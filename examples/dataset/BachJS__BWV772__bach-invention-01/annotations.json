@@ -1,0 +1,338 @@
+{
+  "schema_version": "1.0",
+  "piece_id": "BachJS__BWV772__bach-invention-01",
+  "score_engraving_id": "BachJS__BWV772__bach-invention-01_ly",
+  "performance_id": "BachJS__BWV772__bach-invention-01_tempo-1000_grand-piano-YDP-20160804",
+  "image": {
+    "path": "strip.png",
+    "sha256": "9808f82e7c3666e4a9d7ab2bc08dd0ec0ca6f24cc8d67de7aa04a81f7547c73c",
+    "width_px": 7510,
+    "height_px": 224
+  },
+  "audio": {
+    "path": "audio.wav",
+    "sha256": "84df799d1bb4d84f3043f2c22bcde677cf588c2071df81bdfb111f5663532927",
+    "sample_rate_hz": 24000,
+    "duration_sec": 67.0,
+    "soundfont": "pretty_midi_sine",
+    "peak_db": -3.0,
+    "synthesized": true
+  },
+  "midi": {
+    "path": "score.midi",
+    "sha256": "6287dafeb381336de108c0ad56732879d1bea690755ec6079518f40fb14e00e9"
+  },
+  "tempo_events": [
+    {
+      "time_sec": 0.0,
+      "bpm": 80.0
+    }
+  ],
+  "beat_times_sec": [
+    0.0,
+    0.75,
+    1.5,
+    2.25,
+    3.0,
+    3.75,
+    4.5,
+    5.25,
+    6.0,
+    6.75,
+    7.5,
+    8.25,
+    9.0,
+    9.75,
+    10.5,
+    11.25,
+    12.0,
+    12.75,
+    13.5,
+    14.25,
+    15.0,
+    15.75,
+    16.5,
+    17.25,
+    18.0,
+    18.75,
+    19.5,
+    20.25,
+    21.0,
+    21.75,
+    22.5,
+    23.25,
+    24.0,
+    24.75,
+    25.5,
+    26.25,
+    27.0,
+    27.75,
+    28.5,
+    29.25,
+    30.0,
+    30.75,
+    31.5,
+    32.25,
+    33.0,
+    33.75,
+    34.5,
+    35.25,
+    36.0,
+    36.75,
+    37.5,
+    38.25,
+    39.0,
+    39.75,
+    40.5,
+    41.25,
+    42.0,
+    42.75,
+    43.5,
+    44.25,
+    45.0,
+    45.75,
+    46.5,
+    47.25,
+    48.0,
+    48.75,
+    49.5,
+    50.25,
+    51.0,
+    51.75,
+    52.5,
+    53.25,
+    54.0,
+    54.75,
+    55.5,
+    56.25,
+    57.0,
+    57.75,
+    58.5,
+    59.25,
+    60.0,
+    60.75,
+    61.5,
+    62.25,
+    63.0,
+    63.75,
+    64.5,
+    65.25
+  ],
+  "bar_times_sec": [
+    0.0,
+    3.0,
+    6.0,
+    9.0,
+    12.0,
+    15.0,
+    18.0,
+    21.0,
+    24.0,
+    27.0,
+    30.0,
+    33.0,
+    36.0,
+    39.0,
+    42.0,
+    45.0,
+    48.0,
+    51.0,
+    54.0,
+    57.0,
+    60.0,
+    63.0
+  ],
+  "strip_to_page_mapping": [
+    {
+      "strip_x_start": 0,
+      "strip_x_end": 697,
+      "page_idx": 0,
+      "system_idx_on_page": 0,
+      "raw_bbox": [
+        99,
+        105,
+        796,
+        199
+      ],
+      "exp_bbox": [
+        99,
+        65,
+        796,
+        229
+      ],
+      "scale": 1.1382978723404256
+    },
+    {
+      "strip_x_start": 697,
+      "strip_x_end": 1454,
+      "page_idx": 0,
+      "system_idx_on_page": 1,
+      "raw_bbox": [
+        39,
+        260,
+        796,
+        354
+      ],
+      "exp_bbox": [
+        39,
+        229,
+        796,
+        384
+      ],
+      "scale": 1.1382978723404256
+    },
+    {
+      "strip_x_start": 1454,
+      "strip_x_end": 2211,
+      "page_idx": 0,
+      "system_idx_on_page": 2,
+      "raw_bbox": [
+        39,
+        415,
+        796,
+        509
+      ],
+      "exp_bbox": [
+        39,
+        384,
+        796,
+        540
+      ],
+      "scale": 1.1382978723404256
+    },
+    {
+      "strip_x_start": 2211,
+      "strip_x_end": 2968,
+      "page_idx": 0,
+      "system_idx_on_page": 3,
+      "raw_bbox": [
+        39,
+        571,
+        796,
+        663
+      ],
+      "exp_bbox": [
+        39,
+        540,
+        796,
+        694
+      ],
+      "scale": 1.1630434782608696
+    },
+    {
+      "strip_x_start": 2968,
+      "strip_x_end": 3725,
+      "page_idx": 0,
+      "system_idx_on_page": 4,
+      "raw_bbox": [
+        39,
+        726,
+        796,
+        818
+      ],
+      "exp_bbox": [
+        39,
+        694,
+        796,
+        849
+      ],
+      "scale": 1.1630434782608696
+    },
+    {
+      "strip_x_start": 3725,
+      "strip_x_end": 4482,
+      "page_idx": 0,
+      "system_idx_on_page": 5,
+      "raw_bbox": [
+        39,
+        880,
+        796,
+        974
+      ],
+      "exp_bbox": [
+        39,
+        849,
+        796,
+        1004
+      ],
+      "scale": 1.1382978723404256
+    },
+    {
+      "strip_x_start": 4482,
+      "strip_x_end": 5239,
+      "page_idx": 0,
+      "system_idx_on_page": 6,
+      "raw_bbox": [
+        39,
+        1035,
+        796,
+        1132
+      ],
+      "exp_bbox": [
+        39,
+        1004,
+        796,
+        1172
+      ],
+      "scale": 1.1030927835051547
+    },
+    {
+      "strip_x_start": 5239,
+      "strip_x_end": 5996,
+      "page_idx": 1,
+      "system_idx_on_page": 0,
+      "raw_bbox": [
+        39,
+        53,
+        796,
+        146
+      ],
+      "exp_bbox": [
+        39,
+        13,
+        796,
+        177
+      ],
+      "scale": 1.1505376344086022
+    },
+    {
+      "strip_x_start": 5996,
+      "strip_x_end": 6753,
+      "page_idx": 1,
+      "system_idx_on_page": 1,
+      "raw_bbox": [
+        39,
+        208,
+        796,
+        301
+      ],
+      "exp_bbox": [
+        39,
+        177,
+        796,
+        332
+      ],
+      "scale": 1.1505376344086022
+    },
+    {
+      "strip_x_start": 6753,
+      "strip_x_end": 7510,
+      "page_idx": 1,
+      "system_idx_on_page": 2,
+      "raw_bbox": [
+        39,
+        363,
+        796,
+        456
+      ],
+      "exp_bbox": [
+        39,
+        332,
+        796,
+        496
+      ],
+      "scale": 1.1505376344086022
+    }
+  ],
+  "notehead_count": 458
+}

@@ -1,0 +1,16 @@
+data:
+  dataset: MSMD
+  snippet_sec: 1.0
+  hop_sec: 0.5
+  n_bins: 92
+  batch_size: 32
+
+training:
+  epochs: 50
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  seed: 42
+
+evaluation:
+  threshold_beats: 0.5
+  recall_k: [1, 5, 10]

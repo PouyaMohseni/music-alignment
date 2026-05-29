@@ -1,0 +1,47 @@
+seed: 42
+
+data:
+  manifest_path: data/MSMD/processed/manifest.jsonl
+  num_workers:   0       # 0 for laptop debugging; bump to 4+ on a GPU box
+
+window:
+  audio_sec:        5.0
+  audio_sr:         24000
+  pool_hz:          10
+  tile_size:        224
+  tile_stride:      56
+  margin_sec_range: [3.0, 8.0]
+  min_anchors:      3
+  max_retries:      10
+
+model:
+  shared_dim:     256
+  audio_model_id: m-a-p/MERT-v1-95M
+  image_model_id: google/vit-base-patch16-224-in21k
+  pool_hz:        10
+  tile_size:      224
+  tile_stride:    56
+  freeze_audio:   true
+  freeze_image:   true
+  head_dropout:   0.0
+
+loss:
+  gamma:             0.1
+  anchor_weight:     1.0
+  band_radius_frac:  0.5
+
+optim:
+  lr:           3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 500
+  grad_clip:    1.0
+
+train:
+  batch_size:      4         # small for smoke test; raise on GPU
+  steps:           1000
+  log_every:       10
+  eval_every:      200
+  ckpt_every:      500
+  amp:             false
+  device:          auto       # auto -> cuda if available, else mps, else cpu
+  out_dir:         results/v1_baseline

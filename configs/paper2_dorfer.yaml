@@ -1,0 +1,8 @@
+defaults:
+  - base
+
+model: dorfer2017
+training:
+  lr: 0.01
+  optimizer: sgd
+  momentum: 0.9

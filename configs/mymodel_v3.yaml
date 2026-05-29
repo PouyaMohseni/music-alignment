@@ -1,0 +1,18 @@
+defaults:
+  - base
+
+model: mymodel_v3_softdtw
+audio_encoder:
+  name: MERT-v1-95M
+  lora: true
+  lora_rank: 8
+score_encoder:
+  name: vit-base-patch16-224
+  lora: true
+  lora_rank: 8
+fusion: cross_attention
+loss:
+  primary: softdtw
+  softdtw_gamma: 1.0
+  auxiliary: infonce
+  auxiliary_weight: 0.1

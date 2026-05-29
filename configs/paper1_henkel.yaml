@@ -1,0 +1,7 @@
+defaults:
+  - base
+
+model: henkel2019
+training:
+  lr: 1.0e-4
+  optimizer: adam
