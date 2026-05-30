@@ -111,6 +111,8 @@ def main(cfg: DictConfig) -> None:
         tile_stride=cfg.model.tile_stride,
         freeze_audio=cfg.model.freeze_audio,
         freeze_image=cfg.model.freeze_image,
+        lora_rank_audio=cfg.model.get("lora_rank_audio", 0),
+        lora_rank_image=cfg.model.get("lora_rank_image", 0),
         head_dropout=cfg.model.head_dropout,
     )
     model = AlignmentModel(model_cfg).to(device)

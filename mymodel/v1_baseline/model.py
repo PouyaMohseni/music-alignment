@@ -16,12 +16,14 @@ class AlignmentModelConfig:
     audio_model_id: str = "m-a-p/MERT-v1-95M"
     pool_hz: int = 10
     freeze_audio: bool = True
+    lora_rank_audio: int = 0   # 0 = no LoRA; >0 = LoRA rank (e.g. 8)
 
     # image
     image_model_id: str = "google/vit-base-patch16-224-in21k"
     tile_size: int = 224
     tile_stride: int = 56
     freeze_image: bool = True
+    lora_rank_image: int = 0   # 0 = no LoRA; >0 = LoRA rank (e.g. 8)
 
     # projection heads
     head_dropout: float = 0.0
@@ -61,12 +63,14 @@ class AlignmentModel(nn.Module):
             model_id=self.cfg.audio_model_id,
             pool_hz=self.cfg.pool_hz,
             freeze=self.cfg.freeze_audio,
+            lora_rank=self.cfg.lora_rank_audio,
         )
         self.image_enc = ImageEncoder(
             model_id=self.cfg.image_model_id,
             tile_size=self.cfg.tile_size,
             stride=self.cfg.tile_stride,
             freeze=self.cfg.freeze_image,
+            lora_rank=self.cfg.lora_rank_image,
         )
         self.audio_proj = _ProjectionHead(
             self.audio_enc.d_audio, self.cfg.shared_dim, self.cfg.head_dropout
