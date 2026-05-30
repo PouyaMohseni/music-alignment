@@ -83,7 +83,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 4. CPJKU/msmd repo (for splits)
-SPLITS=data/MSMD/msmd/splits/all_split.yaml
+SPLITS=data/MSMD/msmd/msmd/splits/all_split.yaml
 if [[ ! -f "$SPLITS" ]]; then
   echo "==> cloning CPJKU/msmd (just for splits/*.yaml)"
   git clone --depth 1 https://github.com/CPJKU/msmd.git data/MSMD/msmd
