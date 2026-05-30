@@ -16,6 +16,8 @@ cd /project/def-ichiro/pmohseni/music-alignment
 mkdir -p results/v1_lora
 
 source .venv/bin/activate
+pip install -q peft
+
 export HF_HOME=/project/def-ichiro/pmohseni/hf_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
