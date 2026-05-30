@@ -102,8 +102,8 @@ class ImageEncoder(nn.Module):
     freeze=True,  lora_rank>0 → LoRA adapters only (recommended)
     """
 
-    # Attention projection names in ViT (HuggingFace)
-    LORA_TARGET_MODULES = ["query", "value"]
+    # Attention projection names in ViT (HuggingFace transformers >= 4.38)
+    LORA_TARGET_MODULES = ["q_proj", "v_proj"]
 
     def __init__(
         self,
