@@ -32,7 +32,6 @@ python -m mymodel.v1_baseline.train \
   train.steps=20000 \
   train.batch_size=16 \
   data.num_workers=8 \
-  train.amp=true \
   train.eval_every=500 \
   train.ckpt_every=2000
 

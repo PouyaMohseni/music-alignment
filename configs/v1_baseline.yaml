@@ -26,22 +26,22 @@ model:
   head_dropout:   0.0
 
 loss:
-  gamma:             0.1
+  gamma:             1.0    # 0.1 caused exp underflow in fp16 → NaN; 1.0 is numerically stable
   anchor_weight:     1.0
   band_radius_frac:  0.5
 
 optim:
-  lr:           3.0e-4
+  lr:           1.0e-4     # 3e-4 was too aggressive for projection-heads-only training
   weight_decay: 0.01
-  warmup_steps: 500
-  grad_clip:    1.0
+  warmup_steps: 1000       # longer warmup gives frozen encoder embeddings time to stabilise
+  grad_clip:    0.5        # tighter clip; SoftDTW gradients can spike early
 
 train:
-  batch_size:      4         # small for smoke test; raise on GPU
-  steps:           1000
+  batch_size:      16
+  steps:           20000
   log_every:       10
-  eval_every:      200
-  ckpt_every:      500
-  amp:             false
-  device:          auto       # auto -> cuda if available, else mps, else cpu
+  eval_every:      500
+  ckpt_every:      2000
+  amp:             false   # disabled: pure-Python SoftDTW + fp16 → NaN; re-enable only with CUDA kernel
+  device:          auto
   out_dir:         results/v1_baseline

@@ -152,6 +152,12 @@ def main(cfg: DictConfig) -> None:
                 band_radius_frac=cfg.loss.band_radius_frac,
             )
 
+        if not torch.isfinite(loss):
+            print(f"  WARN step {step}: non-finite loss={loss.item():.4f}, skipping batch",
+                  flush=True)
+            optim.zero_grad(set_to_none=True)
+            continue
+
         scaler.scale(loss).backward()
         scaler.unscale_(optim)
         torch.nn.utils.clip_grad_norm_(model.trainable_parameters(), cfg.optim.grad_clip)
