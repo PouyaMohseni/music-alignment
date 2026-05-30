@@ -20,6 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 from .data import WindowConfig, build_dataloaders
 from .loss import softdtw_anchor_loss
 from .model import AlignmentModel, AlignmentModelConfig
+from ..shared.losses import infonce_loss
 
 
 def _pick_device(name: str) -> str:
@@ -142,7 +143,7 @@ def main(cfg: DictConfig) -> None:
         with torch.amp.autocast(device_type="cuda" if device == "cuda" else "cpu",
                                  enabled=cfg.train.amp and device == "cuda"):
             out = model(batch["audio"], batch["image"], batch["image_mask"])
-            loss, parts = softdtw_anchor_loss(
+            loss_dtw, parts = softdtw_anchor_loss(
                 out["sim"],
                 batch["anchors_t"],
                 batch["anchors_n"],
@@ -151,6 +152,18 @@ def main(cfg: DictConfig) -> None:
                 anchor_weight=cfg.loss.anchor_weight,
                 band_radius_frac=cfg.loss.band_radius_frac,
             )
+            # InfoNCE over anchor pairs to prevent embedding collapse.
+            # Gather one embedding per anchor (first valid anchor per item).
+            K = batch["anchor_mask"].sum(dim=1).clamp(min=1)
+            B = out["audio_embeds"].shape[0]
+            t_idx = batch["anchors_t"][:, 0].clamp(0, out["audio_embeds"].shape[1] - 1)
+            n_idx = batch["anchors_n"][:, 0].clamp(0, out["image_embeds"].shape[1] - 1)
+            a_anchor = out["audio_embeds"][torch.arange(B), t_idx]   # (B, d)
+            s_anchor = out["image_embeds"][torch.arange(B), n_idx]   # (B, d)
+            loss_nce = infonce_loss(a_anchor, s_anchor,
+                                    temperature=cfg.loss.get("nce_temperature", 0.07))
+            loss = loss_dtw + cfg.loss.get("nce_weight", 0.5) * loss_nce
+            parts["nce"] = loss_nce.detach()
 
         if not torch.isfinite(loss):
             print(f"  WARN step {step}: non-finite loss={loss.item():.4f}, skipping batch",
@@ -169,6 +182,7 @@ def main(cfg: DictConfig) -> None:
             dt = time.time() - t_start
             print(f"step {step:5d}/{cfg.train.steps}  loss={loss.item():7.4f}  "
                   f"dtw={parts['dtw'].item():7.4f}  anchor={parts['anchor'].item():.4f}  "
+                  f"nce={parts['nce'].item():.4f}  "
                   f"lr={lr:.2e}  {dt:.1f}s elapsed")
 
         if val_loader is not None and step % cfg.train.eval_every == 0:

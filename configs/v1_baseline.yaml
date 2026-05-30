@@ -29,6 +29,8 @@ loss:
   gamma:             1.0    # 0.1 caused exp underflow in fp16 → NaN; 1.0 is numerically stable
   anchor_weight:     1.0
   band_radius_frac:  0.5
+  nce_weight:        0.5    # InfoNCE weight to prevent embedding collapse
+  nce_temperature:   0.07
 
 optim:
   lr:           1.0e-4     # 3e-4 was too aggressive for projection-heads-only training
