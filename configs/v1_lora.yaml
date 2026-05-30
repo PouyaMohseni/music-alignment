@@ -23,8 +23,8 @@ model:
   tile_stride:      56
   freeze_audio:     true    # base weights frozen; only LoRA adapters train
   freeze_image:     true
-  lora_rank_audio:  8       # ~1.2M extra trainable params in MERT
-  lora_rank_image:  8       # ~1.2M extra trainable params in ViT
+  lora_rank_audio:  4       # rank 4 saves memory vs rank 8; sufficient for alignment
+  lora_rank_image:  4
   head_dropout:     0.1
 
 loss:
