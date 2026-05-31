@@ -126,15 +126,81 @@ def main(cfg: DictConfig) -> None:
     scaler = torch.amp.GradScaler(device, enabled=cfg.train.amp and device == "cuda")
 
     # ----- train -----
+    accum_steps  = cfg.train.get("grad_accum_steps", 1)
+    # SoftDTW gate: only add DTW loss once NCE < nce_gate_threshold.
+    # Below this value the embedding space has enough structure for DTW to help.
+    nce_gate     = cfg.loss.get("nce_gate_threshold", 1.0)
+    nce_weight   = cfg.loss.get("nce_weight", 0.5)
+    nce_temp     = cfg.loss.get("nce_temperature", 0.07)
+    dtw_enabled  = False
+
     train_iter = iter(train_loader)
-    t_start = time.time()
+    t_start    = time.time()
+    optim.zero_grad(set_to_none=True)
+
     for step in range(1, cfg.train.steps + 1):
-        try:
-            batch = next(train_iter)
-        except StopIteration:
-            train_iter = iter(train_loader)
-            batch = next(train_iter)
-        batch = _move_batch(batch, device)
+        # ---- collect accum_steps micro-batches ----
+        accum_loss = torch.tensor(0.0, device=device)
+        accum_parts: dict = {"dtw": torch.tensor(0.0), "anchor": torch.tensor(0.0),
+                             "nce": torch.tensor(0.0)}
+        skipped = 0
+        for _ in range(accum_steps):
+            try:
+                batch = next(train_iter)
+            except StopIteration:
+                train_iter = iter(train_loader)
+                batch = next(train_iter)
+            batch = _move_batch(batch, device)
+
+            with torch.amp.autocast(device_type="cuda" if device == "cuda" else "cpu",
+                                     enabled=cfg.train.amp and device == "cuda"):
+                out = model(batch["audio"], batch["image"], batch["image_mask"])
+
+                # InfoNCE — always active
+                B = out["audio_embeds"].shape[0]
+                t_idx = batch["anchors_t"][:, 0].clamp(0, out["audio_embeds"].shape[1] - 1)
+                n_idx = batch["anchors_n"][:, 0].clamp(0, out["image_embeds"].shape[1] - 1)
+                a_anc = out["audio_embeds"][torch.arange(B), t_idx]
+                s_anc = out["image_embeds"][torch.arange(B), n_idx]
+                loss_nce = infonce_loss(a_anc, s_anc, temperature=nce_temp)
+
+                # SoftDTW — only once NCE has fallen below gate threshold
+                if dtw_enabled:
+                    loss_dtw, dtw_parts = softdtw_anchor_loss(
+                        out["sim"],
+                        batch["anchors_t"], batch["anchors_n"], batch["anchor_mask"],
+                        gamma=cfg.loss.gamma,
+                        anchor_weight=cfg.loss.anchor_weight,
+                        band_radius_frac=cfg.loss.band_radius_frac,
+                    )
+                    loss = loss_dtw + nce_weight * loss_nce
+                    for k in ("dtw", "anchor"):
+                        accum_parts[k] = accum_parts[k] + dtw_parts[k].detach().cpu()
+                else:
+                    loss = loss_nce
+
+                accum_parts["nce"] = accum_parts["nce"] + loss_nce.detach().cpu()
+                micro_loss = loss / accum_steps
+
+            if not torch.isfinite(micro_loss):
+                skipped += 1
+                continue
+
+            scaler.scale(micro_loss).backward()
+            accum_loss = accum_loss + micro_loss.detach()
+
+        if skipped == accum_steps:
+            print(f"  WARN step {step}: all micro-batches non-finite, skipping",
+                  flush=True)
+            optim.zero_grad(set_to_none=True)
+            continue
+
+        # Enable DTW once NCE consistently below gate
+        nce_val = (accum_parts["nce"] / accum_steps).item()
+        if not dtw_enabled and nce_val < nce_gate:
+            dtw_enabled = True
+            print(f"  INFO step {step}: NCE={nce_val:.4f} < gate={nce_gate} "
+                  f"→ SoftDTW enabled", flush=True)
 
         # set lr from warmup-cosine schedule
         lr = _warmup_cosine_lr(step, warmup=cfg.optim.warmup_steps,
@@ -142,38 +208,6 @@ def main(cfg: DictConfig) -> None:
         for g in optim.param_groups:
             g["lr"] = lr
 
-        with torch.amp.autocast(device_type="cuda" if device == "cuda" else "cpu",
-                                 enabled=cfg.train.amp and device == "cuda"):
-            out = model(batch["audio"], batch["image"], batch["image_mask"])
-            loss_dtw, parts = softdtw_anchor_loss(
-                out["sim"],
-                batch["anchors_t"],
-                batch["anchors_n"],
-                batch["anchor_mask"],
-                gamma=cfg.loss.gamma,
-                anchor_weight=cfg.loss.anchor_weight,
-                band_radius_frac=cfg.loss.band_radius_frac,
-            )
-            # InfoNCE over anchor pairs to prevent embedding collapse.
-            # Gather one embedding per anchor (first valid anchor per item).
-            K = batch["anchor_mask"].sum(dim=1).clamp(min=1)
-            B = out["audio_embeds"].shape[0]
-            t_idx = batch["anchors_t"][:, 0].clamp(0, out["audio_embeds"].shape[1] - 1)
-            n_idx = batch["anchors_n"][:, 0].clamp(0, out["image_embeds"].shape[1] - 1)
-            a_anchor = out["audio_embeds"][torch.arange(B), t_idx]   # (B, d)
-            s_anchor = out["image_embeds"][torch.arange(B), n_idx]   # (B, d)
-            loss_nce = infonce_loss(a_anchor, s_anchor,
-                                    temperature=cfg.loss.get("nce_temperature", 0.07))
-            loss = loss_dtw + cfg.loss.get("nce_weight", 0.5) * loss_nce
-            parts["nce"] = loss_nce.detach()
-
-        if not torch.isfinite(loss):
-            print(f"  WARN step {step}: non-finite loss={loss.item():.4f}, skipping batch",
-                  flush=True)
-            optim.zero_grad(set_to_none=True)
-            continue
-
-        scaler.scale(loss).backward()
         scaler.unscale_(optim)
         torch.nn.utils.clip_grad_norm_(model.trainable_parameters(), cfg.optim.grad_clip)
         scaler.step(optim)
@@ -182,9 +216,10 @@ def main(cfg: DictConfig) -> None:
 
         if step % cfg.train.log_every == 0 or step == 1:
             dt = time.time() - t_start
-            print(f"step {step:5d}/{cfg.train.steps}  loss={loss.item():7.4f}  "
-                  f"dtw={parts['dtw'].item():7.4f}  anchor={parts['anchor'].item():.4f}  "
-                  f"nce={parts['nce'].item():.4f}  "
+            dtw_str = f"dtw={accum_parts['dtw'].item()/accum_steps:7.4f}  " if dtw_enabled else "dtw=off        "
+            print(f"step {step:5d}/{cfg.train.steps}  loss={accum_loss.item():7.4f}  "
+                  f"{dtw_str}"
+                  f"nce={nce_val:.4f}  "
                   f"lr={lr:.2e}  {dt:.1f}s elapsed")
 
         if val_loader is not None and step % cfg.train.eval_every == 0:

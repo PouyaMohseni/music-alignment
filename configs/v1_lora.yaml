@@ -1,7 +1,7 @@
 seed: 42
 
 data:
-  manifest_path: data/MSMD/processed/manifest.jsonl
+  manifest_path: data/MSMD/processed_all/manifest.jsonl
   num_workers:   4
 
 window:
@@ -21,31 +21,33 @@ model:
   pool_hz:          10
   tile_size:        224
   tile_stride:      56
-  freeze_audio:     true    # base weights frozen; only LoRA adapters train
+  freeze_audio:     true
   freeze_image:     true
-  lora_rank_audio:  4       # rank 4 saves memory vs rank 8; sufficient for alignment
+  lora_rank_audio:  4
   lora_rank_image:  4
   head_dropout:     0.1
 
 loss:
-  gamma:             1.0
-  anchor_weight:     1.0
-  band_radius_frac:  0.5
-  nce_weight:        0.5
-  nce_temperature:   0.07
+  gamma:                1.0
+  anchor_weight:        1.0
+  band_radius_frac:     0.5
+  nce_weight:           0.5
+  nce_temperature:      0.07
+  nce_gate_threshold:   1.0   # enable SoftDTW once NCE drops below this (~log(4)=1.39 is random)
 
 optim:
-  lr:           5.0e-5     # lower LR for LoRA fine-tuning
+  lr:           5.0e-5
   weight_decay: 0.01
   warmup_steps: 1000
   grad_clip:    0.5
 
 train:
-  batch_size:      8        # smaller batch: LoRA adapters use more memory per step
-  steps:           20000
-  log_every:       10
-  eval_every:      500
-  ckpt_every:      2000
-  amp:             false
-  device:          auto
-  out_dir:         results/v1_lora
+  batch_size:       4
+  grad_accum_steps: 4     # effective batch = 4 × 4 = 16; same memory as batch=4
+  steps:            20000
+  log_every:        10
+  eval_every:       500
+  ckpt_every:       2000
+  amp:              false
+  device:           auto
+  out_dir:          results/v1_lora
