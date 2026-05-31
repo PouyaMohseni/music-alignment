@@ -22,7 +22,7 @@ export HF_HOME=/project/def-ichiro/pmohseni/hf_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128
 
 echo "Python: $(which python)"
 echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.cuda.is_available())')"
@@ -31,7 +31,8 @@ echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
   train.steps=20000 \
-  train.batch_size=4 \
+  train.batch_size=2 \
+  train.grad_accum_steps=8 \
   data.num_workers=4
 
 echo "Job finished at $(date)"

@@ -60,6 +60,9 @@ class AudioEncoder(nn.Module):
             for p in backbone.parameters():
                 p.requires_grad = False
             self.backbone = _apply_lora(backbone, lora_rank, self.LORA_TARGET_MODULES)
+            self.backbone.enable_input_require_grads()
+            if hasattr(self.backbone, "gradient_checkpointing_enable"):
+                self.backbone.gradient_checkpointing_enable()
         elif freeze:
             for p in backbone.parameters():
                 p.requires_grad = False
@@ -123,6 +126,9 @@ class ImageEncoder(nn.Module):
             for p in backbone.parameters():
                 p.requires_grad = False
             self.backbone = _apply_lora(backbone, lora_rank, self.LORA_TARGET_MODULES)
+            self.backbone.enable_input_require_grads()
+            if hasattr(self.backbone, "gradient_checkpointing_enable"):
+                self.backbone.gradient_checkpointing_enable()
         elif freeze:
             for p in backbone.parameters():
                 p.requires_grad = False
