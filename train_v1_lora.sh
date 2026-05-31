@@ -31,8 +31,8 @@ echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
   train.steps=20000 \
-  train.batch_size=2 \
-  train.grad_accum_steps=8 \
+  train.batch_size=4 \
+  train.grad_accum_steps=4 \
   data.num_workers=4
 
 echo "Job finished at $(date)"

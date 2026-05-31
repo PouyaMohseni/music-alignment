@@ -44,9 +44,9 @@ class WindowConfig:
 class _PieceCache:
     piece_id:        str
     image_path:      str           # strip.png
+    audio_path:      str           # audio.wav — loaded lazily per window, not into RAM
     image_width:     int
     image_height:    int           # always 224
-    audio:           np.ndarray    # (T,) float32, decoded into RAM
     audio_sr:        int
     duration_sec:    float
     pixels_per_sec:  float
@@ -82,7 +82,10 @@ def _load_piece(piece_dir: str, manifest_row: dict) -> _PieceCache:
         ann = json.load(f)
     npz = np.load(os.path.join(piece_dir, "noteheads.npz"))
 
-    audio, sr = _read_wav_mono_f32(os.path.join(piece_dir, "audio.wav"))
+    # Lazy: only read metadata here, not the audio waveform.
+    # Audio is read from disk per-window in _sample_window().
+    audio_path = os.path.join(piece_dir, "audio.wav")
+    sr       = ann["audio"]["sample_rate_hz"]
     duration = ann["audio"]["duration_sec"]
     width    = ann["image"]["width_px"]
     height   = ann["image"]["height_px"]
@@ -90,9 +93,9 @@ def _load_piece(piece_dir: str, manifest_row: dict) -> _PieceCache:
     return _PieceCache(
         piece_id        = ann["piece_id"],
         image_path      = os.path.join(piece_dir, "strip.png"),
+        audio_path      = audio_path,
         image_width     = width,
         image_height    = height,
-        audio           = audio,
         audio_sr        = sr,
         duration_sec    = duration,
         pixels_per_sec  = width / duration,
@@ -173,14 +176,25 @@ class MSMDAlignmentDataset(Dataset):
         if x_max - x_min < w.tile_size + w.tile_stride:
             return None
 
-        # ---- audio slice ----
+        # ---- audio slice (lazy: read only the needed window from disk) ----
         sr = piece.audio_sr
         start_sample = int(round(t0 * sr))
         n_samples    = int(round(w.audio_sec * sr))
-        audio_slice  = piece.audio[start_sample : start_sample + n_samples]
-        if audio_slice.shape[0] < n_samples:
-            pad = np.zeros(n_samples - audio_slice.shape[0], dtype=np.float32)
-            audio_slice = np.concatenate([audio_slice, pad])
+        import wave as _wave
+        with _wave.open(piece.audio_path, "rb") as wf:
+            n_ch = wf.getnchannels()
+            sw   = wf.getsampwidth()
+            wf.setpos(start_sample)
+            raw  = wf.readframes(n_samples)
+        dtype = {1: "i1", 2: "<i2", 4: "<i4"}[sw]
+        pcm   = np.frombuffer(raw, dtype=dtype).astype(np.float32)
+        if sw == 2:   pcm /= 32768.0
+        elif sw == 4: pcm /= 2147483648.0
+        if n_ch > 1:
+            pcm = pcm.reshape(-1, n_ch).mean(axis=1)
+        if pcm.shape[0] < n_samples:
+            pcm = np.concatenate([pcm, np.zeros(n_samples - pcm.shape[0], dtype=np.float32)])
+        audio_slice = pcm
 
         # ---- image slice (decode strip from disk; rely on OS file cache) ----
         with Image.open(piece.image_path) as im:

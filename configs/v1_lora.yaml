@@ -9,8 +9,8 @@ window:
   audio_sr:         24000
   pool_hz:          10
   tile_size:        224
-  tile_stride:      112   # larger stride = fewer tiles per strip slice = less ViT memory
-  margin_sec_range: [1.0, 3.0]   # tighter margins = narrower strip slice
+  tile_stride:      56
+  margin_sec_range: [3.0, 8.0]
   min_anchors:      3
   max_retries:      10
 
@@ -20,7 +20,7 @@ model:
   image_model_id:   google/vit-base-patch16-224-in21k
   pool_hz:          10
   tile_size:        224
-  tile_stride:      112
+  tile_stride:      56
   freeze_audio:     true
   freeze_image:     true
   lora_rank_audio:  4
