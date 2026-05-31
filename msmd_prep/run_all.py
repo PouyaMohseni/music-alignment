@@ -57,8 +57,7 @@ def _worker(piece_dir: str, out_dir: str, sf2_path: str | None,
                 failed.append(r)
             else:
                 if sf2_path:
-                    perf_dir = os.path.join(out_dir, f"{r['piece_id']}__{r['performance_id']}") \
-                               if all_performances else out_dir
+                    perf_dir = os.path.dirname(r["annotations"]) if all_performances else out_dir
                     try:
                         synthesize_piece(perf_dir, sf2_path=sf2_path)
                     except Exception as e:
