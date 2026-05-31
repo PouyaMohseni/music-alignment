@@ -119,8 +119,10 @@ def build_piece(
             strip.save(strip_path)
         results = []
         for perf_id in perfs:
-            # Flat layout: <root>/<piece_id>__<perf_id>/  (sits directly at dataset root)
-            perf_out = os.path.join(os.path.dirname(out_dir), f"{piece_id}__{perf_id}")
+            # Use short dir name: <piece_id>__<perf_suffix> where perf_suffix
+            # strips the redundant piece_id prefix from the performance name.
+            perf_suffix = perf_id[len(piece_id) + 1:] if perf_id.startswith(piece_id + "_") else perf_id
+            perf_out = os.path.join(os.path.dirname(out_dir), f"{piece_id}__{perf_suffix}")
             try:
                 r = _build_one_performance(
                     piece_dir, perf_out, piece_id, engraving_id,

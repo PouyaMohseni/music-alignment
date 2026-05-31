@@ -120,7 +120,10 @@ def main() -> None:
             else:
                 for res in r["results"]:
                     if args.all_performances:
-                        dir_name = f"{res['piece_id']}__{res['performance_id']}"
+                        pid = res["piece_id"]
+                        perf_id = res["performance_id"]
+                        perf_suffix = perf_id[len(pid) + 1:] if perf_id.startswith(pid + "_") else perf_id
+                        dir_name = f"{pid}__{perf_suffix}"
                     else:
                         dir_name = res["piece_id"]
                     success_dirs.append(dir_name)
