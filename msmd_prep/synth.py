@@ -80,6 +80,8 @@ def _synth_fluidsynth(midi_path: str, sf2_path: str, sample_rate: int) -> np.nda
     fluid = shutil.which("fluidsynth")
     if fluid is None:
         raise RuntimeError("fluidsynth CLI not found on PATH")
+    sf2_path = os.path.expanduser(sf2_path)   # expand ~ on all platforms
+    midi_path = os.path.expanduser(midi_path)
     if not os.path.isfile(sf2_path):
         raise FileNotFoundError(f"soundfont not found: {sf2_path}")
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
