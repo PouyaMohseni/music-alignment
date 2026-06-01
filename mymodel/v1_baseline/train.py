@@ -129,10 +129,12 @@ def main(cfg: DictConfig) -> None:
     accum_steps  = cfg.train.get("grad_accum_steps", 1)
     # SoftDTW gate: only add DTW loss once NCE < nce_gate_threshold.
     # Below this value the embedding space has enough structure for DTW to help.
-    nce_gate     = cfg.loss.get("nce_gate_threshold", 1.0)
-    nce_weight   = cfg.loss.get("nce_weight", 0.5)
-    nce_temp     = cfg.loss.get("nce_temperature", 0.07)
-    dtw_enabled  = False
+    nce_gate          = cfg.loss.get("nce_gate_threshold", 1.0)
+    nce_weight        = cfg.loss.get("nce_weight", 0.5)
+    nce_temp          = cfg.loss.get("nce_temperature", 0.07)
+    dtw_ramp_steps    = cfg.loss.get("dtw_ramp_steps", 2000)  # steps to ramp DTW from 0→1
+    dtw_enabled       = False
+    dtw_enabled_step  = 0
 
     train_iter = iter(train_loader)
     t_start    = time.time()
@@ -165,7 +167,10 @@ def main(cfg: DictConfig) -> None:
                 loss_nce = infonce_loss(a_anc, s_anc, temperature=nce_temp)
 
                 # SoftDTW — only once NCE has fallen below gate threshold
+                # Ramp DTW weight from 0→1 over dtw_ramp_steps to avoid destroying NCE
                 if dtw_enabled:
+                    steps_since_dtw = step - dtw_enabled_step
+                    dtw_w = min(1.0, steps_since_dtw / max(1, dtw_ramp_steps))
                     loss_dtw, dtw_parts = softdtw_anchor_loss(
                         out["sim"],
                         batch["anchors_t"], batch["anchors_n"], batch["anchor_mask"],
@@ -173,10 +178,11 @@ def main(cfg: DictConfig) -> None:
                         anchor_weight=cfg.loss.anchor_weight,
                         band_radius_frac=cfg.loss.band_radius_frac,
                     )
-                    loss = loss_dtw + nce_weight * loss_nce
+                    loss = dtw_w * loss_dtw + nce_weight * loss_nce
                     for k in ("dtw", "anchor"):
                         accum_parts[k] = accum_parts[k] + dtw_parts[k].detach().cpu()
                 else:
+                    dtw_w = 0.0
                     loss = loss_nce
 
                 accum_parts["nce"] = accum_parts["nce"] + loss_nce.detach().cpu()
@@ -199,8 +205,9 @@ def main(cfg: DictConfig) -> None:
         nce_val = (accum_parts["nce"] / accum_steps).item()
         if not dtw_enabled and nce_val < nce_gate:
             dtw_enabled = True
+            dtw_enabled_step = step
             print(f"  INFO step {step}: NCE={nce_val:.4f} < gate={nce_gate} "
-                  f"→ SoftDTW enabled", flush=True)
+                  f"→ SoftDTW enabled (ramping over {dtw_ramp_steps} steps)", flush=True)
 
         # set lr from warmup-cosine schedule
         lr = _warmup_cosine_lr(step, warmup=cfg.optim.warmup_steps,
@@ -216,7 +223,10 @@ def main(cfg: DictConfig) -> None:
 
         if step % cfg.train.log_every == 0 or step == 1:
             dt = time.time() - t_start
-            dtw_str = f"dtw={accum_parts['dtw'].item()/accum_steps:7.4f}  " if dtw_enabled else "dtw=off        "
+            if dtw_enabled:
+                dtw_str = f"dtw={accum_parts['dtw'].item()/accum_steps:7.4f}(w={dtw_w:.2f})  "
+            else:
+                dtw_str = "dtw=off                "
             print(f"step {step:5d}/{cfg.train.steps}  loss={accum_loss.item():7.4f}  "
                   f"{dtw_str}"
                   f"nce={nce_val:.4f}  "
