@@ -3,9 +3,10 @@
 #SBATCH --account=def-ichiro
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=40G
-#SBATCH --time=16:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --tmp=64G
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v1_lora/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v1_lora/slurm-%j.log
 
