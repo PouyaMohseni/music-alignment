@@ -18,6 +18,14 @@ mkdir -p results/v1_lora
 source .venv/bin/activate
 pip install -q peft
 
+# Copy dataset to local NVMe SSD for fast audio I/O during training
+echo "==> copying processed_all to \$SLURM_TMPDIR (~may take 5 min)..."
+mkdir -p $SLURM_TMPDIR/processed_all
+rsync -a --info=progress2 \
+  /lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all/ \
+  $SLURM_TMPDIR/processed_all/
+echo "==> dataset copy done"
+
 export HF_HOME=/project/def-ichiro/pmohseni/hf_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -33,6 +41,7 @@ python -m mymodel.v1_baseline.train \
   train.steps=20000 \
   train.batch_size=4 \
   train.grad_accum_steps=4 \
-  data.num_workers=4
+  data.num_workers=4 \
+  data.manifest_path=$SLURM_TMPDIR/processed_all/manifest.jsonl
 
 echo "Job finished at $(date)"
