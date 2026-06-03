@@ -20,12 +20,12 @@ source .venv/bin/activate
 pip install -q peft
 
 # Copy dataset to local NVMe SSD for fast audio I/O during training
-echo "==> copying processed_all to \$SLURM_TMPDIR (~may take 5 min)..."
+# tar pipe is much faster than rsync for many small files on Lustre
+echo "==> copying processed_all to \$SLURM_TMPDIR via tar pipe..."
 mkdir -p $SLURM_TMPDIR/processed_all
-rsync -a --info=progress2 \
-  /lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all/ \
-  $SLURM_TMPDIR/processed_all/
-echo "==> dataset copy done"
+time tar cf - -C /lustre07/scratch/pmohseni/music-alignment/data/MSMD processed_all \
+  | tar xf - -C $SLURM_TMPDIR/
+echo "==> dataset copy done, $(ls $SLURM_TMPDIR/processed_all | wc -l) dirs"
 
 export HF_HOME=/project/def-ichiro/pmohseni/hf_cache
 export HF_HUB_OFFLINE=1
@@ -39,7 +39,7 @@ echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
-  train.steps=20000 \
+  train.steps=30000 \
   train.batch_size=4 \
   train.grad_accum_steps=4 \
   data.num_workers=4 \
