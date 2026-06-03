@@ -132,7 +132,8 @@ def main(cfg: DictConfig) -> None:
     nce_gate          = cfg.loss.get("nce_gate_threshold", 1.0)
     nce_weight        = cfg.loss.get("nce_weight", 0.5)
     nce_temp          = cfg.loss.get("nce_temperature", 0.07)
-    dtw_ramp_steps    = cfg.loss.get("dtw_ramp_steps", 2000)  # steps to ramp DTW from 0→1
+    dtw_ramp_steps    = cfg.loss.get("dtw_ramp_steps", 2000)
+    dtw_only_nce      = cfg.loss.get("nce_only", False)  # if True, never enable DTW
     dtw_enabled       = False
     dtw_enabled_step  = 0
 
@@ -203,7 +204,7 @@ def main(cfg: DictConfig) -> None:
 
         # Enable DTW once NCE consistently below gate
         nce_val = (accum_parts["nce"] / accum_steps).item()
-        if not dtw_enabled and nce_val < nce_gate:
+        if not dtw_enabled and not dtw_only_nce and nce_val < nce_gate:
             dtw_enabled = True
             dtw_enabled_step = step
             print(f"  INFO step {step}: NCE={nce_val:.4f} < gate={nce_gate} "

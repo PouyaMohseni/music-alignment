@@ -3,10 +3,10 @@
 #SBATCH --account=def-ichiro
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --tmp=64G
+#SBATCH --tmp=32G
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v1_nce/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v1_nce/slurm-%j.log
 
@@ -39,10 +39,10 @@ echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
   train.steps=30000 \
-  train.batch_size=4 \
-  train.grad_accum_steps=4 \
+  train.batch_size=8 \
+  train.grad_accum_steps=2 \
   data.num_workers=4 \
-  loss.nce_gate_threshold=999.0 \
+  loss.nce_only=true \
   train.out_dir=results/v1_nce \
   data.manifest_path=$SLURM_TMPDIR/processed_all/manifest.jsonl
 
