@@ -38,7 +38,7 @@ echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
-  train.steps=30000 \
+  train.steps=10000 \
   train.batch_size=8 \
   train.grad_accum_steps=2 \
   data.num_workers=4 \
