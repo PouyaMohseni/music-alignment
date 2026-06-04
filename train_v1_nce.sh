@@ -6,7 +6,6 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --tmp=32G
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v1_nce/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v1_nce/slurm-%j.log
 
@@ -19,13 +18,6 @@ mkdir -p results/v1_nce
 source .venv/bin/activate
 pip install -q peft
 
-# Copy dataset to local NVMe SSD
-echo "==> copying processed_all to \$SLURM_TMPDIR via tar pipe..."
-mkdir -p $SLURM_TMPDIR/processed_all
-time tar cf - -C /lustre07/scratch/pmohseni/music-alignment/data/MSMD processed_all \
-  | tar xf - -C $SLURM_TMPDIR/
-echo "==> dataset copy done, $(ls $SLURM_TMPDIR/processed_all | wc -l) dirs"
-
 export HF_HOME=/project/def-ichiro/pmohseni/hf_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -36,14 +28,15 @@ echo "Python: $(which python)"
 echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.cuda.is_available())')"
 echo "peft:  $(python -c 'import peft; print(peft.__version__)')"
 
+# Use single-performance processed/ (354 train pieces, fits in RAM, fast I/O)
 python -m mymodel.v1_baseline.train \
   --config configs/v1_lora.yaml \
   train.steps=10000 \
-  train.batch_size=8 \
-  train.grad_accum_steps=2 \
+  train.batch_size=4 \
+  train.grad_accum_steps=4 \
   data.num_workers=4 \
   loss.nce_only=true \
   train.out_dir=results/v1_nce \
-  data.manifest_path=$SLURM_TMPDIR/processed_all/manifest.jsonl
+  data.manifest_path=data/MSMD/processed/manifest.jsonl
 
 echo "Job finished at $(date)"

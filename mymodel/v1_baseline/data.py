@@ -82,8 +82,6 @@ def _load_piece(piece_dir: str, manifest_row: dict) -> _PieceCache:
         ann = json.load(f)
     npz = np.load(os.path.join(piece_dir, "noteheads.npz"))
 
-    # Lazy: only read metadata here, not the audio waveform.
-    # Audio is read from disk per-window in _sample_window().
     audio_path = os.path.join(piece_dir, "audio.wav")
     sr       = ann["audio"]["sample_rate_hz"]
     duration = ann["audio"]["duration_sec"]
