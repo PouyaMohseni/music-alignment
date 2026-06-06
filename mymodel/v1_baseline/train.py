@@ -118,6 +118,15 @@ def main(cfg: DictConfig) -> None:
     model = AlignmentModel(model_cfg).to(device)
     print(f"trainable params: {model.num_trainable_params():,}")
 
+    # ----- optional warm-start from a previous checkpoint -----
+    init_ckpt = cfg.train.get("init_checkpoint", None)
+    if init_ckpt:
+        init_path = cwd / init_ckpt
+        sd = torch.load(init_path, map_location=device, weights_only=False)
+        params = sd.get("trainable_state", sd.get("model_state", {}))
+        missing, unexpected = model.load_state_dict(params, strict=False)
+        print(f"init from {init_ckpt}  missing={len(missing)} unexpected={len(unexpected)}")
+
     # ----- optim -----
     optim = torch.optim.AdamW(
         model.trainable_parameters(),
