@@ -26,8 +26,9 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128
 echo "Python: $(which python)"
 echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.cuda.is_available())')"
 
-# Warm-start from the best NCE checkpoint so cross-attention layers
-# start with good encoder embeddings rather than random
+# Phase 1: NCE warmup for cross-attention layers (10K steps, NCE-only)
+# Cross-attention starts randomly initialized — must learn good embeddings
+# before DTW can provide useful signal (otherwise DTW causes collapse).
 python -m mymodel.v2_crossattn.train \
   --config configs/v2_crossattn.yaml \
   train.init_checkpoint=results/v1_nce2/checkpoint_020000.pt
