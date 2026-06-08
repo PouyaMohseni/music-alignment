@@ -1,0 +1,57 @@
+seed: 42
+
+data:
+  manifest_path: data/MSMD/processed/manifest.jsonl
+  num_workers:   4
+
+window:
+  audio_sec:        5.0
+  audio_sr:         24000
+  pool_hz:          10
+  tile_size:        224
+  tile_stride:      56
+  margin_sec_range: [3.0, 8.0]
+  min_anchors:      3
+  max_retries:      10
+
+model:
+  shared_dim:       256
+  n_heads:          4
+  attn_dropout:     0.1
+  head_dropout:     0.1
+  audio_model_id:   m-a-p/MERT-v1-95M
+  pool_hz:          10
+  freeze_audio:     true
+  lora_rank_audio:  4
+  image_model_id:   google/vit-base-patch16-224-in21k
+  tile_size:        224
+  tile_stride:      56
+  freeze_image:     true
+  lora_rank_image:  4
+
+loss:
+  gamma:              1.0
+  anchor_weight:      1.0
+  band_radius_frac:   0.5
+  nce_weight:         0.5
+  nce_temperature:    0.07
+  nce_gate_threshold: 0.3   # enable DTW once NCE < 0.3 (v1 nce2 final was ~0.05-0.1)
+  dtw_ramp_steps:     1000
+  nce_only:           false
+
+optim:
+  lr:           5.0e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+  grad_clip:    0.5
+
+train:
+  batch_size:       4
+  grad_accum_steps: 4
+  steps:            20000
+  log_every:        10
+  eval_every:       500
+  ckpt_every:       2000
+  amp:              false
+  device:           auto
+  out_dir:          results/v2_crossattn
