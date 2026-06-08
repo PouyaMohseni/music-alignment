@@ -88,27 +88,20 @@ def softdtw_anchor_loss(
 
 
 def _softdtw_from_cost(cost: torch.Tensor, gamma: float) -> torch.Tensor:
-    """SoftDTW computed directly from a (B, T, N) cost matrix.
+    """SoftDTW on a (B, T, N) cost matrix — pure-PyTorch recursion.
 
-    Implements the classic recursion with soft-min:
-        r[i, j] = D[i, j] + softmin(r[i-1, j], r[i-1, j-1], r[i, j-1])
-        softmin_g(a, b, c) = -g * log(exp(-a/g) + exp(-b/g) + exp(-c/g))
-    Returns a (B,) tensor of dtw losses (the value at r[T-1, N-1]).
-
-    This is a straightforward differentiable implementation. For longer
-    sequences (T, N > 200) consider switching to pysdtw's CUDA kernel.
+    Training windows are small (T~50, N~7) so the Python loop is fast enough.
+    pysdtw's API does not cleanly accept a precomputed cost matrix, so we avoid
+    it entirely to prevent negative-loss bugs.
     """
     B, T, N = cost.shape
-    INF = torch.full((B,), float("inf"), device=cost.device, dtype=cost.dtype)
-    # r has shape (B, T+1, N+1) with sentinel borders
     r = cost.new_full((B, T + 1, N + 1), float("inf"))
     r[:, 0, 0] = 0.0
-
     for i in range(1, T + 1):
         for j in range(1, N + 1):
             triple = torch.stack([r[:, i - 1, j - 1],
                                   r[:, i - 1, j],
-                                  r[:, i, j - 1]], dim=-1)        # (B, 3)
+                                  r[:, i, j - 1]], dim=-1)
             softmin = -gamma * torch.logsumexp(-triple / gamma, dim=-1)
             r[:, i, j] = cost[:, i - 1, j - 1] + softmin
     return r[:, T, N]
