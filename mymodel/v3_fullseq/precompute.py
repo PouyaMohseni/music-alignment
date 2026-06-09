@@ -100,6 +100,10 @@ def main():
     ap.add_argument("--out", default="data/MSMD/embeddings")
     ap.add_argument("--chunk_sec", type=float, default=5.0)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--init_checkpoint", default=None,
+                    help="v1/v2 checkpoint to load LoRA-adapted encoder weights from")
+    ap.add_argument("--lora_rank", type=int, default=0,
+                    help="LoRA rank of the init checkpoint's encoders (0 = raw frozen)")
     args = ap.parse_args()
 
     cfg = OmegaConf.load(args.config)
@@ -108,10 +112,23 @@ def main():
     tile_size, tile_stride = cfg.tile_size, cfg.tile_stride
 
     audio_enc = AudioEncoder(model_id=cfg.audio_model_id, pool_hz=cfg.pool_hz,
-                             freeze=True, lora_rank=0).to(device).eval()
+                             freeze=True, lora_rank=args.lora_rank).to(device).eval()
     image_enc = ImageEncoder(model_id=cfg.image_model_id, tile_size=tile_size,
-                             stride=tile_stride, freeze=True, lora_rank=0).to(device).eval()
+                             stride=tile_stride, freeze=True, lora_rank=args.lora_rank).to(device).eval()
     eff_hz = audio_enc.native_frame_rate / audio_enc.pool_kernel
+
+    # Load LoRA-adapted encoder weights from a trained v1/v2 checkpoint, so the
+    # cached embeddings reflect the domain adaptation we trained (not raw frozen).
+    if args.init_checkpoint:
+        sd = torch.load(args.init_checkpoint, map_location=device, weights_only=False)
+        params = sd.get("trainable_state", sd.get("model_state", {}))
+        a_sd = {k[len("audio_enc."):]: v for k, v in params.items() if k.startswith("audio_enc.")}
+        i_sd = {k[len("image_enc."):]: v for k, v in params.items() if k.startswith("image_enc.")}
+        ma, ua = audio_enc.load_state_dict(a_sd, strict=False)
+        mi, ui = image_enc.load_state_dict(i_sd, strict=False)
+        print(f"loaded LoRA from {args.init_checkpoint}  "
+              f"audio: {len(a_sd)} keys (missing={len(ma)} unexpected={len(ua)})  "
+              f"image: {len(i_sd)} keys (missing={len(mi)} unexpected={len(ui)})", flush=True)
 
     manifest = [json.loads(l) for l in open(Path(args.processed) / "manifest.jsonl")]
     if args.limit:

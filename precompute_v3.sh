@@ -21,11 +21,13 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
-# Cache frozen MERT + ViT embeddings + dense targets for every piece.
-# Embeddings go to scratch (large, regeneratable).
+# Cache MERT + ViT embeddings using the LoRA-ADAPTED encoders from v1_nce2
+# (not raw frozen), so the cached features reflect the domain adaptation.
 python -m mymodel.v3_fullseq.precompute \
   --processed data/MSMD/processed \
   --config    configs/v3_fullseq.yaml \
-  --out       /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings
+  --init_checkpoint results/v1_nce2/checkpoint_020000.pt \
+  --lora_rank 4 \
+  --out       /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora
 
 echo "Job finished at $(date)"

@@ -26,6 +26,6 @@ echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.
 
 python -m mymodel.v3_fullseq.train \
   --config configs/v3_fullseq.yaml \
-  data.emb_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings
+  data.emb_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora
 
 echo "Job finished at $(date)"
