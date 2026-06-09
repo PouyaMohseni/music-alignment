@@ -20,7 +20,7 @@ from omegaconf import OmegaConf
 
 from .model import FullSeqAlignmentModel, FullSeqModelConfig
 from .data import FullSeqDataset
-from ..shared.metrics import alignment_metrics, retrieval_metrics
+from ..shared.metrics import alignment_metrics, retrieval_metrics, dtw_backtrack
 
 
 def _build(cfg, device):
@@ -33,7 +33,8 @@ def _build(cfg, device):
 
 @torch.no_grad()
 def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
-               out_dir=None, limit=None, device=None):
+               out_dir=None, limit=None, device=None,
+               readout="dtw", band_radius_frac=0.25):
     cfg = OmegaConf.load(cfg_path)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     temp = cfg.loss.temperature
@@ -61,16 +62,28 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
             i = torch.from_numpy(z["tile_emb"].astype(np.float32)).unsqueeze(0).to(device)
             sim = model(a, i)["sim"][0]                       # (T, N)
 
-            pos_tile = torch.from_numpy(z["pos_tile"]).to(device)        # (N,) norm
-            p = F.softmax(sim / temp, dim=-1)                            # (T, N)
-            pred_pos = (p * pos_tile.view(1, -1)).sum(dim=-1).cpu().numpy()  # (T,) norm
+            pos_tile = z["pos_tile"].astype(np.float64)                  # (N,) norm
             eff_hz = float(z["eff_hz"])
-
             ann = json.load(open(Path(processed_root) / pid / "annotations.json"))
             strip_w_px = ann["image"]["width_px"]
             px_per_sec = strip_w_px / float(ann["audio"]["duration_sec"])
 
-            pred_px_per_frame = pred_pos * strip_w_px                    # (T,)
+            sim_np = sim.cpu().numpy()
+            if readout == "dtw":
+                # Monotonic DTW path over the full similarity matrix — rejects
+                # spurious far-away high-similarity peaks (repeated measures).
+                path = dtw_backtrack(sim_np, band_radius_frac=band_radius_frac)  # (P,2) of (t,n)
+                # one predicted tile per audio frame (last path node at that frame)
+                T = sim_np.shape[0]
+                pred_tile_per_frame = np.zeros(T, dtype=np.int64)
+                for t, n in path:
+                    pred_tile_per_frame[t] = n
+                pred_px_per_frame = pos_tile[pred_tile_per_frame] * strip_w_px
+            else:  # "mean" — expected position (kept for ablation)
+                p = F.softmax(sim / temp, dim=-1)
+                pred_pos = (p * torch.from_numpy(pos_tile).float().to(device).view(1, -1)).sum(-1).cpu().numpy()
+                pred_px_per_frame = pred_pos * strip_w_px
+
             gt_onset = notes["onset_sec"]; gt_strip_x = notes["strip_x"]
             frame = np.clip(np.round(gt_onset * eff_hz).astype(int), 0, len(pred_px_per_frame) - 1)
             pred_at_onset = pred_px_per_frame[frame]
@@ -112,9 +125,13 @@ def main():
     p.add_argument("--out_dir", default=None)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--device", default=None)
+    p.add_argument("--readout", default="dtw", choices=["dtw", "mean"],
+                   help="dtw = monotonic path (default); mean = expected position")
+    p.add_argument("--band_radius_frac", type=float, default=0.25)
     a = p.parse_args()
     eval_split(a.checkpoint, a.config, a.processed, a.emb_root, a.split,
-               out_dir=a.out_dir, limit=a.limit, device=a.device)
+               out_dir=a.out_dir, limit=a.limit, device=a.device,
+               readout=a.readout, band_radius_frac=a.band_radius_frac)
 
 
 if __name__ == "__main__":
