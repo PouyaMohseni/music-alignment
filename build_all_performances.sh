@@ -18,10 +18,12 @@ mkdir -p results/v3_fullseq
 source .venv/bin/activate
 export PATH=~/miniforge/envs/msmd-tools/bin:$PATH   # fluidsynth
 
+SCRATCH=/lustre07/scratch/pmohseni/music-alignment/data/MSMD
+
 python -m msmd_prep.run_all \
-  --raw    data/MSMD/msmd_aug_v1-1_no-audio \
-  --splits data/MSMD/msmd/msmd/splits/all_split.yaml \
-  --out    /lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all \
+  --raw    $SCRATCH/msmd_aug_v1-1_no-audio \
+  --splits $SCRATCH/msmd/msmd/splits/all_split.yaml \
+  --out    $SCRATCH/processed_all \
   --sf2    ~/sf2/MuseScore_General.sf3 \
   --all-performances \
   --jobs   32
