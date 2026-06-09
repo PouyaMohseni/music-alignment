@@ -19,8 +19,14 @@ import torch.nn.functional as F
 from omegaconf import OmegaConf
 
 from .model import FullSeqAlignmentModel, FullSeqModelConfig
-from .data import FullSeqDataset
+from .data import FullSeqDataset, FullSeqTarDataset
 from ..shared.metrics import alignment_metrics, retrieval_metrics, dtw_backtrack
+
+
+def _make_dataset(emb_root, processed_root, split):
+    if (Path(emb_root) / "index.json").exists():
+        return FullSeqTarDataset(emb_root, processed_root, split)
+    return FullSeqDataset(emb_root, processed_root, split)
 
 
 def _build(cfg, device):
@@ -47,23 +53,24 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
         print(f"  load_state_dict: missing={len(miss)} unexpected={len(unexp)}")
     model.eval()
 
-    ds = FullSeqDataset(emb_root, processed_root, split)
-    ids = ds.piece_ids[:limit] if limit else ds.piece_ids
+    ds = _make_dataset(emb_root, processed_root, split)
+    ids = list(range(len(ds)))[:limit] if limit else list(range(len(ds)))
     out_dir = out_dir or str(Path(checkpoint).parent / "eval")
     out_root = Path(out_dir) / split
     out_root.mkdir(parents=True, exist_ok=True)
 
     rows = []
     with open(out_root / "per_piece.jsonl", "w") as f:
-        for k, pid in enumerate(ids):
-            z = np.load(Path(emb_root) / f"{pid}.npz")
+        for k in ids:
+            s = ds[k]
+            pid = s["piece_id"]
             notes = np.load(Path(processed_root) / pid / "noteheads.npz")
-            a = torch.from_numpy(z["audio_emb"].astype(np.float32)).unsqueeze(0).to(device)
-            i = torch.from_numpy(z["tile_emb"].astype(np.float32)).unsqueeze(0).to(device)
+            a = s["audio_emb"].unsqueeze(0).to(device)
+            i = s["tile_emb"].unsqueeze(0).to(device)
             sim = model(a, i)["sim"][0]                       # (T, N)
 
-            pos_tile = z["pos_tile"].astype(np.float64)                  # (N,) norm
-            eff_hz = float(z["eff_hz"])
+            pos_tile = s["pos_tile"].numpy().astype(np.float64)          # (N,) norm
+            eff_hz = s["eff_hz"]
             ann = json.load(open(Path(processed_root) / pid / "annotations.json"))
             strip_w_px = ann["image"]["width_px"]
             px_per_sec = strip_w_px / float(ann["audio"]["duration_sec"])

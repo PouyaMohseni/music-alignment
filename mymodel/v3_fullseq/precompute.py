@@ -23,7 +23,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import os
+import tarfile
 import wave
 from pathlib import Path
 
@@ -33,6 +36,50 @@ from omegaconf import OmegaConf
 from PIL import Image
 
 from ..v1_baseline.encoders import AudioEncoder, ImageEncoder
+
+
+class _TarShardWriter:
+    """Write per-piece .npz blobs into a few tar shards (avoids inode blowup).
+
+    Produces <out>/shard_000.tar, shard_001.tar, ... and <out>/index.json
+    mapping piece_id -> shard filename. ~13x-more-data all-performances runs
+    create thousands of pieces; a handful of tar shards keeps the file count low.
+    """
+
+    def __init__(self, out_dir: Path, shard_size: int):
+        self.out_dir = Path(out_dir)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.shard_size = shard_size
+        self.index: dict[str, str] = {}
+        self.n = 0
+        self.shard_idx = 0
+        self.tar = None
+        self._open()
+
+    def _open(self):
+        if self.tar is not None:
+            self.tar.close()
+        self.cur = f"shard_{self.shard_idx:03d}.tar"
+        self.tar = tarfile.open(self.out_dir / self.cur, "w")
+
+    def add(self, piece_id: str, arrays: dict):
+        buf = io.BytesIO()
+        np.savez_compressed(buf, **arrays)
+        data = buf.getvalue()
+        info = tarfile.TarInfo(name=f"{piece_id}.npz")
+        info.size = len(data)
+        self.tar.addfile(info, io.BytesIO(data))
+        self.index[piece_id] = self.cur
+        self.n += 1
+        if self.n % self.shard_size == 0:
+            self.shard_idx += 1
+            self._open()
+
+    def close(self):
+        if self.tar is not None:
+            self.tar.close()
+        with open(self.out_dir / "index.json", "w") as f:
+            json.dump(self.index, f)
 
 
 def _read_wav(path: Path, sr: int) -> np.ndarray:
@@ -104,6 +151,9 @@ def main():
                     help="v1/v2 checkpoint to load LoRA-adapted encoder weights from")
     ap.add_argument("--lora_rank", type=int, default=0,
                     help="LoRA rank of the init checkpoint's encoders (0 = raw frozen)")
+    ap.add_argument("--shard_size", type=int, default=0,
+                    help=">0 writes tar shards of this many pieces (avoids inode blowup); "
+                         "0 writes individual .npz files")
     args = ap.parse_args()
 
     cfg = OmegaConf.load(args.config)
@@ -136,25 +186,40 @@ def main():
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
+    writer = _TarShardWriter(out_root, args.shard_size) if args.shard_size > 0 else None
+
+    # Tile embeddings are SHARED across all performances of a piece (same strip).
+    # Cache the most recent strip so all-performances runs don't recompute ViT
+    # N times per piece. Manifest is sorted, so a piece's performances are adjacent.
+    tile_cache = {"key": None, "tile_emb": None, "N": None}
+
     import time
     t0 = time.time()
     done = skipped = 0
     for i, row in enumerate(manifest):
         pid = row["piece_id"]
-        out_path = out_root / f"{pid}.npz"
-        if out_path.exists():
-            skipped += 1
-            continue
+        if writer is None:
+            out_path = out_root / f"{pid}.npz"
+            if out_path.exists():
+                skipped += 1
+                continue
         pdir = Path(args.processed) / pid
         try:
             ann = json.load(open(pdir / "annotations.json"))
             notes = np.load(pdir / "noteheads.npz")
-            strip = np.asarray(Image.open(pdir / "strip.png").convert("RGB"))
             audio = _read_wav(pdir / "audio.wav", sr)
 
             audio_emb = _encode_audio(audio_enc, audio, sr, args.chunk_sec, device)
             T = audio_emb.shape[0]
-            tile_emb, N = _encode_tiles(image_enc, strip, device)
+
+            strip_path = pdir / "strip.png"
+            strip_key = os.path.realpath(strip_path)   # shared strips symlink to one file
+            if tile_cache["key"] == strip_key:
+                tile_emb, N = tile_cache["tile_emb"], tile_cache["N"]
+            else:
+                strip = np.asarray(Image.open(strip_path).convert("RGB"))
+                tile_emb, N = _encode_tiles(image_enc, strip, device)
+                tile_cache.update(key=strip_key, tile_emb=tile_emb, N=N)
 
             strip_w = ann["image"]["width_px"]
             tile_centres = np.arange(N) * tile_stride + tile_size / 2.0
@@ -162,8 +227,7 @@ def main():
             pos_target, valid = _build_targets(notes, T, eff_hz, strip_w, pos_tile)
             px_per_sec = strip_w / float(ann["audio"]["duration_sec"])
 
-            np.savez_compressed(
-                out_path,
+            arrays = dict(
                 audio_emb=audio_emb.numpy().astype(np.float16),
                 tile_emb=tile_emb.numpy().astype(np.float16),
                 pos_tile=pos_tile,
@@ -172,6 +236,10 @@ def main():
                 eff_hz=np.float32(eff_hz),
                 px_per_sec=np.float32(px_per_sec),
             )
+            if writer is not None:
+                writer.add(pid, arrays)
+            else:
+                np.savez_compressed(out_root / f"{pid}.npz", **arrays)
             done += 1
         except Exception as e:
             print(f"  FAIL {pid}: {type(e).__name__}: {e}", flush=True)
@@ -179,6 +247,9 @@ def main():
             print(f"[{i+1}/{len(manifest)}] done={done} skipped={skipped} "
                   f"elapsed={time.time()-t0:.1f}s", flush=True)
 
+    if writer is not None:
+        writer.close()
+        print(f"wrote {writer.shard_idx + 1} tar shards + index.json")
     print(f"DONE done={done} skipped={skipped} elapsed={time.time()-t0:.1f}s")
 
 
