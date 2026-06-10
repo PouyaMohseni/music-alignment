@@ -22,17 +22,30 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 
 
-def _read_wav(path, sr):
+def _read_wav_slice(path, sr, start_sample: int, n_samples: int) -> np.ndarray:
+    """Read only the needed slice from a WAV — avoids loading the full file."""
     with wave.open(str(path), "rb") as r:
         assert r.getframerate() == sr
-        raw = r.readframes(r.getnframes())
-        n_ch, sw = r.getnchannels(), r.getsampwidth()
+        n_ch, sw, n_frames = r.getnchannels(), r.getsampwidth(), r.getnframes()
+        start = max(0, min(start_sample, n_frames))
+        count = min(n_samples, n_frames - start)
+        r.setpos(start)
+        raw = r.readframes(count)
     dtype = {1: "i1", 2: "<i2", 4: "<i4"}[sw]
     pcm = np.frombuffer(raw, dtype=dtype).astype(np.float32)
     if sw == 2: pcm /= 32768.0
     elif sw == 4: pcm /= 2147483648.0
     if n_ch > 1: pcm = pcm.reshape(-1, n_ch).mean(axis=1)
+    # pad if file ended before n_samples
+    if len(pcm) < n_samples:
+        pcm = np.pad(pcm, (0, n_samples - len(pcm)))
     return pcm
+
+
+def _read_wav_duration(path, sr) -> float:
+    """Read just the header to get duration — no sample data loaded."""
+    with wave.open(str(path), "rb") as r:
+        return r.getnframes() / r.getframerate()
 
 
 class E2EDataset(Dataset):
@@ -59,11 +72,12 @@ class E2EDataset(Dataset):
             wav = pdir / "audio.wav"
             if not wav.exists():
                 continue
-            ann = json.load(open(pdir / "annotations.json"))
-            notes = np.load(pdir / "noteheads.npz")
-            dur = float(ann["audio"]["duration_sec"])
+            # read duration from WAV header only (no sample data)
+            dur = _read_wav_duration(wav, audio_sr)
             if dur < audio_sec + 0.5:
                 continue
+            ann = json.load(open(pdir / "annotations.json"))
+            notes = np.load(pdir / "noteheads.npz")
             self.pieces.append({
                 "pid": pid,
                 "pdir": pdir,
@@ -96,23 +110,21 @@ class E2EDataset(Dataset):
             self._strip_cache[pid] = np.asarray(img)
         return self._strip_cache[pid]
 
-    def _get_audio(self, p):
-        return _read_wav(p["pdir"] / "audio.wav", self.audio_sr)
+    def _get_audio_slice(self, p, start_sample: int, n_samples: int) -> np.ndarray:
+        return _read_wav_slice(p["pdir"] / "audio.wav", self.audio_sr,
+                               start_sample, n_samples)
 
     def __getitem__(self, idx):
         pi = int(self._np_rng.choice(len(self.pieces), p=self._weights))
         p = self.pieces[pi]
 
-        audio = self._get_audio(p)
         strip = self._get_strip(p)
 
-        # sample a random window start
+        # sample a random window start, read only that slice from disk
         t0 = self._rng.uniform(0.0, p["dur"] - self.audio_sec)
         s = int(round(t0 * self.audio_sr))
-        e = s + int(self.audio_sec * self.audio_sr)
-        window = audio[s:e]
-        if len(window) < e - s:
-            window = np.pad(window, (0, e - s - len(window)))
+        n_samples = int(self.audio_sec * self.audio_sr)
+        window = self._get_audio_slice(p, s, n_samples)
 
         # pooled frame count
         native_hz = 75

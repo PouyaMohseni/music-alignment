@@ -5,7 +5,7 @@
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
 
