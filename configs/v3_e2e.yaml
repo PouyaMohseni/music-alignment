@@ -1,0 +1,46 @@
+seed: 42
+
+data:
+  processed_root: data/MSMD/processed
+  num_workers:    4
+
+window:
+  audio_sec:   5.0
+  audio_sr:    24000
+  pool_hz:     10
+  tile_size:   224
+  tile_stride: 56
+
+model:
+  audio_model_id:  m-a-p/MERT-v1-95M
+  image_model_id:  google/vit-base-patch16-224-in21k
+  lora_rank_audio: 4
+  lora_rank_image: 4
+  shared_dim:      256
+  n_heads:         4
+  n_cross_layers:  1
+  dropout:         0.1
+
+loss:
+  temperature: 0.07
+  power:       1.0
+
+optim:
+  lr:           1.0e-4    # head LR
+  encoder_lr:   5.0e-6    # encoder LoRA LR (~20x lower)
+  weight_decay: 0.01
+  warmup_steps: 500
+  grad_clip:    0.5
+
+train:
+  batch_size:               4
+  grad_accum_steps:         4    # effective batch = 16
+  steps:                    20000
+  log_every:                10
+  eval_every:               500
+  ckpt_every:               2000
+  amp:                      false  # keep false; AMP + LoRA + long sequences can NaN
+  device:                   auto
+  out_dir:                  results/v3_e2e
+  init_encoder_checkpoint:  results/v1_nce2/checkpoint_020000.pt   # LoRA-adapted encoders
+  init_head_checkpoint:     results/v3_all/checkpoint_002000.pt    # best v3 head
