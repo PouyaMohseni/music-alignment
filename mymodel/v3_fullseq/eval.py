@@ -20,7 +20,8 @@ from omegaconf import OmegaConf
 
 from .model import FullSeqAlignmentModel, FullSeqModelConfig
 from .data import FullSeqDataset, FullSeqTarDataset
-from ..shared.metrics import alignment_metrics, retrieval_metrics, dtw_backtrack
+from ..shared.metrics import (alignment_metrics, retrieval_metrics, dtw_backtrack,
+                              henkel_metrics, dorfer_retrieval_metrics)
 
 
 def _make_dataset(emb_root, processed_root, split):
@@ -100,7 +101,10 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
                 beat_times_sec=ann.get("beat_times_sec") or None,
                 bar_times_sec=ann.get("bar_times_sec") or None,
                 gt_onset_sec=gt_onset)
-            m.update(retrieval_metrics(sim.cpu().numpy()))
+            # Henkel 2019 metrics (cm error + global tracking ratio)
+            m.update(henkel_metrics(pred_at_onset, gt_strip_x))
+            # Dorfer 2017/2018 metrics (Recall@K + MAP)
+            m.update(dorfer_retrieval_metrics(sim_np))
             m["piece_id"] = pid
             rows.append(m)
             f.write(json.dumps(m) + "\n"); f.flush()
@@ -108,7 +112,8 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
                 print(f"  [{k+1}/{len(ids)}] mean_abs_err_sec="
                       f"{np.mean([r['mean_abs_err_sec'] for r in rows]):.3f}", flush=True)
 
-    keys = [kk for kk in rows[0] if kk.startswith(("mean_", "median_", "pct_", "recall_")) or kk == "n"]
+    keys = [kk for kk in rows[0] if kk.startswith(
+        ("mean_", "median_", "pct_", "recall_", "std_", "global_", "tracked_", "map")) or kk == "n"]
     summ = {"n_pieces": len(rows)}
     for kk in keys:
         vals = np.asarray([r[kk] for r in rows if isinstance(r.get(kk), (int, float))])

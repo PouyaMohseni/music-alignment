@@ -33,7 +33,7 @@ from omegaconf import OmegaConf
 from PIL import Image, ImageDraw
 
 from .model import AlignmentModel, AlignmentModelConfig
-from ..shared.metrics import alignment_metrics, dtw_backtrack, retrieval_metrics
+from ..shared.metrics import alignment_metrics, dtw_backtrack, retrieval_metrics, henkel_metrics, dorfer_retrieval_metrics
 
 
 def _read_wav(path: Path, sr: int) -> np.ndarray:
@@ -157,6 +157,8 @@ def align_piece(
         gt_onset_sec=gt_onset_sec,
     )
     metrics.update(retrieval_metrics(sim))
+    metrics.update(henkel_metrics(pred_at_onset, gt_strip_x))
+    metrics.update(dorfer_retrieval_metrics(sim))
     metrics["piece_id"] = piece_id
     metrics["pixels_per_sec"] = float(px_per_sec)
     metrics["sim_shape"] = list(sim.shape)

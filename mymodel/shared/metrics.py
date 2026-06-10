@@ -168,6 +168,86 @@ def alignment_metrics(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Henkel 2019 — "Score Following as a Multi-Modal RL Problem", TISMIR 2019
+# ---------------------------------------------------------------------------
+# Physical conversion factor: 1 pixel ≈ 0.035277778 cm (≈ 1/28.35 cm/px)
+# matching the MSMD rendering DPI used in the paper.
+PXL2CM = 0.035277778
+
+# Their episode-failure threshold: score_shape[2]//3 = 256//3 = 85 px in
+# their MSMD config. We expose it as a parameter so callers can override.
+HENKEL_THRESHOLD_PX = 85
+
+
+def henkel_metrics(
+    pred_strip_x_at_onset: np.ndarray,  # (K,) predicted px at each GT onset
+    gt_strip_x: np.ndarray,             # (K,) ground-truth strip-x in px
+    *,
+    threshold_px: float = HENKEL_THRESHOLD_PX,
+    pxl2cm: float = PXL2CM,
+) -> dict:
+    """Metrics from Henkel et al. 2019, TISMIR.
+
+    Reports:
+      - mean/median/std alignment error in cm  (PXL2CM conversion)
+      - global_tracking_ratio: fraction of onsets with error < threshold_px
+        (equivalent to their "Global Tracking Ratio", 0.80 in paper)
+      - tracked_until_end: 1.0 if ALL onsets are within threshold, 0.0 otherwise
+        (per-piece; aggregate by averaging over pieces to get "Tracked Until End Ratio")
+      - mean_abs_err_cm, median_abs_err_cm, std_abs_err_cm
+    """
+    err_px = np.abs(pred_strip_x_at_onset - gt_strip_x).astype(np.float64)
+    err_cm = err_px * pxl2cm
+    within = err_px < threshold_px
+    return {
+        "mean_abs_err_cm":      float(err_cm.mean())        if len(err_cm) else float("nan"),
+        "median_abs_err_cm":    float(np.median(err_cm))    if len(err_cm) else float("nan"),
+        "std_abs_err_cm":       float(err_cm.std())         if len(err_cm) else float("nan"),
+        "global_tracking_ratio": float(within.mean())       if len(within) else float("nan"),
+        "tracked_until_end":    float(within.all())         if len(within) else float("nan"),
+        "threshold_px":         float(threshold_px),
+        "pxl2cm":               float(pxl2cm),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dorfer 2017/2018 — "Learning Audio-Sheet Music Correspondences", TISMIR 2018
+# ---------------------------------------------------------------------------
+
+
+def dorfer_retrieval_metrics(sim: np.ndarray, ks: tuple[int, ...] = (1, 5, 10, 25)) -> dict:
+    """Snippet-level retrieval metrics from Dorfer et al. 2017/2018.
+
+    Given a (T, N) similarity matrix where row t should retrieve column t as
+    the top result (diagonal is ground truth), computes:
+      - Recall@K   : % of frames where correct tile is in top-K  (matches paper)
+      - MAP        : mean average precision = mean(1/rank)        (matches paper)
+      - mean_rank  : mean rank of the correct tile                (matches paper)
+      - median_rank: median rank of the correct tile
+
+    Their reported numbers: Recall@1 ~70-75%, MAP ~0.80-0.85 on MSMD.
+    """
+    T, N = sim.shape
+    gt_tile = np.round(np.arange(T) * (N - 1) / max(T - 1, 1)).astype(np.int64)
+    ranks_desc = np.argsort(-sim, axis=1)                       # (T, N) descending
+
+    # rank of correct tile (1-indexed)
+    correct_rank = np.array([
+        int(np.where(ranks_desc[t] == gt_tile[t])[0][0]) + 1
+        for t in range(T)
+    ], dtype=np.float64)
+
+    out = {
+        "map":         float(np.mean(1.0 / correct_rank)),
+        "mean_rank":   float(correct_rank.mean()),
+        "median_rank": float(np.median(correct_rank)),
+    }
+    for k in ks:
+        out[f"recall_at_{k}"] = float((correct_rank <= k).mean()) * 100.0
+    return out
+
+
 def retrieval_metrics(sim: np.ndarray, ks: tuple[int, ...] = (1, 5, 10)) -> dict:
     """Recall@k for audio→score retrieval from a (T_audio, N_tiles) sim matrix.
 
