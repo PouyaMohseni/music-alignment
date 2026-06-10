@@ -95,6 +95,7 @@ def main(cfg: DictConfig):
         _load_init(model, cwd / cfg.train.init_head_checkpoint, device)
 
     # two-group optimizer: very low LR for encoder LoRA, normal for head
+    base_lrs = [cfg.optim.encoder_lr, cfg.optim.lr]
     optim = torch.optim.AdamW([
         {"params": list(model.encoder_parameters()),
          "lr": cfg.optim.encoder_lr, "weight_decay": cfg.optim.weight_decay},
@@ -112,9 +113,8 @@ def main(cfg: DictConfig):
         acc_loss = acc_dist = acc_ent = 0.0
 
         scale = _lr_scale(step, cfg.optim.warmup_steps, cfg.train.steps)
-        for g in optim.param_groups:
-            g["lr"] = g["initial_lr"] * scale if "initial_lr" in g else \
-                      (cfg.optim.encoder_lr if g["lr"] <= cfg.optim.encoder_lr else cfg.optim.lr) * scale
+        for g, base in zip(optim.param_groups, base_lrs):
+            g["lr"] = base * scale
 
         for _ in range(accum):
             try:
