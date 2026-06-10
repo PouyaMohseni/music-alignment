@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=40G
+#SBATCH --mem=64G
 #SBATCH --time=24:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
@@ -31,6 +31,7 @@ echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.
 # Uses all-performances processed dataset for maximum data.
 python -m mymodel.v3_e2e.train \
   --config configs/v3_e2e.yaml \
-  data.processed_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all
+  data.processed_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all \
+  data.num_workers=0
 
 echo "Job finished at $(date)"

@@ -2,7 +2,7 @@ seed: 42
 
 data:
   processed_root: data/MSMD/processed
-  num_workers:    4
+  num_workers:    0
 
 window:
   audio_sec:   5.0
