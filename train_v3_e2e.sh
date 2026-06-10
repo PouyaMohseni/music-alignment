@@ -5,7 +5,7 @@
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=48:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v3_e2e/slurm-%j.log
 
@@ -32,6 +32,9 @@ echo "Torch: $(python -c 'import torch; print(torch.__version__, "cuda:", torch.
 python -m mymodel.v3_e2e.train \
   --config configs/v3_e2e.yaml \
   data.processed_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/processed_all \
-  data.num_workers=0
+  data.num_workers=0 \
+  train.steps=2000 \
+  train.ckpt_every=500 \
+  train.eval_every=250
 
 echo "Job finished at $(date)"
