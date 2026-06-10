@@ -79,7 +79,8 @@ class E2EDataset(Dataset):
         self._weights = np.array([p["dur"] for p in self.pieces])
         self._weights /= self._weights.sum()
         self._strip_cache: dict[str, np.ndarray] = {}
-        self._audio_cache: dict[str, np.ndarray] = {}
+        # Audio is NOT cached — 7005 pieces × ~5 MB = ~35 GB would OOM.
+        # Strips ARE cached — only 467 unique strips (shared across performances) × ~6 MB = ~3 GB.
 
         # virtual epoch: roughly total_seconds / audio_sec
         total = sum(p["dur"] for p in self.pieces)
@@ -96,11 +97,7 @@ class E2EDataset(Dataset):
         return self._strip_cache[pid]
 
     def _get_audio(self, p):
-        pid = p["pid"]
-        if pid not in self._audio_cache:
-            self._audio_cache[pid] = _read_wav(p["pdir"] / "audio.wav",
-                                               self.audio_sr)
-        return self._audio_cache[pid]
+        return _read_wav(p["pdir"] / "audio.wav", self.audio_sr)
 
     def __getitem__(self, idx):
         pi = int(self._np_rng.choice(len(self.pieces), p=self._weights))
