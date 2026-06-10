@@ -81,7 +81,10 @@ class E2EAlignmentModel(nn.Module):
         super().__init__()
         self.cfg = cfg or E2EModelConfig()
 
-        # LoRA adapters trainable; base weights frozen
+        # Audio LoRA adapters trainable; image encoder fully frozen.
+        # Image encoder OOMs on full-strip backward pass (hundreds of ViT tiles).
+        # MERT audio LoRA is the critical adaptation — score images are synthetic
+        # and don't need domain-specific fine-tuning.
         self.audio_enc = AudioEncoder(
             model_id=self.cfg.audio_model_id,
             pool_hz=self.cfg.pool_hz,
@@ -93,7 +96,7 @@ class E2EAlignmentModel(nn.Module):
             tile_size=self.cfg.tile_size,
             stride=self.cfg.tile_stride,
             freeze=True,
-            lora_rank=self.cfg.lora_rank_image,
+            lora_rank=0,   # fully frozen — no grad through ViT
         )
 
         d = self.cfg.shared_dim
@@ -107,11 +110,10 @@ class E2EAlignmentModel(nn.Module):
              for _ in range(self.cfg.n_cross_layers)])
 
     def encoder_parameters(self):
-        """LoRA adapter parameters only — low-LR group."""
-        for enc in (self.audio_enc, self.image_enc):
-            for p in enc.parameters():
-                if p.requires_grad:
-                    yield p
+        """Audio LoRA adapter parameters only — low-LR group."""
+        for p in self.audio_enc.parameters():
+            if p.requires_grad:
+                yield p
 
     def head_parameters(self):
         """Projection + cross-attention — high-LR group."""
