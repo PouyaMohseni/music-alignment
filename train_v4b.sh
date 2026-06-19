@@ -34,6 +34,6 @@ echo "Warm-starting from: $V3_CKPT"
 python -m mymodel.v4_pitch.train \
   --config configs/v4b_pitch.yaml \
   init_v3_checkpoint=$V3_CKPT \
-  data.emb_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora_all
+  data.emb_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
 
 echo "Job finished at $(date)"

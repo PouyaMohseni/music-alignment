@@ -4,7 +4,7 @@ seed: 42
 init_v3_checkpoint: null
 
 data:
-  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora_all
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
   processed_root:  data/MSMD/processed
   num_workers:     2
   tile_size:       224
