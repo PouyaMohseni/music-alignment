@@ -1,0 +1,39 @@
+seed: 42
+
+init_v3_checkpoint: null   # set via CLI: init_v3_checkpoint=results/v3_all/checkpoint_XXXXXX.pt
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
+  processed_root:  data/MSMD/processed_all
+  num_workers:     2
+  tile_size:       224
+
+model:
+  d_audio:          768
+  d_image:          768
+  shared_dim:       256
+  n_heads:          4
+  n_cross_layers:   1
+  dropout:          0.1
+  pitch_fuse_alpha: 0.0      # unused — pitch heads are gradient-only (not fused into sim)
+  pitch_hidden:     256
+
+loss:
+  temperature:    0.07       # same as v3_all
+  power:          1.0
+  entropy_weight: 0.0
+  pitch_weight:   0.5        # stronger pitch gradient — safe now (no inference noise)
+
+optim:
+  lr:           1.0e-4       # warm-started weights, keep small
+  weight_decay: 0.01
+  warmup_steps: 200
+  grad_clip:    1.0
+
+train:
+  steps:            8000
+  grad_accum_steps: 8
+  log_every:        10
+  eval_every:       500
+  ckpt_every:       2000
+  out_dir:          results/v4c_pitch

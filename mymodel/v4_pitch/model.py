@@ -109,12 +109,10 @@ class PitchFusedModel(nn.Module):
 
         a_emb = F.normalize(a, dim=-1)
         i_emb = F.normalize(i, dim=-1)
-        a_pit = F.normalize(torch.sigmoid(a_pitch_logits), dim=-1) * self.cfg.pitch_fuse_alpha
-        i_pit = F.normalize(torch.sigmoid(i_pitch_logits), dim=-1) * self.cfg.pitch_fuse_alpha
-
-        a_fused = torch.cat([a_emb, a_pit], dim=-1)
-        i_fused = torch.cat([i_emb, i_pit], dim=-1)
-        sim = torch.einsum("btd,bnd->btn", a_fused, i_fused)
+        # Pitch heads train via BCE gradient only — not fused into sim.
+        # This lets pitch supervision shape the proj weights without adding
+        # noisy pitch logits to cosine similarity at inference.
+        sim = torch.einsum("btd,bnd->btn", a_emb, i_emb)
 
         return {"sim": sim,
                 "audio_pitch_logits": a_pitch_logits,
