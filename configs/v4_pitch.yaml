@@ -1,0 +1,37 @@
+seed: 42
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora
+  processed_root:  data/MSMD/processed
+  num_workers:     2
+  tile_size:       224
+
+model:
+  d_audio:          768
+  d_image:          768
+  shared_dim:       256
+  n_heads:          4
+  n_cross_layers:   1
+  dropout:          0.1
+  pitch_fuse_alpha: 1.0      # weight of the 88-d pitch block in the fused match vector
+  pitch_hidden:     256
+
+loss:
+  temperature:    0.03       # sharpened (was 0.07 in v3)
+  power:          2.0        # squared distance penalises spread (was 1.0)
+  entropy_weight: 0.02       # discourage diffuse rows (was 0.0)
+  pitch_weight:   0.5        # weight on the two BCE pitch-aux losses
+
+optim:
+  lr:           3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 500
+  grad_clip:    1.0
+
+train:
+  steps:            10000
+  grad_accum_steps: 8
+  log_every:        10
+  eval_every:       500
+  ckpt_every:       2000
+  out_dir:          results/v4_pitch
