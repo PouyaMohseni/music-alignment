@@ -72,6 +72,17 @@ def _save(model, step, cfg, out_dir):
     return path
 
 
+def _load_v3_weights(model, ckpt_path, device):
+    """Warm-start proj + cross-attn heads from a v3 checkpoint (pitch heads stay random)."""
+    sd = torch.load(ckpt_path, map_location=device, weights_only=False)
+    v3_state = sd.get("trainable_state", sd.get("model_state", {}))
+    transferable = {k: v for k, v in v3_state.items()
+                    if k.startswith(("audio_proj.", "image_proj.", "audio_layers.", "image_layers."))}
+    miss, _ = model.load_state_dict(transferable, strict=False)
+    print(f"  warm-start: loaded {len(transferable)} tensors from {ckpt_path} "
+          f"({len(miss)} new v4-only keys left random)", flush=True)
+
+
 def main(cfg: DictConfig):
     _seed(cfg.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -94,6 +105,11 @@ def main(cfg: DictConfig):
         n_heads=cfg.model.n_heads, n_cross_layers=cfg.model.n_cross_layers, dropout=cfg.model.dropout,
         pitch_fuse_alpha=cfg.model.pitch_fuse_alpha, pitch_hidden=cfg.model.pitch_hidden)
     model = PitchFusedModel(mc).to(device)
+
+    init_ckpt = cfg.get("init_v3_checkpoint", None)
+    if init_ckpt:
+        _load_v3_weights(model, init_ckpt, device)
+
     print(f"trainable params: {model.num_trainable_params():,}", flush=True)
 
     optim = torch.optim.AdamW(model.trainable_parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
