@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 
 from .model import RecurrentFollower, RecurrentConfig
 from ..v3_fullseq.data import FullSeqTarDataset, FullSeqDataset
+from ..v4_pitch.data import PitchFusedDataset
 
 
 def _seed(s):
@@ -31,8 +32,10 @@ def _lr(step, warmup, total, peak):
     return peak * 0.5 * (1.0 + math.cos(math.pi * prog))
 
 
-def _build_loader(emb_root, processed_root, split, shuffle, num_workers):
-    if (Path(emb_root) / "index.json").exists():
+def _build_loader(emb_root, processed_root, split, shuffle, num_workers, with_pitch=False):
+    if with_pitch:
+        ds = PitchFusedDataset(emb_root, processed_root, split)
+    elif (Path(emb_root) / "index.json").exists():
         ds = FullSeqTarDataset(emb_root, processed_root, split)
     else:
         ds = FullSeqDataset(emb_root, processed_root, split)
@@ -41,7 +44,11 @@ def _build_loader(emb_root, processed_root, split, shuffle, num_workers):
 
 
 def _to(b, device):
-    for k in ("audio_emb", "tile_emb", "pos_tile", "pos_target", "valid_mask"):
+    keys = ["audio_emb", "tile_emb", "pos_tile", "pos_target", "valid_mask"]
+    for k in ("audio_pitch_target", "score_pitch_target"):
+        if k in b:
+            keys.append(k)
+    for k in keys:
         b[k] = b[k].to(device)
     return b
 
@@ -52,12 +59,16 @@ def _tile_labels(pos_target, pos_tile):
     return diffs.argmin(dim=1)                                        # (T,) long
 
 
-def _step_loss(model, b):
+def _step_loss(model, b, pitch_weight=0.0):
     out = model(b["audio_emb"].unsqueeze(0), b["tile_emb"].unsqueeze(0))
     logits = out["logits"][0]                              # (T, N)
     labels = _tile_labels(b["pos_target"], b["pos_tile"])  # (T,)
     mask = b["valid_mask"].bool()
     loss = F.cross_entropy(logits[mask], labels[mask])
+    if pitch_weight > 0 and "audio_pitch_logits" in out:
+        bce_a = F.binary_cross_entropy_with_logits(out["audio_pitch_logits"][0], b["audio_pitch_target"])
+        bce_s = F.binary_cross_entropy_with_logits(out["score_pitch_logits"][0], b["score_pitch_target"])
+        loss = loss + pitch_weight * (bce_a + bce_s)
     acc = (logits[mask].argmax(1) == labels[mask]).float().mean()
     return loss, float(loss.detach()), float(acc.detach())
 
@@ -100,11 +111,12 @@ def main(cfg: DictConfig):
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"device={device}  out={out_dir}  emb={cfg.data.emb_root}", flush=True)
 
+    with_pitch = cfg.model.get("pitch_hidden", 0) > 0
     tl = _build_loader(cfg.data.emb_root, cfg.data.processed_root, "train",
-                       shuffle=True, num_workers=cfg.data.num_workers)
+                       shuffle=True, num_workers=cfg.data.num_workers, with_pitch=with_pitch)
     try:
         vl = _build_loader(cfg.data.emb_root, cfg.data.processed_root, "val",
-                           shuffle=False, num_workers=1)
+                           shuffle=False, num_workers=1, with_pitch=with_pitch)
     except ValueError:
         vl = None
     print(f"train: {len(tl.dataset)}  val: {len(vl.dataset) if vl else 0}", flush=True)
@@ -115,7 +127,8 @@ def main(cfg: DictConfig):
         n_cross_layers=cfg.model.n_cross_layers, dropout=cfg.model.dropout,
         lstm_hidden=cfg.model.lstm_hidden, lstm_layers=cfg.model.lstm_layers,
         lstm_bidirectional=cfg.model.get("lstm_bidirectional", False),
-        residual=cfg.model.get("residual", False))
+        residual=cfg.model.get("residual", False),
+        pitch_hidden=cfg.model.get("pitch_hidden", 0))
     model = RecurrentFollower(rc).to(device)
 
     if cfg.get("init_v3_checkpoint"):
@@ -126,6 +139,7 @@ def main(cfg: DictConfig):
     optim = torch.optim.AdamW(model.trainable_parameters(),
                                lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
     accum = cfg.train.get("grad_accum_steps", 1)
+    pitch_weight = cfg.loss.get("pitch_weight", 0.0) if hasattr(cfg, "loss") else 0.0
     it = iter(tl); t0 = time.time(); optim.zero_grad(set_to_none=True)
 
     for step in range(1, cfg.train.steps + 1):
@@ -134,7 +148,7 @@ def main(cfg: DictConfig):
             try: b = next(it)
             except StopIteration: it = iter(tl); b = next(it)
             b = _to(b, device)
-            loss, ce, acc = _step_loss(model, b)
+            loss, ce, acc = _step_loss(model, b, pitch_weight=pitch_weight)
             (loss / accum).backward()
             tot_ce += ce / accum; tot_acc += acc / accum
 

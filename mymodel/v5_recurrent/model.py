@@ -14,12 +14,16 @@ mode (RC1).
 Config flags:
   lstm_bidirectional : bidirectional LSTM — doubles output dim, uses full sequence context
   residual           : logits = LSTM_logits + raw_sim (LSTM learns a correction on top of v3)
+  pitch_hidden       : >0 adds 88-key pitch heads for aux BCE supervision at training time
+                       (gradient-only — not fused into logits at inference)
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+N_PITCH = 88
 
 
 @dataclass
@@ -34,6 +38,18 @@ class RecurrentConfig:
     lstm_layers: int = 1
     lstm_bidirectional: bool = False   # bidir LSTM — 2x hidden for query_proj input
     residual: bool = False             # logits = LSTM_logits + raw_sim
+    pitch_hidden: int = 0              # 0 = no pitch heads; >0 = add aux pitch supervision
+
+
+class _PitchHead(nn.Module):
+    def __init__(self, d_in, hidden):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(d_in), nn.Linear(d_in, hidden), nn.GELU(),
+            nn.Linear(hidden, N_PITCH))
+
+    def forward(self, x):
+        return self.net(x)
 
 
 class _ProjHead(nn.Module):
@@ -85,6 +101,9 @@ class RecurrentFollower(nn.Module):
                             bidirectional=self.cfg.lstm_bidirectional)
         lstm_out_dim = self.cfg.lstm_hidden * (2 if self.cfg.lstm_bidirectional else 1)
         self.query_proj = nn.Linear(lstm_out_dim, d)
+        if self.cfg.pitch_hidden > 0:
+            self.audio_pitch = _PitchHead(self.cfg.d_audio, self.cfg.pitch_hidden)
+            self.score_pitch = _PitchHead(self.cfg.d_image, self.cfg.pitch_hidden)
 
     def trainable_parameters(self):
         return [p for p in self.parameters() if p.requires_grad]
@@ -108,4 +127,8 @@ class RecurrentFollower(nn.Module):
         # residual: LSTM corrects on top of raw cosine sim instead of replacing it
         logits = sim + lstm_logits if self.cfg.residual else lstm_logits
 
-        return {"logits": logits, "sim": sim}
+        out = {"logits": logits, "sim": sim}
+        if self.cfg.pitch_hidden > 0:
+            out["audio_pitch_logits"] = self.audio_pitch(audio_emb)   # (B,T,88)
+            out["score_pitch_logits"] = self.score_pitch(tile_emb)    # (B,N,88)
+        return out
