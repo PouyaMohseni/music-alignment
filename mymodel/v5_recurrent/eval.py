@@ -91,7 +91,7 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
 
                 # DTW on LSTM logits: globally optimal monotonic path.
                 # Greedy was brittle — one wrong step corrupts the whole trajectory.
-                path_pairs = dtw_backtrack(logits, band_radius_frac=0.25)
+                path_pairs = dtw_backtrack(logits, band_radius_frac=advance_factor)
                 T = logits.shape[0]
                 pred_tile = np.zeros(T, dtype=np.int64)
                 for t, n in path_pairs:
@@ -146,7 +146,8 @@ def main():
     p.add_argument("--emb_root", default="data/MSMD/embeddings_lora")
     p.add_argument("--out_dir", default=None)
     p.add_argument("--limit", type=int, default=None)
-    p.add_argument("--advance_factor", type=float, default=3.0)
+    p.add_argument("--advance_factor", type=float, default=0.25,
+                   help="DTW band radius as fraction of sequence length (band_radius_frac)")
     p.add_argument("--device", default=None)
     a = p.parse_args()
     eval_split(a.checkpoint, a.config, a.processed, a.emb_root, a.split,
