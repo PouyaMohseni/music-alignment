@@ -13,7 +13,7 @@ from omegaconf import OmegaConf
 
 from .model import RecurrentFollower, RecurrentConfig
 from ..v3_fullseq.data import FullSeqTarDataset, FullSeqDataset
-from ..shared.metrics import alignment_metrics, henkel_metrics, retrieval_metrics
+from ..shared.metrics import alignment_metrics, henkel_metrics, retrieval_metrics, dtw_backtrack
 
 
 def _build(cfg, device):
@@ -87,9 +87,14 @@ def eval_split(checkpoint, cfg_path, processed_root, emb_root, split,
                 strip_w = ann["image"]["width_px"]
                 px_per_sec = strip_w / float(ann["audio"]["duration_sec"])
 
-                path = monotonic_decode(logits, advance_factor=advance_factor)
+                # DTW on LSTM logits: globally optimal monotonic path.
+                # Greedy was brittle — one wrong step corrupts the whole trajectory.
+                path_pairs = dtw_backtrack(logits, band_radius_frac=0.25)
                 T = logits.shape[0]
-                pred_px = pos_tile[path] * strip_w
+                pred_tile = np.zeros(T, dtype=np.int64)
+                for t, n in path_pairs:
+                    pred_tile[t] = n
+                pred_px = pos_tile[pred_tile] * strip_w
 
                 gt_onset = notes["onset_sec"]; gt_strip_x = notes["strip_x"]
                 frame = np.clip(np.round(gt_onset * eff_hz).astype(int), 0, T - 1)
