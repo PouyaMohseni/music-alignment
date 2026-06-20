@@ -23,7 +23,9 @@ def _build(cfg, device):
         n_cross_layers=cfg.model.n_cross_layers, dropout=cfg.model.dropout,
         lstm_hidden=cfg.model.lstm_hidden, lstm_layers=cfg.model.lstm_layers,
         lstm_bidirectional=cfg.model.get("lstm_bidirectional", False),
-        residual=cfg.model.get("residual", False))
+        residual=cfg.model.get("residual", False),
+        pitch_hidden=cfg.model.get("pitch_hidden", 0),
+        pitch_on_aligned=cfg.model.get("pitch_on_aligned", False))
     return RecurrentFollower(rc).to(device)
 
 

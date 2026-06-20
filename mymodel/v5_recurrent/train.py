@@ -128,7 +128,8 @@ def main(cfg: DictConfig):
         lstm_hidden=cfg.model.lstm_hidden, lstm_layers=cfg.model.lstm_layers,
         lstm_bidirectional=cfg.model.get("lstm_bidirectional", False),
         residual=cfg.model.get("residual", False),
-        pitch_hidden=cfg.model.get("pitch_hidden", 0))
+        pitch_hidden=cfg.model.get("pitch_hidden", 0),
+        pitch_on_aligned=cfg.model.get("pitch_on_aligned", False))
     model = RecurrentFollower(rc).to(device)
 
     if cfg.get("init_v3_checkpoint"):

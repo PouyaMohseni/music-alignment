@@ -1,0 +1,46 @@
+seed: 42
+
+# E0 — the one-line-fix experiment (REDESIGN.md §9.4).
+# IDENTICAL architecture to v5i_bidir_residual (the controlled no-pitch baseline at
+# 2.38 s / 29.6 %), with ONLY the corrected-wiring pitch supervision added:
+#   pitch_on_aligned: true  -> pitch head taps the ALIGNED feature a/i, so its BCE
+#   gradient reshapes audio_proj/image_proj/cross-attn — the rep that is actually
+#   matched. v4c/v5k put the head on the frozen embedding (inert). This is the clean
+#   A/B: any delta vs v5i is attributable to pitch finally reaching the matched rep.
+init_v3_checkpoint: null
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
+  processed_root:  data/MSMD/processed_all
+  num_workers:     2
+
+model:
+  d_audio:             768
+  d_image:             768
+  shared_dim:          256
+  n_heads:             4
+  n_cross_layers:      1
+  dropout:             0.1
+  lstm_hidden:         512
+  lstm_layers:         1
+  lstm_bidirectional:  true
+  residual:            true
+  pitch_hidden:        256
+  pitch_on_aligned:    true    # <-- THE FIX. false = legacy inert wiring (v5k).
+
+loss:
+  pitch_weight:  0.3           # same gentle weight as v4c/v5k, for a fair comparison
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 0.01
+  warmup_steps: 300
+  grad_clip:    1.0
+
+train:
+  steps:            12000
+  grad_accum_steps: 8
+  log_every:        10
+  eval_every:       1000
+  ckpt_every:       4000
+  out_dir:          results/v6e0_pitch_aligned

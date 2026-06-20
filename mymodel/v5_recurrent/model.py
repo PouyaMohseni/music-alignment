@@ -39,6 +39,8 @@ class RecurrentConfig:
     lstm_bidirectional: bool = False   # bidir LSTM — 2x hidden for query_proj input
     residual: bool = False             # logits = LSTM_logits + raw_sim
     pitch_hidden: int = 0              # 0 = no pitch heads; >0 = add aux pitch supervision
+    pitch_on_aligned: bool = False     # E0: tap ALIGNED feature a/i (shapes the matched
+                                       # rep) vs raw frozen emb (the inert v4c/v5k wiring)
 
 
 class _PitchHead(nn.Module):
@@ -102,8 +104,15 @@ class RecurrentFollower(nn.Module):
         lstm_out_dim = self.cfg.lstm_hidden * (2 if self.cfg.lstm_bidirectional else 1)
         self.query_proj = nn.Linear(lstm_out_dim, d)
         if self.cfg.pitch_hidden > 0:
-            self.audio_pitch = _PitchHead(self.cfg.d_audio, self.cfg.pitch_hidden)
-            self.score_pitch = _PitchHead(self.cfg.d_image, self.cfg.pitch_hidden)
+            # E0 fix: when pitch_on_aligned, the pitch head consumes the ALIGNED feature
+            # (dim = shared_dim) so its gradient flows back through audio_proj/image_proj
+            # and the cross-attention — i.e. it reshapes the representation that is
+            # actually matched. Legacy (False) reads the raw *frozen* embedding, so the
+            # gradient dead-ends and shapes nothing (the v4c/v5k wiring bug, §9.1).
+            pd_a = d if self.cfg.pitch_on_aligned else self.cfg.d_audio
+            pd_s = d if self.cfg.pitch_on_aligned else self.cfg.d_image
+            self.audio_pitch = _PitchHead(pd_a, self.cfg.pitch_hidden)
+            self.score_pitch = _PitchHead(pd_s, self.cfg.pitch_hidden)
 
     def trainable_parameters(self):
         return [p for p in self.parameters() if p.requires_grad]
@@ -129,6 +138,12 @@ class RecurrentFollower(nn.Module):
 
         out = {"logits": logits, "sim": sim}
         if self.cfg.pitch_hidden > 0:
-            out["audio_pitch_logits"] = self.audio_pitch(audio_emb)   # (B,T,88)
-            out["score_pitch_logits"] = self.score_pitch(tile_emb)    # (B,N,88)
+            if self.cfg.pitch_on_aligned:
+                # tap aligned features (post proj + cross-attn) — the exact tensors that
+                # produce `sim` and feed the LSTM. Pitch BCE now shapes the matched rep.
+                out["audio_pitch_logits"] = self.audio_pitch(a)       # (B,T,88)
+                out["score_pitch_logits"] = self.score_pitch(i)       # (B,N,88)
+            else:
+                out["audio_pitch_logits"] = self.audio_pitch(audio_emb)   # legacy raw frozen
+                out["score_pitch_logits"] = self.score_pitch(tile_emb)
         return out
