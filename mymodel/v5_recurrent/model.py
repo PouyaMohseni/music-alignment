@@ -1,0 +1,103 @@
+"""v5 — Recurrent score follower with LSTM temporal conditioning.
+
+Same frozen-embedding pipeline as v3 (proj + cross-attn), then an LSTM reads
+the projected audio sequence and produces a temporally-conditioned query at
+each frame.  The query is matched against all score tiles.
+
+Training loss  : cross-entropy(logits[t], nearest_tile[t]) per valid frame.
+Inference      : monotonic greedy decode on the (T, N) logit matrix.
+
+Key difference vs v3/v4: the model conditions each frame's prediction on
+where it was before (LSTM state), addressing the memoryless-retrieval failure
+mode (RC1).
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+@dataclass
+class RecurrentConfig:
+    d_audio: int = 768
+    d_image: int = 768
+    shared_dim: int = 256
+    n_heads: int = 4
+    n_cross_layers: int = 1
+    dropout: float = 0.1
+    lstm_hidden: int = 256
+    lstm_layers: int = 1
+
+
+class _ProjHead(nn.Module):
+    def __init__(self, d_in, d_out, dropout):
+        super().__init__()
+        self.norm = nn.LayerNorm(d_in)
+        self.proj = nn.Linear(d_in, d_out)
+        self.drop = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+    def forward(self, x):
+        return self.proj(self.drop(self.norm(x)))
+
+
+class _CrossAttn(nn.Module):
+    def __init__(self, d, n_heads, dropout):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d, n_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(d)
+        self.ff = nn.Sequential(nn.Linear(d, d * 4), nn.GELU(),
+                                nn.Dropout(dropout), nn.Linear(d * 4, d))
+        self.norm2 = nn.LayerNorm(d)
+
+    def forward(self, q, ctx):
+        a, _ = self.attn(q, ctx, ctx)
+        x = self.norm(q + a)
+        return self.norm2(x + self.ff(x))
+
+
+class RecurrentFollower(nn.Module):
+    """forward(audio_emb (B,T,Da), tile_emb (B,N,Di)) -> dict:
+        logits  (B, T, N)  — LSTM-conditioned frame-level logits (training + decode)
+        sim     (B, T, N)  — raw cosine similarity (for retrieval metrics)
+    """
+
+    def __init__(self, cfg: RecurrentConfig | None = None):
+        super().__init__()
+        self.cfg = cfg or RecurrentConfig()
+        d = self.cfg.shared_dim
+        self.audio_proj = _ProjHead(self.cfg.d_audio, d, self.cfg.dropout)
+        self.image_proj = _ProjHead(self.cfg.d_image, d, self.cfg.dropout)
+        self.audio_layers = nn.ModuleList(
+            [_CrossAttn(d, self.cfg.n_heads, self.cfg.dropout)
+             for _ in range(self.cfg.n_cross_layers)])
+        self.image_layers = nn.ModuleList(
+            [_CrossAttn(d, self.cfg.n_heads, self.cfg.dropout)
+             for _ in range(self.cfg.n_cross_layers)])
+        self.lstm = nn.LSTM(d, self.cfg.lstm_hidden, self.cfg.lstm_layers,
+                            batch_first=True)
+        self.query_proj = nn.Linear(self.cfg.lstm_hidden, d)
+
+    def trainable_parameters(self):
+        return [p for p in self.parameters() if p.requires_grad]
+
+    def num_trainable_params(self):
+        return sum(p.numel() for p in self.trainable_parameters())
+
+    def forward(self, audio_emb, tile_emb):
+        a = self.audio_proj(audio_emb)    # (B, T, d)
+        i = self.image_proj(tile_emb)     # (B, N, d)
+        for la, li in zip(self.audio_layers, self.image_layers):
+            a, i = la(a, i), li(i, a)
+
+        i_n = F.normalize(i, dim=-1)
+
+        # Raw cosine sim — same as v3, returned for retrieval metrics
+        sim = torch.einsum("btd,bnd->btn", F.normalize(a, dim=-1), i_n)
+
+        # LSTM produces temporally-conditioned queries
+        lstm_out, _ = self.lstm(a)                              # (B, T, lstm_hidden)
+        q = F.normalize(self.query_proj(lstm_out), dim=-1)     # (B, T, d)
+        logits = torch.einsum("btd,bnd->btn", q, i_n)          # (B, T, N)
+
+        return {"logits": logits, "sim": sim}
