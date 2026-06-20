@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=3:00:00
-#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v6e0_pitch_aligned/slurm-%j.log
-#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v6e0_pitch_aligned/slurm-%j.log
+#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/v6e0_pitch_aligned-%j.log
+#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/v6e0_pitch_aligned-%j.log
 
 echo "Job started on $(hostname) at $(date)"
 nvidia-smi

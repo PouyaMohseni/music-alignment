@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=1:00:00
-#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/oracle_e1/slurm-%j.log
-#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/oracle_e1/slurm-%j.log
+#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/oracle_e1-%j.log
+#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/oracle_e1-%j.log
 
 # E1 — oracle pianoroll alignment ceiling. Training-free, CPU-only, ships NOTHING.
 # Sweeps fps so we read BOTH levers at once:
