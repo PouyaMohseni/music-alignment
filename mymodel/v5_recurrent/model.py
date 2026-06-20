@@ -5,14 +5,18 @@ the projected audio sequence and produces a temporally-conditioned query at
 each frame.  The query is matched against all score tiles.
 
 Training loss  : cross-entropy(logits[t], nearest_tile[t]) per valid frame.
-Inference      : monotonic greedy decode on the (T, N) logit matrix.
+Inference      : DTW on the (T, N) logit matrix (globally optimal path).
 
 Key difference vs v3/v4: the model conditions each frame's prediction on
 where it was before (LSTM state), addressing the memoryless-retrieval failure
 mode (RC1).
+
+Config flags:
+  lstm_bidirectional : bidirectional LSTM — doubles output dim, uses full sequence context
+  residual           : logits = LSTM_logits + raw_sim (LSTM learns a correction on top of v3)
 """
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,6 +32,8 @@ class RecurrentConfig:
     dropout: float = 0.1
     lstm_hidden: int = 256
     lstm_layers: int = 1
+    lstm_bidirectional: bool = False   # bidir LSTM — 2x hidden for query_proj input
+    residual: bool = False             # logits = LSTM_logits + raw_sim
 
 
 class _ProjHead(nn.Module):
@@ -58,8 +64,8 @@ class _CrossAttn(nn.Module):
 
 class RecurrentFollower(nn.Module):
     """forward(audio_emb (B,T,Da), tile_emb (B,N,Di)) -> dict:
-        logits  (B, T, N)  — LSTM-conditioned frame-level logits (training + decode)
-        sim     (B, T, N)  — raw cosine similarity (for retrieval metrics)
+        logits  (B, T, N)  — LSTM-conditioned logits (used for DTW decode)
+        sim     (B, T, N)  — raw cosine similarity (retrieval metrics)
     """
 
     def __init__(self, cfg: RecurrentConfig | None = None):
@@ -75,8 +81,10 @@ class RecurrentFollower(nn.Module):
             [_CrossAttn(d, self.cfg.n_heads, self.cfg.dropout)
              for _ in range(self.cfg.n_cross_layers)])
         self.lstm = nn.LSTM(d, self.cfg.lstm_hidden, self.cfg.lstm_layers,
-                            batch_first=True)
-        self.query_proj = nn.Linear(self.cfg.lstm_hidden, d)
+                            batch_first=True,
+                            bidirectional=self.cfg.lstm_bidirectional)
+        lstm_out_dim = self.cfg.lstm_hidden * (2 if self.cfg.lstm_bidirectional else 1)
+        self.query_proj = nn.Linear(lstm_out_dim, d)
 
     def trainable_parameters(self):
         return [p for p in self.parameters() if p.requires_grad]
@@ -91,13 +99,13 @@ class RecurrentFollower(nn.Module):
             a, i = la(a, i), li(i, a)
 
         i_n = F.normalize(i, dim=-1)
-
-        # Raw cosine sim — same as v3, returned for retrieval metrics
         sim = torch.einsum("btd,bnd->btn", F.normalize(a, dim=-1), i_n)
 
-        # LSTM produces temporally-conditioned queries
-        lstm_out, _ = self.lstm(a)                              # (B, T, lstm_hidden)
-        q = F.normalize(self.query_proj(lstm_out), dim=-1)     # (B, T, d)
-        logits = torch.einsum("btd,bnd->btn", q, i_n)          # (B, T, N)
+        lstm_out, _ = self.lstm(a)
+        q = F.normalize(self.query_proj(lstm_out), dim=-1)
+        lstm_logits = torch.einsum("btd,bnd->btn", q, i_n)
+
+        # residual: LSTM corrects on top of raw cosine sim instead of replacing it
+        logits = sim + lstm_logits if self.cfg.residual else lstm_logits
 
         return {"logits": logits, "sim": sim}

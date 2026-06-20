@@ -113,7 +113,9 @@ def main(cfg: DictConfig):
         d_audio=cfg.model.d_audio, d_image=cfg.model.d_image,
         shared_dim=cfg.model.shared_dim, n_heads=cfg.model.n_heads,
         n_cross_layers=cfg.model.n_cross_layers, dropout=cfg.model.dropout,
-        lstm_hidden=cfg.model.lstm_hidden, lstm_layers=cfg.model.lstm_layers)
+        lstm_hidden=cfg.model.lstm_hidden, lstm_layers=cfg.model.lstm_layers,
+        lstm_bidirectional=cfg.model.get("lstm_bidirectional", False),
+        residual=cfg.model.get("residual", False))
     model = RecurrentFollower(rc).to(device)
 
     if cfg.get("init_v3_checkpoint"):

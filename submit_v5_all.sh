@@ -1,21 +1,18 @@
 #!/bin/bash
 # Submit all v5 training variants at once.
-# Usage: bash submit_v5_all.sh
+# Usage:  bash submit_v5_all.sh
+# After:  bash eval_v5_all.sh
 
 cd /project/def-ichiro/pmohseni/music-alignment
 
-mkdir -p results/v5b_large results/v5c_noxattn results/v5d_long
+VARIANTS=(v5b_large v5c_noxattn v5d_long v5e_scratch v5f_bidir v5g_residual v5h_deep v5i_bidir_residual)
 
-echo "Submitting v5b (large LSTM)..."
-sbatch train_v5b.sh
-
-echo "Submitting v5c (no cross-attention)..."
-sbatch train_v5c.sh
-
-echo "Submitting v5d (long training)..."
-sbatch train_v5d.sh
+for V in "${VARIANTS[@]}"; do
+  mkdir -p results/$V
+  JID=$(sbatch --parsable train_${V}.sh)
+  echo "submitted $V  -> job $JID"
+done
 
 echo ""
-echo "All submitted. Check status with: squeue -u $USER"
-echo ""
-echo "When done tomorrow, run:  bash eval_v5_all.sh"
+echo "All 8 jobs submitted. Monitor with:  squeue -u $USER"
+echo "Eval tomorrow with:  bash eval_v5_all.sh"
