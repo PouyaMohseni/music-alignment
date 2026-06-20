@@ -34,9 +34,10 @@ declare -A CONFIGS=(
   ["v5k_pitch"]="configs/v5k_pitch.yaml"
   ["v5l_deep_bidir"]="configs/v5l_deep_bidir.yaml"
   ["v5m_big"]="configs/v5m_big.yaml"
+  ["v6e0_pitch_aligned"]="configs/v6e0_pitch_aligned.yaml"
 )
 
-MODELS=(v5_recurrent v5b_large v5c_noxattn v5d_long v5e_scratch v5f_bidir v5g_residual v5h_deep v5i_bidir_residual v5j_long v5k_pitch v5l_deep_bidir v5m_big)
+MODELS=(v5_recurrent v5b_large v5c_noxattn v5d_long v5e_scratch v5f_bidir v5g_residual v5h_deep v5i_bidir_residual v5j_long v5k_pitch v5l_deep_bidir v5m_big v6e0_pitch_aligned)
 
 _parse() {
   python3 -c "
