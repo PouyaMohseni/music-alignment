@@ -29,14 +29,19 @@ for FPS in 10 20 40; do
     --processed data/MSMD/processed \
     --out_dir results/oracle_e1_fps${FPS} > /dev/null 2>&1
 
-  python3 -c "
-import json
-d = json.load(open('results/oracle_e1_fps${FPS}/test/summary.json'))
-g = lambda k: d.get(k, float('nan'))
-print(f'{$FPS:<4}  {g(\"mean_mean_abs_err_sec\"):>6.3f}  {g(\"mean_pct_within_0.5s\"):>5.1f}%  "
-      f'{g(\"mean_pct_within_0.25s\"):>6.1f}%  {g(\"mean_pct_within_0.1s\"):>5.1f}%  "
-      f'{g(\"mean_recall_at_1\"):>7.1f}%')
-" 2>/dev/null || echo "$FPS   (parse failed — see results/oracle_e1_fps${FPS}/test/summary.json)"
+  # quoted heredoc -> Python source passed verbatim (no shell escaping); fps via argv
+  python3 - "$FPS" <<'PYEOF'
+import json, sys
+fps = sys.argv[1]
+try:
+    d = json.load(open(f'results/oracle_e1_fps{fps}/test/summary.json'))
+    g = lambda k: d.get(k, float('nan'))
+    print(f"{fps:<4}  {g('mean_mean_abs_err_sec'):>6.3f}  {g('mean_pct_within_0.5s'):>5.1f}%  "
+          f"{g('mean_pct_within_0.25s'):>6.1f}%  {g('mean_pct_within_0.1s'):>5.1f}%  "
+          f"{g('mean_recall_at_1'):>7.1f}%")
+except Exception as e:
+    print(f"{fps}   (parse failed: {e})")
+PYEOF
 done
 
 echo ""
