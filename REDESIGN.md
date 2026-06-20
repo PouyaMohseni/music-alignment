@@ -84,11 +84,16 @@ pooling that discards the pitch axis). The earlier pitch attempts (`v4c`, `v5k`)
 to fail — but on inspection that was a **wiring bug, not a real test**: the pitch head
 read the *frozen precomputed* embedding, not the aligned feature, so its gradient never
 reshaped anything that gets matched ([model.py:132-133](mymodel/v5_recurrent/model.py#L132-L133),
-see §9.1). **RC2 is untested, not refuted** — and it has a cheap, never-run test (§9.4 E0).
-The v6 redesign (§9) keeps the system **end-to-end on the foundation models with no
-pianoroll/transcription at inference**, and instead uses MIDI *only at training time* to
-**shape the embeddings** to be pitch-aware. **The free diagnostic E1 and the one-line E0
-fix come first (§9).**
+see §9.1).
+
+> **E1 RESULT (2026-06-20) — the strategy pivoted. See §9.0.** The oracle (perfect pitch on
+> both sides) reaches only **41.5 % @0.5 s** — and v5 is already at **31.8 %**, i.e. ~77 % of
+> the perfect-pitch ceiling. **Pitch is a small lever (~10 pts of headroom), not the wall.** The
+> real wall is the **tile-bucket-DTW framing**: it caps at ~41 % even with perfect information
+> because the score side localizes only to a 224 px tile. The 44-pt gap to SOTA is **structural**.
+> → Promote *resolution* (continuous / sub-tile position) to PRIMARY; finish E0 but deprioritize
+> heavy pitch work (E2). The path to SOTA is **continuous-position prediction**, not better
+> features. The system stays **end-to-end on the foundation models, no roll at inference**.
 
 ---
 
@@ -337,6 +342,49 @@ transcription-pivot of §9-draft (aligning predicted pianorolls makes a symbolic
 inference representation). What we keep from that literature is the *principle*, realized
 *inside* the embedding instead of beside it.
 
+### 9.0 E1 RESULT (2026-06-20) — READ FIRST: the tile-DTW framing is the wall, pitch is a small lever
+
+We ran the oracle (perfect pitch on **both** sides, test split, DTW band 0.25):
+
+| fps | mean err | @0.5 s | @0.25 s | @0.1 s | recall@1 |
+|---|---|---|---|---|---|
+| **10** | **0.755 s** | **41.5 %** | 20.8 % | 8.7 % | 5.6 % |
+| 20 | 0.786 s | 39.0 % | 19.9 % | 8.3 % | 5.4 % |
+| 40 | 0.804 s | 37.6 % | 19.1 % | 7.9 % | 5.3 % |
+
+*Reference: v5l (real, learned features) = 2.21 s / **31.8 %**; SOTA (Henkel) = 85.2 %.*
+
+**Three conclusions, each reversing a prior assumption in this doc:**
+
+1. **Pitch is a SMALL lever — RC2 is nearly spent.** Perfect pitch reaches **41.5 %** @0.5 s;
+   our learned v5l is already at **31.8 %** — i.e. **~77 % of the perfect-pitch ceiling**. The
+   entire remaining headroom from features is **~10 points**, and a real encoder captures less
+   than perfect pitch. → Finish E0 (cheap, confirms the real-vs-oracle gap) but **do NOT fund
+   E2 (LoRA+pitch) heavily.** The earlier "RC2 co-primary" framing is now downgraded.
+2. **The tile-bucket-DTW *framing* is the wall.** Even with perfect information the score side
+   can only localize to a **224 px tile (stride 56)**, so @0.1 s is just **8.7 %** and @0.5 s
+   caps at ~41 %. The 44-point gap to SOTA is **structural, not featural**: SOTA predicts a
+   *continuous* position in the sheet; we bucket into tiles and argmax. → **Resolution is
+   promoted from "secondary" to the PRIMARY lever.**
+3. **More audio fps does not help — it slightly hurts (10→40 degrades every bin).** The
+   bottleneck is **score-side spatial granularity**, not audio temporal resolution.
+   recall@1 = 5.6 % *with perfect pitch* confirms severe position aliasing (one pitch-set
+   matches ~18 tiles); only the monotonic/temporal constraint disambiguates — re-validating
+   RC1 and the v5 LSTM as the single biggest win.
+
+**Revised priority (supersedes 9.4):**
+- **(P0) Break the tile floor — continuous / sub-tile position.** v5 quantizes to tile centers
+  (`pred_px = pos_tile[pred_tile]`, [eval.py:99](mymodel/v5_recurrent/eval.py#L99)). Replace with
+  a continuous estimate — soft-expectation of `pos_tile` around the DTW path, or a head that
+  regresses offset-within-tile. Directly attacks the @0.25/@0.1 floor perfect pitch could not
+  beat. Cheap, no re-precompute.
+- **(P1) Continuous-position conditioned follower (Henkel framing, the old E4).** FiLM on audio
+  history + predict one continuous position, not a tile bucket. The path past 41 %.
+- **(P2, deprioritized) Pitch (E0/E2).** Ceiling ~10 pts. Finish the running E0; shelve E2.
+
+The §9.1–9.6 plan below was written *before* this result; read it as the rationale for E0
+(still worth finishing), but the live priority is P0/P1 above.
+
 ### 9.1 The pitch lever was never actually tested — a wiring bug, not a dead end
 
 The original §9 read the v4c/v5k results as "pitch-as-auxiliary fails." **That conclusion is
@@ -449,10 +497,13 @@ follower → position. Pitch is scaffolding that is removed before deployment.
 
 ### 9.6 One line
 
-**The pitch lever was mis-wired, not disproven — fix one line (E0), measure the ceiling for free
-(E1), then shape the LoRA foundation embeddings with pitch + onset supervision and fuse them into
-the v5 follower. End-to-end, foundation models, no roll at inference — memory × pitch is the path
-to SOTA.**
+*(Pre-E1 rationale; superseded by §9.0.)* The pitch lever was mis-wired, not disproven — fix one
+line (E0), measure the ceiling for free (E1), then shape the embeddings with pitch supervision.
+
+**Post-E1 verdict (the live one): pitch is nearly spent — v5 is already at ~77 % of the
+perfect-pitch ceiling. The wall is the tile-bucket-DTW *framing* (41 % @0.5 s even with perfect
+pitch). Break it with continuous-position prediction (P0 sub-tile decode, then P1 Henkel-style
+conditioned localization), not better features.**
 
 ---
 
