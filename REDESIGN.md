@@ -80,13 +80,15 @@ ceiling:
 So the follower architecture is **no longer the bottleneck.** The remaining 34 %→85 %
 gap is the *other* two root causes the redesign named — **RC2 (pitch-blind features)**
 and the **resolution** secondaries (onset blur, beat-rate tile quantization, `[CLS]`
-pooling that discards the pitch axis). Critically, every attempt so far to install pitch
-as an **auxiliary loss on frozen embeddings has moved nothing**: `v4c` (gradient-only
-pitch BCE) scored 6.00 s vs the 6.13 s baseline, and the v5 pitch-aux variant (`v5k`)
-failed to even produce a stable checkpoint. **Pitch as a side-objective does not work.
-Pitch has to be the space we align in.** That is the v6 redesign (§9), and it is exactly
-the transcription-pivot of Kwon, Jeong & Nam (ISMIR 2017). **E1 is now more decisive than
-ever and is still unrun — do it first (§9).**
+pooling that discards the pitch axis). The earlier pitch attempts (`v4c`, `v5k`) appeared
+to fail — but on inspection that was a **wiring bug, not a real test**: the pitch head
+read the *frozen precomputed* embedding, not the aligned feature, so its gradient never
+reshaped anything that gets matched ([model.py:132-133](mymodel/v5_recurrent/model.py#L132-L133),
+see §9.1). **RC2 is untested, not refuted** — and it has a cheap, never-run test (§9.4 E0).
+The v6 redesign (§9) keeps the system **end-to-end on the foundation models with no
+pianoroll/transcription at inference**, and instead uses MIDI *only at training time* to
+**shape the embeddings** to be pitch-aware. **The free diagnostic E1 and the one-line E0
+fix come first (§9).**
 
 ---
 
@@ -143,9 +145,10 @@ banded DTW backtrack (infer).
   of Soft-DTW as γ→0, not a bug in the idea.
 - **Temporal memory is the biggest single lever (v5, §0.5).** An LSTM over audio history
   + DTW on the conditioned logits nearly 3×'d mean error (6.13 → 2.21 s). Confirms RC1.
-- **Pitch as an auxiliary loss does nothing (v4c, v5k).** Gradient-only pitch BCE on
-  frozen embeddings: 6.00 s vs 6.13 s baseline — flat. This is the negative result that
-  motivates v6: pitch must be the alignment *space*, not a side-objective.
+- **The pitch auxiliary was mis-wired, so RC2 is still untested (v4c, v5k).** Gradient-only
+  pitch BCE scored 6.00 s vs 6.13 s — flat — but the head read the *frozen* embedding, not
+  the aligned feature, so the gradient never reached the matched representation (§9.1). Not
+  evidence pitch fails; evidence the wiring was inert. v6 fixes the wiring (§9.4 E0).
 
 ## 3. Root-cause analysis (ranked, with confidence and honest caveats)
 
@@ -260,6 +263,13 @@ augmentation.
 
 ## 6. Ranked experiment plan (cheapest, highest-leverage first)
 
+> **Superseded 2026-06-20 by §9.** Items E4/E6/E7 below describe a symbolic
+> *transcription-pivot* (aligning pianorolls). That conflicts with the current
+> constraint — **end-to-end, foundation models, no roll at inference** — so the
+> live plan is §9.4 (E0/E1/E2/E3/E4). E1 (oracle pianoroll DTW) survives **only as a
+> free diagnostic that ships nothing**, not as an inference path. Kept below as the
+> 2026-06-18 record.
+
 **E1 — Oracle pianoroll DTW. No training, hours of CPU. DO THIS FIRST.**
 Build *both* pianorolls directly from MIDI ground truth → cosine → existing
 `dtw_backtrack` → `henkel_metrics`. **This single experiment disambiguates the entire
@@ -316,115 +326,132 @@ as the evidence suggests, **both**, in that order.
 
 ---
 
-## 9. The v6 redesign — align in transcription (pitch) space  ·  *the Nam pivot*
+## 9. The v6 redesign — pitch-shaped foundation embeddings, end-to-end, no symbolic pivot
 
-*Written 2026-06-20, after the v5 sweep. v5 captured the framing lever (RC1) and
-plateaued at ~34 % @0.5 s. The live bottleneck is now features (RC2) + resolution. Two
-independent negative results (v4c, v5k) say pitch-as-auxiliary-loss fails. The
-conclusion both our evidence and the literature converge on: **stop aligning opaque
-embeddings; align in pitch space.***
+*Written 2026-06-20, after the v5 sweep; revised same day to the explicit design
+constraint:* **end-to-end image↔audio alignment, built on the foundation models
+(MERT + ViT, LoRA-adapted), with NO pianoroll / transcription / symbolic intermediate
+at inference.** MIDI is used *only* as a training-time signal to shape the embeddings; the
+deployed model sees (score image, audio) and nothing else. This rules out the
+transcription-pivot of §9-draft (aligning predicted pianorolls makes a symbolic roll the
+inference representation). What we keep from that literature is the *principle*, realized
+*inside* the embedding instead of beside it.
 
-### 9.1 Why this, why now
+### 9.1 The pitch lever was never actually tested — a wiring bug, not a dead end
 
-The original redesign listed RC1 and RC2 as *co-primary*. We resolved RC1 empirically:
-temporal memory was worth ~half the gap to SOTA, and no amount of follower-architecture
-tuning goes further. That leaves RC2 as the dominant remaining lever — and we now have
-**direct evidence about how *not* to attack it.** Bolting an 88-key BCE head onto frozen
-MERT/ViT embeddings (v4c gradient-only; v5k pitch-aux) moves the metric by noise. A thin
-head cannot turn a pitch-blind embedding into a pitch-aware one. The pitch signal must be
-the **representation the two modalities meet in**, not a regularizer on a representation
-that ignores it.
+The original §9 read the v4c/v5k results as "pitch-as-auxiliary fails." **That conclusion is
+invalid.** Look at the v5 pitch head ([model.py:132-133](mymodel/v5_recurrent/model.py#L132-L133)):
 
-### 9.2 What to borrow from Juhan Nam's line (Kwon, Jeong & Nam, ISMIR 2017, already cited)
-
-Their *Audio-to-Score Alignment using RNN-based Automatic Music Transcription* solves the
-same alignment problem by **transcribing the audio into a pitch representation and aligning
-that against the symbolic score** — both sides living on a shared 88-key axis, then DTW.
-Three transferable parts:
-
-1. **Align in transcription/pitch space — the core move.** The audio→pitch map and the
-   score→pitch map share one interpretable axis, so DTW compares *like with like* (pitch
-   content over time) instead of comparing two opaque, separately-learned embedding
-   geometries. This is also the classical synchronization space (Ewert/Müller chroma-onset,
-   already cited) — the most thoroughly validated alignment representation in the field.
-2. **Soft posteriorgram, not hard transcription.** Align the frame-level pitch *probability*
-   map, never a thresholded note list. A wrong/missing transcribed note then costs a soft
-   penalty in one DTW cell instead of a hard structural error. This is the robustness trick
-   that makes transcription-pivot viable despite imperfect AMT — and it costs us nothing, our
-   pitch heads already emit logits.
-3. **Onset-aware features.** The onset/frame AMT line (Nam-lab; the broader high-resolution
-   transcription literature) predicts onsets as a separate channel from sustained activation.
-   This matters *specifically for our metric*: @0.5 s is an **onset-timing** measurement, and
-   our current beat-rate tiling floors it. An explicit onset channel targets exactly the
-   sub-second bins where we are weakest.
-
-### 9.3 The architecture (v6)
-
-Same end-to-end contract — at inference the model still takes only (score image, audio) and
-reads no MIDI; MIDI is training supervision only (audio is FluidSynth-from-MIDI, score
-noteheads carry `midi_pitch` — both exact). The builders already exist:
-`mymodel/v4_pitch/pitchroll.py::audio_pitchroll / score_pitchroll`.
-
-```
-audio ─MERT─► pitch head ─► soft pianoroll  P_a (T×88)  [+ onset channel]
-                                                  │  cosine / IoU
-score image ─► pitch head ─► soft pianoroll  P_s (N×88) ─┤ ► (T×N) ─► DTW
-                                                  │
-                          (Stage 2) feed P_a into the v5 LSTM follower
-                          so the tracker has BOTH pitch AND memory
+```python
+out["audio_pitch_logits"] = self.audio_pitch(audio_emb)   # RAW frozen precomputed input
+out["score_pitch_logits"] = self.score_pitch(tile_emb)    # RAW frozen precomputed input
 ```
 
-- **Audio tower.** MERT → pitch head emitting a soft 88-key posteriorgram, BCE-supervised
-  by `audio_pitchroll`. Add a separate **onset channel** (BCE on onset frames). Pair with the
-  resolution fixes the redesign already specified (§5: learned 13-layer MERT sum, ~25 Hz
-  max-pool) so onsets survive to the posteriorgram.
-- **Score tower.** **Stage-gated.** First use the **oracle MIDI pianoroll** (`score_pitchroll`,
-  zero OMR risk). Only after pitch-space is proven do we train a learned OMR head on the strip
-  (notehead height = pitch; this is where the vertical axis `[CLS]`-pooling threw away becomes
-  load-bearing).
-- **Matcher.** Cosine/IoU between `P_a` and `P_s` → `(T×N)` → existing `dtw_backtrack`. Then
-  **Stage 2 fuses the two captured levers**: feed `P_a` (pitch-aware, temporally local) into
-  the v5 LSTM follower so the tracker has memory *and* pitch — RC1 ∘ RC2 together.
+The pitch head reads `audio_emb` / `tile_emb` — the **raw, precomputed, frozen** embeddings —
+**not** `a` / `i`, the projected, cross-attended features that are actually matched
+([model.py:115-128](mymodel/v5_recurrent/model.py#L115-L128)). Those inputs are frozen tensors
+with no gradient path to anything. So the pitch BCE trained the *pitch head's own weights and
+stopped there* — it never touched `audio_proj`, the cross-attention, the LSTM, or `query_proj`.
+**The pitch supervision was a detached side-branch that could not, by construction, make the
+aligned representation pitch-aware.** v4c/v5k tell us nothing about whether pitch helps; they
+tell us this *wiring* is inert. RC2 is **untested**, not refuted.
 
-### 9.4 Experiment plan (re-gated on what we now know)
+This is good news: the single most important remaining lever has a cheap, never-run test.
 
-- **E1 — ORACLE PIANOROLL DTW. Still unrun. ~20 lines. DO THIS FIRST.** Build *both*
-  pianorolls from MIDI (`audio_pitchroll`, `score_pitchroll`), cosine → `dtw_backtrack` →
-  `henkel_metrics`. **This is the gate for all of v6.** It answers the one question 13 v5
-  variants could not: *is the 1-D strip alignable at sub-second precision when pitch is
-  perfect?*
-  - If @0.5 s jumps toward SOTA → RC2 is the lever; build the audio AMT pivot (next).
-  - If it stays ~34 % even with perfect pitch → the **strip resolution / beat-rate
-    quantization is the floor**, and v6 must first re-tile the score (finer stride +
-    sub-tile x-regression) before any feature work. Either outcome is decisive and saves
-    weeks.
-- **E1b — oracle audio-roll vs learned score-roll, and vice-versa.** Swap one oracle side
-  for a learned head to attribute the gap to the audio tower vs the score tower
-  independently (resolves the LoRA-confound RC2 flagged: the 14→6.7 s evidence couldn't
-  separate the towers).
-- **E4′ — audio AMT pivot (days).** Score = oracle roll; train the MERT pitch+onset head;
-  align. The honest one-tower transcription-pivot baseline, zero OMR risk.
-- **E7′ — fuse pivot into the v5 follower (weeks).** Pitch-aware features into the LSTM. This
-  is the candidate that combines both validated levers and is the realistic path toward 85 %.
-- **OMR score head — deferred** until E1/E4′ prove pitch-space pays, exactly as the original
-  §7 risk analysis demanded.
+### 9.2 What to keep from Juhan Nam's line — the principle, not the pivot
+
+Kwon, Jeong & Nam (*Audio-to-Score Alignment using RNN-based AMT*, ISMIR 2017, already cited)
+transcribe audio to a pianoroll and DTW it against the symbolic score. We **reject the
+mechanism** (it puts a symbolic roll on the inference path) but **keep three principles**, each
+re-homed inside the foundation embeddings:
+
+1. **Pitch must live in the representation that gets matched.** Their whole result rests on
+   comparing *pitch content*, not opaque features. Our translation: make MERT/ViT embeddings
+   *pitch-discriminative* via an auxiliary objective wired to the **aligned** feature — then
+   align those embeddings directly, no roll. (Henkel 2020 does exactly this: learned encoders,
+   never a transcription, pitch emerges implicitly from a 2-D log-frequency frontend. Henkel is
+   the better architectural fit for our constraint than the Nam pivot.)
+2. **Soft / probabilistic, not hard.** Whatever pitch supervision we add stays a soft auxiliary
+   (BCE logits), never a thresholded note list — so an imperfect pitch signal degrades
+   gracefully and is *dropped entirely at inference*.
+3. **Onset-awareness for the sub-second bins.** @0.5 s is an **onset-timing** metric. An onset
+   auxiliary channel (separate from sustain) on the audio tower targets exactly the bins our
+   beat-rate tiling floors — again, training-time only.
+
+### 9.3 The architecture (v6) — three embedding-native levers, pure (image, audio) inference
+
+```
+INFERENCE (no MIDI, no roll):
+  audio  ─ MERT (LoRA) ─► audio_proj ─┐
+                                       ├─► cross-attn ─► a,i ─► LSTM follower ─► position
+  image  ─ ViT  (LoRA) ─► image_proj ─┘                         (v5, kept)
+
+TRAINING ONLY (detached at inference): pitch/onset heads hang off a,i and the LoRA encoders,
+  BCE vs MIDI pianoroll, to SHAPE the embeddings. Removed from the graph when deployed.
+```
+
+- **Lever A — pitch-shaped embeddings (RC2, finally wired right).** Move the pitch head onto
+  the **aligned** feature `a` / `i` (and, in the full version, let its gradient reach the
+  **LoRA-adapted** MERT/ViT). Now the pitch BCE reshapes the exact representation that DTW/the
+  follower consumes. At inference the pitch head is deleted — embeddings are already
+  pitch-aware. This is the clean RC2 test the wiring bug prevented.
+- **Lever B — resolution (the secondaries, all foundation-model-native).** (a) Replace MERT
+  `last_hidden_state` with a **learned softmax over 13 layers** (canonical MARBLE recipe; MERT
+  provably encodes pitch in intermediate layers). (b) Cut pooling 93 ms → ~25-40 ms with
+  max/learned-conv pooling to preserve onsets. (c) **Stop `[CLS]`-pooling the score tile** —
+  keep patch tokens / column-attention so the **vertical axis (= pitch)** survives; add a
+  **sub-tile x-regression** head so we beat the ~0.5 s beat-quantization floor.
+- **Lever C — deeper temporal conditioning (RC1++, the Henkel form).** v5's LSTM reads audio
+  history; extend it to **FiLM-condition the score features** with that history vector and
+  predict a **single local position** rather than re-scoring a global matrix. End-to-end,
+  learned, no roll — and it makes the score representation *adapt to what's been heard*, which
+  both disambiguates repeats and sharpens pitch relevance.
+
+All three compose into one network with one inference path: foundation encoders → conditioned
+follower → position. Pitch is scaffolding that is removed before deployment.
+
+### 9.4 Experiment plan (cheapest, highest-leverage first)
+
+- **E0 — re-wire the pitch head onto `a`/`i` and retrain (HOURS, ~one-line change).** Keep the
+  frozen precomputed embeddings; change [model.py:132-133](mymodel/v5_recurrent/model.py#L132-L133)
+  from `self.audio_pitch(audio_emb)` → `self.audio_pitch(a)` (score side `i`), add the BCE
+  (already in [train.py]). This forces `audio_proj`/cross-attn to *surface* the pitch MERT
+  already encodes. **Cheapest possible test of RC2** — if @0.5 s moves, pitch-shaping is real
+  and worth the LoRA cost; if not, frozen MERT lacks recoverable pitch and we need Lever B/LoRA.
+- **E1 — oracle pitch-space DTW (FREE diagnostic, ~20 lines, throwaway — NOT an inference
+  path).** Build both pianorolls from MIDI (`audio_pitchroll`/`score_pitchroll`, exist), cosine
+  → `dtw_backtrack` → `henkel_metrics`. This *measures the ceiling*: how well does the 1-D strip
+  align when pitch is perfect? It ships nothing and uses no roll at inference — it just tells us
+  whether to invest in pitch (Lever A) or whether the strip **resolution** is the hard floor
+  (→ prioritize Lever B). Decisive, costs an afternoon.
+- **E2 — LoRA + pitch-shaping (DAYS).** Unfreeze MERT/ViT via LoRA with Lever-A pitch BCE live.
+  The full RC2 test: do the *foundation models themselves* become pitch-aware. (v3_e2e drifted,
+  but it fine-tuned ImageNet ViT with no pitch objective on 945 pages — not evidence against a
+  pitch-supervised LoRA, per §2 caveat.)
+- **E3 — resolution stack (DAYS).** 13-layer MERT sum + 25 ms pooling + drop-`[CLS]` score
+  tokens + sub-tile x-regression. Targets the ≤0.25 / ≤0.1 s bins directly.
+- **E4 — FiLM + local-position follower (WEEKS).** Lever C on top of the best of E0-E3. The
+  candidate that fuses both validated levers (memory × pitch) toward 85 %.
 
 ### 9.5 Honest risks specific to v6
 
-- **The resolution floor may dominate the pitch gain.** ~1 tile/beat ≈ 0.5 s at 120 bpm and
-  MERT's 93 ms pooling could cap @0.5 s regardless of pitch quality. **E1 measures this
-  directly** — do not build the AMT pivot until E1 says pitch-space clears the plateau.
-- **MERT may transcribe FluidSynth timbre poorly** (pretrained on real music). The CQT-CNN
-  audio control (original §5/E5) is the fallback front-end.
-- **Onset supervision density.** Piano onsets are sparse per frame; the onset BCE needs
-  positive weighting or focal loss or it collapses to all-zeros.
-- **This is still synthetic MSMD.** Real audio / Iranian-classical (the project's extension)
-  has no clean transcription targets; sub-second on synthetic is the milestone, not the end.
+- **Frozen MERT pitch may be unrecoverable by a proj head alone** → E0 underperforms and we are
+  forced into the costlier LoRA path (E2) before knowing it pays. E1 hedges this: it tells us
+  the *pitch ceiling* independent of whether MERT can reach it.
+- **Resolution may dominate pitch.** ~1 tile/beat ≈ 0.5 s and 93 ms pooling could cap @0.5 s
+  regardless of pitch quality. E1 separates the two; if resolution is the floor, Lever B leads.
+- **LoRA drift.** e2e already burned us once. Keep LoRA rank small, encoders mostly frozen, pitch
+  head as the *only* new strong gradient, and watch val closely.
+- **MERT vs FluidSynth timbre / onset sparsity** — the CQT-CNN frontend control and onset
+  pos-weighting/focal loss are the mitigations (unchanged from §5/§7).
+- **Still synthetic MSMD.** Real audio / Iranian-classical has no clean pitch targets; sub-second
+  on synthetic is the milestone, not the finish (§7).
 
 ### 9.6 One line
 
-**v5 proved memory matters; E1 will prove whether pitch matters. Run E1, then build the
-transcription pivot (Nam) and fuse it into the v5 follower — memory × pitch is the path
+**The pitch lever was mis-wired, not disproven — fix one line (E0), measure the ceiling for free
+(E1), then shape the LoRA foundation embeddings with pitch + onset supervision and fuse them into
+the v5 follower. End-to-end, foundation models, no roll at inference — memory × pitch is the path
 to SOTA.**
 
 ---
