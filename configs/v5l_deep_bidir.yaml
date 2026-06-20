@@ -1,0 +1,35 @@
+seed: 42
+
+init_v3_checkpoint: null
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
+  processed_root:  data/MSMD/processed_all
+  num_workers:     2
+
+model:
+  d_audio:             768
+  d_image:             768
+  shared_dim:          256
+  n_heads:             4
+  n_cross_layers:      2     # v5h showed depth helps; combine with v5i's bidir+residual
+  dropout:             0.1
+  lstm_hidden:         512
+  lstm_layers:         1
+  lstm_bidirectional:  true
+  residual:            true
+  pitch_hidden:        0
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 0.01
+  warmup_steps: 300
+  grad_clip:    1.0
+
+train:
+  steps:            12000
+  grad_accum_steps: 8
+  log_every:        10
+  eval_every:       1000
+  ckpt_every:       4000
+  out_dir:          results/v5l_deep_bidir

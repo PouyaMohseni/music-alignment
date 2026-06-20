@@ -1,0 +1,36 @@
+seed: 42
+
+# No warm-start — shared_dim=512 is incompatible with v3's proj heads (256)
+init_v3_checkpoint: null
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
+  processed_root:  data/MSMD/processed_all
+  num_workers:     2
+
+model:
+  d_audio:             768
+  d_image:             768
+  shared_dim:          512   # 2x projection space — trains from scratch
+  n_heads:             8
+  n_cross_layers:      1
+  dropout:             0.1
+  lstm_hidden:         1024  # 2x LSTM capacity
+  lstm_layers:         1
+  lstm_bidirectional:  true
+  residual:            true
+  pitch_hidden:        0
+
+optim:
+  lr:           2.0e-4       # higher lr since training from scratch
+  weight_decay: 0.01
+  warmup_steps: 1000
+  grad_clip:    1.0
+
+train:
+  steps:            15000
+  grad_accum_steps: 8
+  log_every:        20
+  eval_every:       1000
+  ckpt_every:       5000
+  out_dir:          results/v5m_big
