@@ -43,6 +43,53 @@ The single highest-value next action is **one experiment that costs no training*
 
 ---
 
+## 0.5 Update 2026-06-20 — RC1 confirmed and captured; the bottleneck has moved
+
+We built the temporal-state fix the redesign called for (RC1) before running E1, and
+it worked about as predicted. **`v5_recurrent`** adds an LSTM over the projected audio
+sequence that emits a temporally-conditioned query per frame; DTW then rides the
+conditioned `(T×N)` logit matrix instead of a memoryless cosine matrix. We swept
+**13 architectural variants** (capacity, depth, uni/bi-directional, residual delta,
+warm-start vs from-scratch, longer schedules, a pitch-aux head).
+
+| | mean err | @0.5 s | vs fair baseline |
+|---|---|---|---|
+| **best err — `v5l_deep_bidir`** (2 x-attn + bidir + residual) | **2.21 s** | 31.8 % | — |
+| **best @0.5 s — `v5m_big`** (shared 512 / LSTM 1024, from scratch) | 3.01 s | **33.9 %** | — |
+| `v5i_bidir_residual` (prior best) | 2.38 s | 29.6 % | — |
+| **`v3_all` single-perf (fair baseline)** | **6.13 s** | **18.1 %** | — |
+
+(The 5.35 s / 20.6 % in §0/§2 was v3_all on the *all-performance* eval. The fair,
+apples-to-apples comparison — both families trained on all 13 performances, both
+evaluated on the single-performance test set — is **6.13 s / 18.1 %**, the number to
+beat. v5 nearly **3×'d** the mean error and **~2×'d** @0.5 s against it.)
+
+**What this proves.** RC1 was real and is the single largest lever we have pulled:
+temporal memory alone closed roughly **half** the gap to Henkel's 85.2 %. The redesign's
+top-ranked root cause is confirmed.
+
+**What this also proves — the more important finding.** The result is **plateaued and
+architecture-insensitive.** Across 13 variants spanning a wide capacity/depth/direction
+range, nothing breaks past **~2.2 s / ~34 %**. Two further signals localize the new
+ceiling:
+- **Cross-attention is not the lever.** `v5c_noxattn` (no fusion at all) is competitive
+  at 2.33 s / 29.2 %. The LSTM memory is doing the work; stacking fusion does little.
+- **Raw capacity has diminishing returns.** `v5m_big` buys the best @0.5 s but not a
+  better mean error, and not by much.
+
+So the follower architecture is **no longer the bottleneck.** The remaining 34 %→85 %
+gap is the *other* two root causes the redesign named — **RC2 (pitch-blind features)**
+and the **resolution** secondaries (onset blur, beat-rate tile quantization, `[CLS]`
+pooling that discards the pitch axis). Critically, every attempt so far to install pitch
+as an **auxiliary loss on frozen embeddings has moved nothing**: `v4c` (gradient-only
+pitch BCE) scored 6.00 s vs the 6.13 s baseline, and the v5 pitch-aux variant (`v5k`)
+failed to even produce a stable checkpoint. **Pitch as a side-objective does not work.
+Pitch has to be the space we align in.** That is the v6 redesign (§9), and it is exactly
+the transcription-pivot of Kwon, Jeong & Nam (ISMIR 2017). **E1 is now more decisive than
+ever and is still unrun — do it first (§9).**
+
+---
+
 ## 1. What we built
 
 | Stage | Idea | Encoders | Loss | Window |
@@ -65,6 +112,8 @@ banded DTW backtrack (infer).
 
 | Model | mean err | within 0.5 s | within 1.0 s | recall@1 |
 |---|---|---|---|---|
+| **v5l_deep_bidir** (temporal, §0.5) | **2.21 s** | 31.8 % | — | — |
+| **v5m_big** (temporal, §0.5) | 3.01 s | **33.9 %** | — | — |
 | **v3_all** | **5.35 s** | **20.6 %** | **37.6 %** | 2.5 % |
 | v3_fullseq | 6.71 s | 15.4 % | 28.0 % | — |
 | v1_nce | 9.25 s | 8.9 % | 17.2 % | 0.5 % |
@@ -92,10 +141,20 @@ banded DTW backtrack (infer).
   positional accuracy; a near-miss is punished as hard as a cross-page miss.
 - **Small-γ SoftDTW is unstable** (negative loss / NaN) — this is documented behavior
   of Soft-DTW as γ→0, not a bug in the idea.
+- **Temporal memory is the biggest single lever (v5, §0.5).** An LSTM over audio history
+  + DTW on the conditioned logits nearly 3×'d mean error (6.13 → 2.21 s). Confirms RC1.
+- **Pitch as an auxiliary loss does nothing (v4c, v5k).** Gradient-only pitch BCE on
+  frozen embeddings: 6.00 s vs 6.13 s baseline — flat. This is the negative result that
+  motivates v6: pitch must be the alignment *space*, not a side-objective.
 
 ## 3. Root-cause analysis (ranked, with confidence and honest caveats)
 
-### RC1 — Memoryless global-retrieval framing  ·  confidence 0.85  ·  **co-primary**
+### RC1 — Memoryless global-retrieval framing  ·  **CONFIRMED & CAPTURED (§0.5)**  ·  was co-primary
+> **Update 2026-06-20:** built and validated. An LSTM temporal head (v5) cut mean error
+> 6.13 s → 2.21 s and lifted @0.5 s 18.1 % → 33.9 % — about half the gap to SOTA. The
+> diagnosis below was correct. This lever is now spent; the residual ceiling is RC2 +
+> resolution (see §0.5, §9).
+
 We compute a global `(T×N)` matrix and match each frame independently. On repetitive
 piano music many positions look alike, so each frame faces the full
 repeat-ambiguity. Henkel 2020's **"no-temporal-context" ablation is their worst model
@@ -251,6 +310,122 @@ expensive item and should be **gated on E1 showing pitch-space helps at all.**
 **Run E1 today.** It is free, it is decisive, and it determines whether the next
 month is spent on *features* (pitch pivot) or *framing* (conditioned following) — or,
 as the evidence suggests, **both**, in that order.
+
+> **2026-06-20:** we did *framing* first (v5) and it delivered as predicted but
+> plateaued. E1 is still unrun and is now the gate for everything in §9. Run it first.
+
+---
+
+## 9. The v6 redesign — align in transcription (pitch) space  ·  *the Nam pivot*
+
+*Written 2026-06-20, after the v5 sweep. v5 captured the framing lever (RC1) and
+plateaued at ~34 % @0.5 s. The live bottleneck is now features (RC2) + resolution. Two
+independent negative results (v4c, v5k) say pitch-as-auxiliary-loss fails. The
+conclusion both our evidence and the literature converge on: **stop aligning opaque
+embeddings; align in pitch space.***
+
+### 9.1 Why this, why now
+
+The original redesign listed RC1 and RC2 as *co-primary*. We resolved RC1 empirically:
+temporal memory was worth ~half the gap to SOTA, and no amount of follower-architecture
+tuning goes further. That leaves RC2 as the dominant remaining lever — and we now have
+**direct evidence about how *not* to attack it.** Bolting an 88-key BCE head onto frozen
+MERT/ViT embeddings (v4c gradient-only; v5k pitch-aux) moves the metric by noise. A thin
+head cannot turn a pitch-blind embedding into a pitch-aware one. The pitch signal must be
+the **representation the two modalities meet in**, not a regularizer on a representation
+that ignores it.
+
+### 9.2 What to borrow from Juhan Nam's line (Kwon, Jeong & Nam, ISMIR 2017, already cited)
+
+Their *Audio-to-Score Alignment using RNN-based Automatic Music Transcription* solves the
+same alignment problem by **transcribing the audio into a pitch representation and aligning
+that against the symbolic score** — both sides living on a shared 88-key axis, then DTW.
+Three transferable parts:
+
+1. **Align in transcription/pitch space — the core move.** The audio→pitch map and the
+   score→pitch map share one interpretable axis, so DTW compares *like with like* (pitch
+   content over time) instead of comparing two opaque, separately-learned embedding
+   geometries. This is also the classical synchronization space (Ewert/Müller chroma-onset,
+   already cited) — the most thoroughly validated alignment representation in the field.
+2. **Soft posteriorgram, not hard transcription.** Align the frame-level pitch *probability*
+   map, never a thresholded note list. A wrong/missing transcribed note then costs a soft
+   penalty in one DTW cell instead of a hard structural error. This is the robustness trick
+   that makes transcription-pivot viable despite imperfect AMT — and it costs us nothing, our
+   pitch heads already emit logits.
+3. **Onset-aware features.** The onset/frame AMT line (Nam-lab; the broader high-resolution
+   transcription literature) predicts onsets as a separate channel from sustained activation.
+   This matters *specifically for our metric*: @0.5 s is an **onset-timing** measurement, and
+   our current beat-rate tiling floors it. An explicit onset channel targets exactly the
+   sub-second bins where we are weakest.
+
+### 9.3 The architecture (v6)
+
+Same end-to-end contract — at inference the model still takes only (score image, audio) and
+reads no MIDI; MIDI is training supervision only (audio is FluidSynth-from-MIDI, score
+noteheads carry `midi_pitch` — both exact). The builders already exist:
+`mymodel/v4_pitch/pitchroll.py::audio_pitchroll / score_pitchroll`.
+
+```
+audio ─MERT─► pitch head ─► soft pianoroll  P_a (T×88)  [+ onset channel]
+                                                  │  cosine / IoU
+score image ─► pitch head ─► soft pianoroll  P_s (N×88) ─┤ ► (T×N) ─► DTW
+                                                  │
+                          (Stage 2) feed P_a into the v5 LSTM follower
+                          so the tracker has BOTH pitch AND memory
+```
+
+- **Audio tower.** MERT → pitch head emitting a soft 88-key posteriorgram, BCE-supervised
+  by `audio_pitchroll`. Add a separate **onset channel** (BCE on onset frames). Pair with the
+  resolution fixes the redesign already specified (§5: learned 13-layer MERT sum, ~25 Hz
+  max-pool) so onsets survive to the posteriorgram.
+- **Score tower.** **Stage-gated.** First use the **oracle MIDI pianoroll** (`score_pitchroll`,
+  zero OMR risk). Only after pitch-space is proven do we train a learned OMR head on the strip
+  (notehead height = pitch; this is where the vertical axis `[CLS]`-pooling threw away becomes
+  load-bearing).
+- **Matcher.** Cosine/IoU between `P_a` and `P_s` → `(T×N)` → existing `dtw_backtrack`. Then
+  **Stage 2 fuses the two captured levers**: feed `P_a` (pitch-aware, temporally local) into
+  the v5 LSTM follower so the tracker has memory *and* pitch — RC1 ∘ RC2 together.
+
+### 9.4 Experiment plan (re-gated on what we now know)
+
+- **E1 — ORACLE PIANOROLL DTW. Still unrun. ~20 lines. DO THIS FIRST.** Build *both*
+  pianorolls from MIDI (`audio_pitchroll`, `score_pitchroll`), cosine → `dtw_backtrack` →
+  `henkel_metrics`. **This is the gate for all of v6.** It answers the one question 13 v5
+  variants could not: *is the 1-D strip alignable at sub-second precision when pitch is
+  perfect?*
+  - If @0.5 s jumps toward SOTA → RC2 is the lever; build the audio AMT pivot (next).
+  - If it stays ~34 % even with perfect pitch → the **strip resolution / beat-rate
+    quantization is the floor**, and v6 must first re-tile the score (finer stride +
+    sub-tile x-regression) before any feature work. Either outcome is decisive and saves
+    weeks.
+- **E1b — oracle audio-roll vs learned score-roll, and vice-versa.** Swap one oracle side
+  for a learned head to attribute the gap to the audio tower vs the score tower
+  independently (resolves the LoRA-confound RC2 flagged: the 14→6.7 s evidence couldn't
+  separate the towers).
+- **E4′ — audio AMT pivot (days).** Score = oracle roll; train the MERT pitch+onset head;
+  align. The honest one-tower transcription-pivot baseline, zero OMR risk.
+- **E7′ — fuse pivot into the v5 follower (weeks).** Pitch-aware features into the LSTM. This
+  is the candidate that combines both validated levers and is the realistic path toward 85 %.
+- **OMR score head — deferred** until E1/E4′ prove pitch-space pays, exactly as the original
+  §7 risk analysis demanded.
+
+### 9.5 Honest risks specific to v6
+
+- **The resolution floor may dominate the pitch gain.** ~1 tile/beat ≈ 0.5 s at 120 bpm and
+  MERT's 93 ms pooling could cap @0.5 s regardless of pitch quality. **E1 measures this
+  directly** — do not build the AMT pivot until E1 says pitch-space clears the plateau.
+- **MERT may transcribe FluidSynth timbre poorly** (pretrained on real music). The CQT-CNN
+  audio control (original §5/E5) is the fallback front-end.
+- **Onset supervision density.** Piano onsets are sparse per frame; the onset BCE needs
+  positive weighting or focal loss or it collapses to all-zeros.
+- **This is still synthetic MSMD.** Real audio / Iranian-classical (the project's extension)
+  has no clean transcription targets; sub-second on synthetic is the milestone, not the end.
+
+### 9.6 One line
+
+**v5 proved memory matters; E1 will prove whether pitch matters. Run E1, then build the
+transcription pivot (Nam) and fuse it into the v5 follower — memory × pitch is the path
+to SOTA.**
 
 ---
 
