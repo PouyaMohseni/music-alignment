@@ -40,23 +40,26 @@ if [[ ! -d .venv ]]; then
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
-python -m pip install -q -U pip wheel
 
-echo "==> installing torch ($CUDA)"
-case "$CUDA" in
-  cpu)
-    pip install -q torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cpu
-    ;;
-  cu118|cu121|cu124)
-    pip install -q torch torchaudio torchvision --index-url "https://download.pytorch.org/whl/$CUDA"
-    ;;
-  *)
-    echo "unknown CUDA=$CUDA (use cpu | cu118 | cu121 | cu124)"; exit 1
-    ;;
-esac
-
-echo "==> installing project requirements"
-pip install -q -r requirements.txt
+if [[ "${SKIP_INSTALL:-0}" == "1" ]]; then
+  echo "==> SKIP_INSTALL=1 — assuming deps already in .venv (no pip)"
+else
+  python -m pip install -q -U pip wheel
+  echo "==> installing torch ($CUDA)"
+  case "$CUDA" in
+    cpu)
+      pip install -q torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cpu
+      ;;
+    cu118|cu121|cu124)
+      pip install -q torch torchaudio torchvision --index-url "https://download.pytorch.org/whl/$CUDA"
+      ;;
+    *)
+      echo "unknown CUDA=$CUDA (use cpu | cu118 | cu121 | cu124)"; exit 1
+      ;;
+  esac
+  echo "==> installing project requirements"
+  pip install -q -r requirements.txt
+fi
 
 python - <<'PY'
 import torch
