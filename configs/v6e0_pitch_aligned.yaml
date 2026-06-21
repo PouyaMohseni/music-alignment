@@ -41,6 +41,6 @@ train:
   steps:            12000
   grad_accum_steps: 8
   log_every:        10
-  eval_every:       1000
-  ckpt_every:       4000
+  eval_every:       2000
+  ckpt_every:       1000
   out_dir:          results/v6e0_pitch_aligned
