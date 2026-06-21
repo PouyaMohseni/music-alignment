@@ -1,0 +1,41 @@
+seed: 42
+
+# v8 — Faithful Henkel ISMIR 2020 reimplementation.
+# Uses raw audio.wav (CQT) + strip.png (U-Net) instead of MERT/ViT embeddings.
+# Target: reproduce ~85.2% @0.5s on MSMD test split.
+#
+# PREREQUISITE: audio.wav must exist in each processed piece directory.
+# If missing, synthesise first:
+#   python -m msmd_prep.run_all --stage synth --processed data/MSMD/processed
+
+data:
+  processed_root:  data/MSMD/processed
+  window_sec:      5.0      # audio window length for training
+  sr:              24000    # audio sample rate (MERT native, matches FluidSynth)
+  hop:             512      # CQT hop length → eff_hz ≈ 46.875
+  sigma_px:        25.0     # Gaussian GT blob sigma in tile_width coordinates
+  batch_size:      8
+  num_workers:     4
+
+model:
+  n_bins:           78      # CQT frequency bins (Henkel uses 78)
+  cnn_channels:     [32, 64, 128]
+  lstm_hidden:      256
+  lstm_layers:      2
+  lstm_bidirectional: false  # causal LSTM (unidirectional) for online following
+  unet_channels:    [32, 64, 128, 256]
+  tile_width:       512      # strip window size for U-Net input (pixels)
+
+optim:
+  lr:           1.0e-3      # Adam (Henkel uses Adam, higher lr than AdamW)
+  weight_decay: 0.0
+  warmup_steps: 500
+  grad_clip:    1.0
+
+train:
+  steps:            30000
+  grad_accum_steps: 1
+  log_every:        50
+  eval_every:       5000
+  ckpt_every:       5000
+  out_dir:          results/v8_henkel_repro
