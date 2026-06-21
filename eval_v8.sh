@@ -5,7 +5,7 @@
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=2:00:00
+#SBATCH --time=6:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/eval_v8-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/eval_v8-%j.log
 
