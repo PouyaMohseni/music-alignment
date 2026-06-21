@@ -34,4 +34,19 @@ python -m mymodel.v8_henkel_repro.train \
   --config configs/v8_henkel_repro.yaml \
   data.processed_root=$PROC
 
+echo "Training finished at $(date). Running eval..."
+
+CKPT=$(ls results/v8_henkel_repro/checkpoint_*.pt 2>/dev/null | sort | tail -1)
+if [ -z "$CKPT" ]; then
+  echo "ERROR: no checkpoint found after training"; exit 1
+fi
+echo "Evaluating: $CKPT"
+
+python -m mymodel.v8_henkel_repro.eval \
+  --checkpoint $CKPT \
+  --config configs/v8_henkel_repro.yaml \
+  --split test \
+  --processed $PROC \
+  --out_dir results/v8_henkel_repro/eval
+
 echo "Job finished at $(date)"
