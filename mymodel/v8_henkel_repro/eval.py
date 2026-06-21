@@ -175,6 +175,12 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
                           flush=True)
 
     good = [r for r in rows if "error" not in r]
+    if not good:
+        errors = [r for r in rows if "error" in r]
+        print(f"ERROR: all {len(errors)} pieces failed. First 3 errors:")
+        for r in errors[:3]:
+            print(f"  {r['piece_id']}: {r['error']}")
+        return None
     keys = [kk for kk in good[0]
             if kk.startswith(("mean_", "median_", "pct_", "recall_")) or kk == "n"]
     summ = {"n_pieces": len(good), "n_errors": len(rows) - len(good)}
