@@ -112,7 +112,7 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
                 tiles, offsets = _tile_strip(strip_1d, W, stride)
                 N = len(tiles)
 
-                # Encode all tiles (U-Net encoder, once)
+                # Encode all tiles (U-Net encoder, once) — keep on GPU for efficiency
                 tile_encs = []
                 for ti in range(0, N, batch_tiles):
                     batch = torch.from_numpy(
@@ -120,30 +120,24 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
                     ).to(device)  # (B, 1, 1, W) → need (B, 1, W)
                     batch = batch.squeeze(2)  # (B, 1, W)
                     enc = model.unet.encode(batch)
-                    # Store as CPU tensors to save GPU memory across frames
-                    tile_encs.append(_EncOut(
-                        skips=[s.cpu() for s in enc.skips],
-                        bottom=enc.bottom.cpu()))
+                    tile_encs.append(enc)
 
-                # Flatten tile_encs into one big EncOut
+                # Flatten into one EncOut on GPU (move once, reuse across all T frames)
                 all_skips = [
                     torch.cat([te.skips[i] for te in tile_encs], dim=0)
                     for i in range(len(tile_encs[0].skips))]
                 all_bottom = torch.cat([te.bottom for te in tile_encs], dim=0)
-                enc_all = _EncOut(skips=all_skips, bottom=all_bottom)
+                enc_gpu = _EncOut(skips=all_skips, bottom=all_bottom)
 
                 # ── Build (T, N) tile-score matrix ────────────────────────
-                tile_scores   = np.zeros((T, N), dtype=np.float32)
-                sub_tile_argmax = np.zeros((T, N), dtype=np.float32)  # local px within tile
+                tile_scores     = np.zeros((T, N), dtype=np.float32)
+                sub_tile_argmax = np.zeros((T, N), dtype=np.float32)
 
                 for t in range(T):
                     h_t = h_all[t].unsqueeze(0).expand(N, -1)  # (N, lstm_h)
-                    enc_t = _EncOut(
-                        skips=[s.to(device) for s in enc_all.skips],
-                        bottom=enc_all.bottom.to(device))
-                    pos_maps = model.unet.decode(enc_t, h_t)   # (N, 1, W)
-                    pm = pos_maps.squeeze(1)                    # (N, W)
-                    tile_scores[t]    = pm.max(dim=-1).values.cpu().numpy()
+                    pos_maps = model.unet.decode(enc_gpu, h_t)  # (N, 1, W)
+                    pm = pos_maps.squeeze(1)                     # (N, W)
+                    tile_scores[t]     = pm.max(dim=-1).values.cpu().numpy()
                     sub_tile_argmax[t] = pm.argmax(dim=-1).float().cpu().numpy()
 
                 # ── DTW → alignment path ──────────────────────────────────
