@@ -1,13 +1,14 @@
-"""v8 eval: faithful Henkel repro — tiled strip inference + DTW + sub-tile argmax.
+"""v8 eval: Henkel causal tracking.
 
-Inference strategy (offline, compatible with existing henkel_metrics):
-  1. audio.wav → CQT → audio CNN → LSTM → h[0..T-1]        (all context vectors)
-  2. strip.png tiled into N windows of width tile_width       (50% overlap)
-  3. Encode all tiles through U-Net encoder once (shared encoder features).
-  4. For each audio frame t: decode all N tiles with FiLM(h_t) → (N, 1, W) pos maps
-       → tile_score[n] = max of pos_map_n  (is tile n the right one?)
-  5. (T, N) tile-score matrix → DTW → alignment path (which tile at each frame)
-  6. Sub-tile position: pos_map_n[t].argmax() → local_x → strip_x = offset_n + local_x
+Inference strategy:
+  1. audio.wav → CQT → audio CNN → LSTM → h[0..T-1]  (all context vectors)
+  2. Causal tracking: for each frame t
+       a. Window of width tile_width centered at current position estimate
+       b. U-Net(window, h_t) → position heatmap
+       c. argmax → local_x within window → update estimate
+
+This matches training: model always sees a window and predicts where the GT
+is within it — never trained to discriminate correct vs incorrect tiles.
 
     python -m mymodel.v8_henkel_repro.eval \
         --checkpoint results/v8_henkel_repro/checkpoint_030000.pt \
@@ -22,9 +23,9 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from .model import HenkelRepro, HenkelReproConfig, _EncOut
+from .model import HenkelRepro, HenkelReproConfig
 from .data import load_cqt, load_strip
-from ..shared.metrics import alignment_metrics, henkel_metrics, dtw_backtrack
+from ..shared.metrics import alignment_metrics, henkel_metrics
 
 
 def _build(cfg, device):
@@ -39,34 +40,18 @@ def _build(cfg, device):
     return HenkelRepro(hc).to(device)
 
 
-def _tile_strip(strip_1d: np.ndarray, tile_width: int,
-                stride: int) -> tuple[list[np.ndarray], list[int]]:
-    """Divide 1-D strip into overlapping tiles of width tile_width.
-
-    strip_1d : (1, W_full) float32
-    Returns  : tiles (list of (1, tile_width) arrays), offsets (list of int)
-    """
-    W = strip_1d.shape[-1]
-    tiles, offsets = [], []
-    x = 0
-    while x < W:
-        x1 = min(x + tile_width, W)
-        crop = strip_1d[:, x:x1]
-        if crop.shape[-1] < tile_width:
-            pad = np.zeros((1, tile_width - crop.shape[-1]), dtype=np.float32)
-            crop = np.concatenate([crop, pad], axis=-1)
-        tiles.append(crop)
-        offsets.append(x)
-        if x1 == W:
-            break
-        x += stride
-    return tiles, offsets
+def _crop_window(strip_1d: np.ndarray, x0: int, W: int) -> np.ndarray:
+    """Crop width-W window from (1, W_full) strip, zero-pad at right edge."""
+    crop = strip_1d[:, x0:x0 + W]
+    if crop.shape[-1] < W:
+        pad = np.zeros((1, W - crop.shape[-1]), dtype=np.float32)
+        crop = np.concatenate([crop, pad], axis=-1)
+    return crop
 
 
 @torch.no_grad()
 def eval_split(checkpoint, cfg_path, processed_root, split,
-               out_dir=None, limit=None, device=None, band=0.25,
-               batch_tiles=64):
+               out_dir=None, limit=None, device=None, batch_frames=64):
     cfg    = OmegaConf.load(cfg_path)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model  = _build(cfg, device)
@@ -74,9 +59,9 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
     model.load_state_dict(sd["state_dict"], strict=True)
     model.eval()
 
-    hop  = cfg.data.hop
-    sr   = cfg.data.sr
-    W    = cfg.model.tile_width
+    hop    = cfg.data.hop
+    sr     = cfg.data.sr
+    W      = cfg.model.tile_width
     eff_hz = sr / hop
 
     proc = Path(processed_root)
@@ -91,63 +76,51 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
         for k, pid in enumerate(piece_ids):
             try:
                 piece_dir = proc / pid
-                ann   = json.load(open(piece_dir / "annotations.json"))
-                notes = np.load(piece_dir / "noteheads.npz")
-                strip_w    = ann["image"]["width_px"]
-                dur        = float(ann["audio"]["duration_sec"])
+                ann       = json.load(open(piece_dir / "annotations.json"))
+                notes     = np.load(piece_dir / "noteheads.npz")
+                strip_w   = ann["image"]["width_px"]
+                dur       = float(ann["audio"]["duration_sec"])
                 px_per_sec = strip_w / dur
 
                 # ── Audio → context vectors h[0..T-1] ───────────────────
                 cqt = load_cqt(piece_dir / "audio.wav",
-                                sr=sr, n_bins=cfg.model.n_bins, hop=hop)  # (1, n_bins, T)
+                               sr=sr, n_bins=cfg.model.n_bins, hop=hop)  # (1, n_bins, T)
                 T = cqt.shape[-1]
-                cqt_t = cqt.unsqueeze(0).to(device)   # (1, 1, n_bins, T)
-                h_all = model.audio_context(cqt_t)[0]  # (T, lstm_h)
+                cqt_t  = cqt.unsqueeze(0).to(device)    # (1, 1, n_bins, T)
+                h_all  = model.audio_context(cqt_t)[0]  # (T, lstm_h)
 
-                # ── Tile strip, encode each tile ──────────────────────────
-                strip_full = load_strip(piece_dir / "strip.png")    # (1, H, W_full)
-                strip_1d   = strip_full.mean(axis=1)                 # (1, W_full)
-                stride     = W // 2
-                tiles, offsets = _tile_strip(strip_1d, W, stride)
-                N = len(tiles)
+                # ── Load strip ───────────────────────────────────────────
+                strip_full = load_strip(piece_dir / "strip.png")  # (1, H, W_full)
+                strip_1d   = strip_full.mean(axis=1)               # (1, W_full)
 
-                # Encode all tiles (U-Net encoder, once) — keep on GPU for efficiency
-                tile_encs = []
-                for ti in range(0, N, batch_tiles):
-                    batch = torch.from_numpy(
-                        np.stack([t[np.newaxis] for t in tiles[ti:ti+batch_tiles]])
-                    ).to(device)  # (B, 1, 1, W) → need (B, 1, W)
-                    batch = batch.squeeze(2)  # (B, 1, W)
-                    enc = model.unet.encode(batch)
-                    tile_encs.append(enc)
-
-                # Flatten into one EncOut on GPU (move once, reuse across all T frames)
-                all_skips = [
-                    torch.cat([te.skips[i] for te in tile_encs], dim=0)
-                    for i in range(len(tile_encs[0].skips))]
-                all_bottom = torch.cat([te.bottom for te in tile_encs], dim=0)
-                enc_gpu = _EncOut(skips=all_skips, bottom=all_bottom)
-
-                # ── Build (T, N) tile-score matrix ────────────────────────
-                tile_scores     = np.zeros((T, N), dtype=np.float32)
-                sub_tile_argmax = np.zeros((T, N), dtype=np.float32)
-
-                for t in range(T):
-                    h_t = h_all[t].unsqueeze(0).expand(N, -1)  # (N, lstm_h)
-                    pos_maps = model.unet.decode(enc_gpu, h_t)  # (N, 1, W)
-                    pm = pos_maps.squeeze(1)                     # (N, W)
-                    tile_scores[t]     = pm.max(dim=-1).values.cpu().numpy()
-                    sub_tile_argmax[t] = pm.argmax(dim=-1).float().cpu().numpy()
-
-                # ── DTW → alignment path ──────────────────────────────────
-                path_pairs = dtw_backtrack(tile_scores, band_radius_frac=band)
+                # ── Causal tracking ──────────────────────────────────────
+                # Process frames in batches for GPU efficiency.
+                # Within a batch, the window center is fixed at the position
+                # from the previous batch — small approximation, big speedup.
+                pos_estimate = 0.0
                 pred_strip_x = np.zeros(T, dtype=np.float64)
-                for t_idx, n_idx in path_pairs:
-                    local_x = sub_tile_argmax[t_idx, n_idx]
-                    # Scale local_x back to original strip coordinates
-                    tile_orig_width = min(W, strip_w - offsets[n_idx])
-                    scale = tile_orig_width / W
-                    pred_strip_x[t_idx] = offsets[n_idx] + local_x * scale
+
+                for t_start in range(0, T, batch_frames):
+                    t_end_b = min(t_start + batch_frames, T)
+                    B = t_end_b - t_start
+
+                    # Center window at current estimate (same for this batch)
+                    cx = int(round(pos_estimate))
+                    x0 = max(0, min(strip_w - W, cx - W // 2))
+
+                    window = _crop_window(strip_1d, x0, W)          # (1, W)
+                    win_t  = torch.from_numpy(
+                        np.tile(window[np.newaxis], (B, 1, 1))       # (B, 1, W)
+                    ).to(device)
+
+                    h_batch = h_all[t_start:t_end_b]                 # (B, lstm_h)
+                    pos_maps = model.unet(win_t, h_batch)             # (B, 1, W)
+                    local_xs = pos_maps.squeeze(1).argmax(dim=-1).cpu().numpy()  # (B,)
+
+                    for i, local_x in enumerate(local_xs):
+                        new_pos = float(np.clip(x0 + local_x, 0, strip_w - 1))
+                        pred_strip_x[t_start + i] = new_pos
+                        pos_estimate = new_pos  # causal: update after every frame
 
                 # ── Metrics ───────────────────────────────────────────────
                 gt_onset   = notes["onset_sec"]
@@ -163,7 +136,8 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
                 m.update(henkel_metrics(pred_at_onset, gt_strip_x))
                 m["piece_id"] = pid
             except Exception as e:
-                m = {"piece_id": pid, "error": repr(e)}
+                import traceback
+                m = {"piece_id": pid, "error": repr(e), "tb": traceback.format_exc()}
 
             rows.append(m)
             fout.write(json.dumps(m) + "\n"); fout.flush()
@@ -180,6 +154,8 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
         print(f"ERROR: all {len(errors)} pieces failed. First 3 errors:")
         for r in errors[:3]:
             print(f"  {r['piece_id']}: {r['error']}")
+            if "tb" in r:
+                print(r["tb"])
         return None
     keys = [kk for kk in good[0]
             if kk.startswith(("mean_", "median_", "pct_", "recall_")) or kk == "n"]
@@ -204,11 +180,12 @@ def main():
     p.add_argument("--processed",  default="data/MSMD/processed")
     p.add_argument("--out_dir",    default=None)
     p.add_argument("--limit",      type=int, default=None)
-    p.add_argument("--band",       type=float, default=0.25)
     p.add_argument("--device",     default=None)
+    p.add_argument("--batch_frames", type=int, default=64)
     a = p.parse_args()
     eval_split(a.checkpoint, a.config, a.processed, a.split,
-               out_dir=a.out_dir, limit=a.limit, device=a.device, band=a.band)
+               out_dir=a.out_dir, limit=a.limit, device=a.device,
+               batch_frames=a.batch_frames)
 
 
 if __name__ == "__main__":

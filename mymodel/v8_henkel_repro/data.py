@@ -1,8 +1,9 @@
 """v8 dataset: raw audio.wav + strip.png per piece.
 
-Each __getitem__ returns a random 5-second audio window with the
-corresponding strip crop, resized to tile_width for U-Net input.
-GT is a Gaussian centred on the ground-truth strip_x position.
+Each __getitem__ returns a random 5-second audio window ending at time t_end,
+paired with a strip crop where the GT position (strip_x at t_end) appears
+at a RANDOM local offset within the window (not always at center).
+This forces the model to learn audio-conditioned position discrimination.
 """
 from __future__ import annotations
 import json
@@ -46,19 +47,15 @@ def load_strip(strip_path: Path) -> np.ndarray:
     return arr[np.newaxis]                            # (1, H, W)
 
 
-def crop_and_resize(strip: np.ndarray, cx: int, tile_width: int,
-                    strip_width: int) -> np.ndarray:
-    """Crop tile_width px centred at cx, resize to tile_width if needed.
-    strip: (1, H, W_full)  →  (1, H, tile_width)
+def crop_at_offset(strip: np.ndarray, x0: int, width: int) -> np.ndarray:
+    """Crop `width` pixels starting at x0, zero-pad at right edge if needed.
+    strip: (1, H, W_full)  →  (1, H, width)
     """
-    half = tile_width // 2
-    x0 = max(0, cx - half)
-    x1 = min(strip_width, cx + half)
-    crop = strip[:, :, x0:x1]                        # may be narrower at edges
-    if crop.shape[-1] != tile_width:
-        img = Image.fromarray((crop[0] * 255).astype(np.uint8))
-        img = img.resize((tile_width, crop.shape[1]), Image.BILINEAR)
-        crop = np.array(img, dtype=np.float32)[np.newaxis] / 255.0
+    x1 = x0 + width
+    crop = strip[:, :, x0:min(x1, strip.shape[-1])]
+    if crop.shape[-1] < width:
+        pad = np.zeros((1, strip.shape[1], width - crop.shape[-1]), dtype=np.float32)
+        crop = np.concatenate([crop, pad], axis=-1)
     return crop
 
 
@@ -75,10 +72,11 @@ class HenkelDataset(Dataset):
     """
     One sample = random 5-second audio window + corresponding strip crop.
 
-    audio_cqt : (1, n_bins, T_win)
-    strip_win : (1, H, tile_width)  — grayscale, in [0, 1]
-    gt_mask   : (tile_width,)        — Gaussian at strip centre (training target)
-    eff_hz    : float                — CQT frame rate
+    audio_cqt  : (1, n_bins, T_win)
+    strip_win  : (1, tile_width)     — grayscale 1-D strip window, in [0, 1]
+    gt_mask    : (tile_width,)        — Gaussian at actual local GT position
+    local_gt_x : int                  — GT pixel offset within the strip window
+    eff_hz     : float                — CQT frame rate
     """
 
     def __init__(self, processed_root: str, split: str,
@@ -136,21 +134,28 @@ class HenkelDataset(Dataset):
             gt_x = int(notes["strip_x"][nearest])
         gt_x = np.clip(gt_x, 0, strip_w - 1)
 
-        # ── Strip crop centred at gt_x ────────────────────────────────────
+        # ── Strip crop with RANDOM local GT offset ────────────────────────
+        # The GT appears at a random position within the window (not always center).
+        # The model must use audio context h_t to predict WHERE in the window it is.
         strip = load_strip(piece_dir / "strip.png")        # (1, H, W_full)
-        strip_win = crop_and_resize(strip, gt_x, self.tile_width, strip_w)
-        # (1, H, tile_width) → squeeze height to (1, tile_width)
-        # Average over height axis (strip height is small ~120px)
-        strip_win_1d = strip_win.mean(axis=1, keepdims=True)  # (1, 1, tile_width)
-        strip_win_1d = strip_win_1d[0]                        # (1, tile_width)
+        margin = max(16, self.tile_width // 8)
+        local_gt_x = int(rng.integers(margin, self.tile_width - margin))
 
-        # ── Gaussian GT — always centred in the tile (we centred on gt_x) ─
-        gt_mask = make_gaussian(self.tile_width, self.tile_width // 2, self.sigma_px)
+        # Window starting pixel (clamped to valid range)
+        window_start = int(np.clip(gt_x - local_gt_x, 0, max(0, strip_w - self.tile_width)))
+        actual_local_gt = int(np.clip(gt_x - window_start, 0, self.tile_width - 1))
 
+        strip_win = crop_at_offset(strip, window_start, self.tile_width)  # (1, H, W)
+        strip_win_1d = strip_win.mean(axis=1)                              # (1, W)
+
+        gt_mask = make_gaussian(self.tile_width, actual_local_gt, self.sigma_px)
+
+        cqt_arr = cqt_win.numpy() if hasattr(cqt_win, 'numpy') else np.array(cqt_win)
         return {
-            "audio_cqt": torch.from_numpy(cqt_win.numpy() if hasattr(cqt_win, 'numpy') else np.array(cqt_win)),
-            "strip_win": torch.from_numpy(strip_win_1d),
-            "gt_mask":   torch.from_numpy(gt_mask),
-            "piece_id":  pid,
-            "eff_hz":    float(self.eff_hz),
+            "audio_cqt":  torch.from_numpy(cqt_arr),
+            "strip_win":  torch.from_numpy(strip_win_1d),
+            "gt_mask":    torch.from_numpy(gt_mask),
+            "local_gt_x": actual_local_gt,
+            "piece_id":   pid,
+            "eff_hz":     float(self.eff_hz),
         }

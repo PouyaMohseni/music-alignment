@@ -44,11 +44,11 @@ def _step_loss(model, b, device):
 
     pos_map, _ = model(cqt, strip)              # (B, 1, W)
     loss = dice_loss(pos_map, gt)
-    # Accuracy proxy: is argmax within 10% of strip width from centre?
-    half = pos_map.shape[-1] // 2
-    margin = pos_map.shape[-1] // 10
-    pred_center = pos_map.squeeze(1).argmax(dim=-1)  # (B,)
-    acc = ((pred_center - half).abs() <= margin).float().mean()
+    # Accuracy proxy: is argmax within 10% of strip width from actual GT position?
+    pred_pos = pos_map.squeeze(1).argmax(dim=-1)         # (B,)
+    gt_pos   = b["local_gt_x"].to(device)                 # (B,) actual local GT
+    margin   = pos_map.shape[-1] // 10
+    acc = ((pred_pos - gt_pos).abs() <= margin).float().mean()
     return loss, float(loss.detach()), float(acc.detach())
 
 
