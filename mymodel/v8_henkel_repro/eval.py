@@ -106,8 +106,7 @@ def eval_split(checkpoint, cfg_path, processed_root, split,
 
                 # ── Tile strip, encode each tile ──────────────────────────
                 strip_full = load_strip(piece_dir / "strip.png")    # (1, H, W_full)
-                strip_1d   = strip_full.mean(axis=1, keepdims=False) # (W_full,) then back to (1,W)
-                strip_1d   = strip_full.mean(axis=1)[np.newaxis]     # (1, W_full)
+                strip_1d   = strip_full.mean(axis=1)                 # (1, W_full)
                 stride     = W // 2
                 tiles, offsets = _tile_strip(strip_1d, W, stride)
                 N = len(tiles)
