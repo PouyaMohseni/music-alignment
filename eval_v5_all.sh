@@ -35,9 +35,15 @@ declare -A CONFIGS=(
   ["v5l_deep_bidir"]="configs/v5l_deep_bidir.yaml"
   ["v5m_big"]="configs/v5m_big.yaml"
   ["v6e0_pitch_aligned"]="configs/v6e0_pitch_aligned.yaml"
+  ["v7_henkel"]="configs/v7_henkel.yaml"
 )
 
-MODELS=(v5_recurrent v5b_large v5c_noxattn v5d_long v5e_scratch v5f_bidir v5g_residual v5h_deep v5i_bidir_residual v5j_long v5k_pitch v5l_deep_bidir v5m_big v6e0_pitch_aligned)
+# Eval module per model — defaults to mymodel.v5_recurrent.eval
+declare -A EVAL_MOD=(
+  ["v7_henkel"]="mymodel.v7_henkel.eval"
+)
+
+MODELS=(v5_recurrent v5b_large v5c_noxattn v5d_long v5e_scratch v5f_bidir v5g_residual v5h_deep v5i_bidir_residual v5j_long v5k_pitch v5l_deep_bidir v5m_big v6e0_pitch_aligned v7_henkel)
 
 _parse() {
   python3 -c "
@@ -67,7 +73,8 @@ for MODEL in "${MODELS[@]}"; do
   SUMM=results/$MODEL/eval/test/summary.json
   if [ ! -f "$SUMM" ]; then
     echo "  evaluating $MODEL ($CKPT)..."
-    python -m mymodel.v5_recurrent.eval \
+    MOD=${EVAL_MOD[$MODEL]:-mymodel.v5_recurrent.eval}
+    python -m $MOD \
       --checkpoint $CKPT \
       --config $CFG \
       --split test \

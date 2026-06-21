@@ -1,0 +1,39 @@
+seed: 42
+
+# v7 — Henkel-style FiLM-conditioned follower (ISMIR 2020 adaptation).
+# Key difference from v5: LSTM context → FiLM (γ,β) → dynamically modulates
+# score tile representation per frame.  No tile-argmax at inference — same DTW
+# decode as v5 but on FiLM-conditioned logits.
+# Target: close the 34%→85% @0.5s gap that E1 attributed to the framing wall.
+init_v3_checkpoint: null
+
+data:
+  emb_root:        /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_all_tar
+  processed_root:  data/MSMD/processed_all
+  num_workers:     2
+
+model:
+  d_audio:         768
+  d_image:         768
+  shared_dim:      256
+  n_heads:         4
+  n_cross_layers:  1
+  dropout:         0.1
+  lstm_hidden:     512
+  lstm_layers:     1
+  film_hidden:     256    # FiLM param generator hidden dim
+  residual:        true   # logits = FiLM_logits + raw_sim (anchors warm-start)
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 0.01
+  warmup_steps: 300
+  grad_clip:    1.0
+
+train:
+  steps:            12000
+  grad_accum_steps: 8
+  log_every:        10
+  eval_every:       2000
+  ckpt_every:       1000
+  out_dir:          results/v7_henkel
