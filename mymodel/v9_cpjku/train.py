@@ -111,8 +111,9 @@ def main(cfg: DictConfig):
     print(f'  spec means: {means.mean():.3f}  stds: {stds.mean():.3f}', flush=True)
 
     net_config = OmegaConf.to_container(cfg.net)
-    network = ConditionalUNet(net_config).to(device)
+    network = ConditionalUNet(net_config)
     network.perf_encoder.set_stats(means, stds)
+    network = network.to(device)
     print(f'params: {sum(p.numel() for p in network.parameters() if p.requires_grad):,}',
           flush=True)
 
