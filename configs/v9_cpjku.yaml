@@ -1,42 +1,40 @@
 seed: 42
 
-# v9 — Faithful Henkel ISMIR 2020 (CPJKU) reimplementation.
-# 2D U-Net on full strip crops (H × W) preserving the pitch axis.
-# Always-centered crop during training (faithful to paper) — works here
-# because the 2D pitch structure gives FiLM something to discriminate on.
-#
-# PREREQUISITE: audio.wav in each piece directory.
-# If missing: python -m msmd_prep.run_all --stage synth --processed data/MSMD/processed
+# v9 — CPJKU ConditionalUNet with their EXACT best-model config (CB_TA).
+# Network code copied verbatim from CPJKU/audio_conditioned_unet (ismir-2020).
+# Spectrogram: sr=22050, fps=20, 78-bin log-mel (madmom-free via librosa).
+
+# Their net_config for CB_TA (best model, 85.2% @0.5s):
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    CBEncoder
+  spec_enc:         32
 
 data:
   processed_root: data/MSMD/processed
-  window_sec:     5.0
-  sr:             24000
-  hop:            512        # eff_hz ≈ 46.875 Hz
-  sigma_x:        25.0       # 2D Gaussian x-sigma (strip width direction)
-  sigma_y:        10.0       # 2D Gaussian y-sigma (strip height direction)
-  batch_size:     8
+  tile_width:     512    # score crop width (pixels)
+  h_strip:        128    # strip height after resize (power of 2 for U-Net)
+  n_mels:         78     # spectrogram frequency bins
+  fps:            20     # spectrogram frame rate (matches their fps=20)
+  n_frames:       40     # CBEncoder context window (40 frames = 2s at fps=20)
+  gt_width:       10     # binary GT rectangle width (their gt_width=10)
+  batch_size:     16
   num_workers:    4
 
-model:
-  n_bins:           78
-  cnn_channels:     [32, 64, 128]
-  lstm_hidden:      256
-  lstm_layers:      2
-  lstm_bidirectional: false
-  unet_channels:    [32, 64, 128, 256]
-  h_strip:          128      # strip height after resize (power of 2 for U-Net)
-  tile_width:       512
-
 optim:
-  lr:           1.0e-3
-  weight_decay: 0.0
-  warmup_steps: 500
-  grad_clip:    1.0
+  lr:           1.0e-4   # their learning rate
+  weight_decay: 1.0e-5   # their weight decay
+  patience:     5        # ReduceLROnPlateau patience
+  clip_grads:   null
 
 train:
-  steps:        30000
-  log_every:    50
-  eval_every:   5000
-  ckpt_every:   5000
-  out_dir:      results/v9_cpjku
+  steps:      50000
+  log_every:  100
+  eval_every: 5000
+  ckpt_every: 5000
+  out_dir:    results/v9_cpjku

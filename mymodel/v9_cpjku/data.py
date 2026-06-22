@@ -1,12 +1,12 @@
-"""v9 dataset — 2D strip crops, always centered on GT (faithful Henkel training).
+"""v9 data loader — adapts our MSMD processed format to the CPJKU model.
 
-Unlike v8 (which used 1D projections), we keep the full 2D strip crop so the
-U-Net can see pitch-specific notehead patterns and staff layout. FiLM can then
-discriminate based on which notes the audio contains.
+Their spectrogram: sr=22050, fps=20 (hop=1102), 78-bin log-mel, 60-6000 Hz.
+We compute this from audio.wav using librosa (no madmom dependency).
 
-Training: crop always centered at GT strip_x → 2D Gaussian at (H/2, W/2).
-          Model learns audio↔score visual matching, not "output center."
-Inference: causal tracking with crop centered at current x estimate.
+Their GT: binary rectangle mask at the current position (not Gaussian).
+Their score: 2D crop centered at GT, always (training) or at estimate (eval).
+
+Their CBEncoder takes 40 frames (=2 seconds at fps=20) as context window.
 """
 from __future__ import annotations
 import json
@@ -17,84 +17,92 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-_CQT_CACHE: dict = {}
+_SPEC_CACHE: dict = {}   # piece_id → (78, T) spectrogram
 
 
-def load_cqt(wav_path: Path, sr: int = 24000,
-             n_bins: int = 78, hop: int = 512) -> torch.Tensor:
-    """Load audio.wav → log-CQT (1, n_bins, T) float32."""
+def load_spec(wav_path: Path, sr_out: int = 22050,
+              fps: int = 20, n_mels: int = 78,
+              fmin: float = 60.0, fmax: float = 6000.0) -> np.ndarray:
+    """Load audio.wav and compute log-mel spectrogram matching CPJKU format.
+
+    Returns (n_mels, T) float32, normalised similarly to their log-spec.
+    fps=20, sr=22050 matches their spectrogram_params exactly.
+    """
     import librosa
     wav_path = Path(wav_path)
     if not wav_path.exists():
         raise FileNotFoundError(
-            f"audio.wav not found at {wav_path}\n"
-            "Run: python -m msmd_prep.run_all --stage synth --processed <processed_root>")
-    y, _ = librosa.load(str(wav_path), sr=sr, mono=True)
-    C = librosa.cqt(y, sr=sr, hop_length=hop, n_bins=n_bins, bins_per_octave=12,
-                    fmin=librosa.note_to_hz('C1'))
-    log_C = np.log1p(np.abs(C)).astype(np.float32)
-    return torch.from_numpy(log_C).unsqueeze(0)   # (1, n_bins, T)
+            f"audio.wav not found: {wav_path}\n"
+            "Run: python -m msmd_prep.run_all --stage synth")
+    y, _ = librosa.load(str(wav_path), sr=sr_out, mono=True)
+    hop = int(sr_out / fps)   # 22050/20 = 1102
+    mel = librosa.feature.melspectrogram(
+        y=y, sr=sr_out, n_fft=2048, hop_length=hop,
+        n_mels=n_mels, fmin=fmin, fmax=fmax, power=1.0)
+    log_mel = np.log1p(mel).astype(np.float32)   # (n_mels, T)
+    return log_mel
 
 
 def load_strip_2d(strip_path: Path, h_strip: int) -> np.ndarray:
-    """Load grayscale strip, resize height to h_strip.
-    Returns float32 (1, h_strip, W_full) in [0, 1].
+    """Load grayscale strip resized to h_strip. Returns (h_strip, W) in [0,1].
+    Score is INVERTED (1-img) to match their convention (white background → 0,
+    black noteheads → 1).
     """
     img = Image.open(strip_path).convert("L")
     W, H = img.size
     if H != h_strip:
         img = img.resize((W, h_strip), Image.BILINEAR)
-    arr = np.array(img, dtype=np.float32) / 255.0   # (h_strip, W)
-    return arr[np.newaxis]                           # (1, h_strip, W)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return 1.0 - arr   # invert: noteheads → 1, background → 0
 
 
-def crop_2d(strip: np.ndarray, x0: int, tile_width: int) -> np.ndarray:
-    """Crop tile_width columns starting at x0; zero-pad at right edge.
-    strip: (1, H, W_full) → (1, H, tile_width)
+def crop_score(strip: np.ndarray, cx: int, tile_width: int) -> np.ndarray:
+    """Crop tile_width columns centered at cx from (H, W_full) strip.
+    Zero-pads at edges. Returns (H, tile_width).
     """
+    H, W_full = strip.shape
+    x0 = max(0, cx - tile_width // 2)
+    x0 = min(x0, max(0, W_full - tile_width))
     x1 = x0 + tile_width
-    crop = strip[:, :, x0:min(x1, strip.shape[-1])]
-    if crop.shape[-1] < tile_width:
-        pad = np.zeros((1, strip.shape[1], tile_width - crop.shape[-1]), dtype=np.float32)
-        crop = np.concatenate([crop, pad], axis=-1)
+    crop = strip[:, x0:min(x1, W_full)]
+    if crop.shape[1] < tile_width:
+        pad = np.zeros((H, tile_width - crop.shape[1]), dtype=np.float32)
+        crop = np.concatenate([crop, pad], axis=1)
     return crop
 
 
-def make_gaussian_2d(W: int, H: int, cx: int, cy: int,
-                     sigma_x: float = 25.0, sigma_y: float = 10.0) -> np.ndarray:
-    """2D Gaussian at (cx, cy), normalised to max=1. Returns (H, W) float32."""
-    x = np.arange(W, dtype=np.float32)
-    y = np.arange(H, dtype=np.float32)
-    gx = np.exp(-0.5 * ((x - cx) / sigma_x) ** 2)
-    gy = np.exp(-0.5 * ((y - cy) / sigma_y) ** 2)
-    g = np.outer(gy, gx)
-    return (g / g.max()).astype(np.float32)   # (H, W)
+def make_gt_mask(H: int, W: int, gt_width: int = 10, gt_height: int = None) -> np.ndarray:
+    """Binary rectangle GT mask at center (H/2, W/2). Returns (H, W) float32."""
+    gt_height = gt_height or H // 2
+    mask = np.zeros((H, W), dtype=np.float32)
+    cy, cx = H // 2, W // 2
+    y0 = max(0, cy - gt_height // 2)
+    y1 = min(H, cy + gt_height // 2)
+    x0 = max(0, cx - gt_width // 2)
+    x1 = min(W, cx + gt_width // 2)
+    mask[y0:y1, x0:x1] = 1.0
+    return mask
 
 
 class CPJKUDataset(Dataset):
-    """
-    One sample = 5-second audio window + 2D score crop centered at GT strip_x.
+    """Random-window dataset for training CPJKU network.
 
-    audio_cqt  : (1, n_bins, T_win)
-    score_crop : (1, h_strip, tile_width)   — 2D grayscale crop in [0, 1]
-    gt_mask    : (h_strip, tile_width)      — 2D Gaussian at center (H/2, W/2)
+    Each __getitem__ samples a random frame t, returning:
+      score_crop : (1, h_strip, tile_width) — 2D score crop centered at GT
+      perf       : (1, n_mels, n_frames)    — spectrogram context (CBEncoder format)
+      gt_mask    : (1, h_strip, tile_width) — binary GT rectangle at center
     """
-
     def __init__(self, processed_root: str, split: str,
-                 window_sec: float = 5.0, tile_width: int = 512,
-                 h_strip: int = 128, n_bins: int = 78,
-                 hop: int = 512, sr: int = 24000,
-                 sigma_x: float = 25.0, sigma_y: float = 10.0):
+                 tile_width: int = 512, h_strip: int = 128,
+                 n_mels: int = 78, fps: int = 20, n_frames: int = 40,
+                 gt_width: int = 10):
         self.root       = Path(processed_root)
-        self.window_sec = window_sec
         self.tile_width = tile_width
         self.h_strip    = h_strip
-        self.n_bins     = n_bins
-        self.hop        = hop
-        self.sr         = sr
-        self.sigma_x    = sigma_x
-        self.sigma_y    = sigma_y
-        self.eff_hz     = sr / hop
+        self.n_mels     = n_mels
+        self.fps        = fps
+        self.n_frames   = n_frames
+        self.gt_width   = gt_width
 
         splits = json.load(open(self.root / "splits.json"))
         self.piece_ids = splits[split]
@@ -102,51 +110,69 @@ class CPJKUDataset(Dataset):
     def __len__(self):
         return len(self.piece_ids)
 
+    def _load_spec(self, pid, piece_dir):
+        spec = _SPEC_CACHE.get(pid)
+        if spec is None:
+            spec = load_spec(piece_dir / "audio.wav", fps=self.fps, n_mels=self.n_mels)
+            _SPEC_CACHE[pid] = spec
+        return spec
+
     def __getitem__(self, idx: int) -> dict:
-        pid       = self.piece_ids[idx]
+        pid = self.piece_ids[idx]
         piece_dir = self.root / pid
 
-        ann     = json.load(open(piece_dir / "annotations.json"))
-        notes   = np.load(piece_dir / "noteheads.npz")
+        ann   = json.load(open(piece_dir / "annotations.json"))
+        notes = np.load(piece_dir / "noteheads.npz")
         strip_w = ann["image"]["width_px"]
 
-        # ── CQT (cached) ──────────────────────────────────────────────────────
-        cqt = _CQT_CACHE.get(pid)
-        if cqt is None:
-            cqt = load_cqt(piece_dir / "audio.wav",
-                           sr=self.sr, n_bins=self.n_bins, hop=self.hop)
-            _CQT_CACHE[pid] = cqt
-        T_total   = cqt.shape[-1]
+        spec = self._load_spec(pid, piece_dir)  # (n_mels, T_spec)
+        T_spec = spec.shape[-1]
+        pad = self.n_frames    # their convention: pad n_frames zeros at start
 
-        # ── Random 5-second audio window ──────────────────────────────────────
-        rng       = np.random.default_rng()
-        win_frames = int(self.window_sec * self.eff_hz)
-        t_end     = int(rng.integers(win_frames, max(win_frames, T_total) + 1))
-        t_start   = max(0, t_end - win_frames)
-        cqt_win   = cqt[:, :, t_start:t_end]   # (1, n_bins, T_win)
+        rng = np.random.default_rng()
+        # Random frame t in [pad, T_spec)
+        t = int(rng.integers(pad, max(pad + 1, T_spec)))
+        t_sec = (t - pad) / self.fps   # real time (accounting for their padding)
 
-        # ── GT strip_x at t_end ───────────────────────────────────────────────
-        t_end_sec = t_end / self.eff_hz
-        onset     = notes["onset_sec"]
-        gt_x      = int(notes["strip_x"][int(np.argmin(np.abs(onset - t_end_sec)))]
-                        if len(onset) else strip_w // 2)
-        gt_x      = int(np.clip(gt_x, 0, strip_w - 1))
+        # GT strip_x at t_sec
+        onset = notes["onset_sec"]
+        gt_x = int(notes["strip_x"][int(np.argmin(np.abs(onset - t_sec)))]
+                   if len(onset) else strip_w // 2)
+        gt_x = int(np.clip(gt_x, 0, strip_w - 1))
 
-        # ── 2D strip crop CENTERED at GT (faithful Henkel training) ───────────
-        strip = load_strip_2d(piece_dir / "strip.png", self.h_strip)  # (1, H, W)
-        half  = self.tile_width // 2
-        x0    = int(np.clip(gt_x - half, 0, max(0, strip_w - self.tile_width)))
-        crop  = crop_2d(strip, x0, self.tile_width)   # (1, H, W)
+        # Spectrogram context: 40 frames ending at t (their CBEncoder format)
+        perf = spec[:, t - self.n_frames:t]   # (n_mels, n_frames)
+        if perf.shape[-1] < self.n_frames:
+            perf = np.pad(perf, ((0, 0), (self.n_frames - perf.shape[-1], 0)))
 
-        # GT: 2D Gaussian at center of crop (model matches audio to this visual)
-        gt = make_gaussian_2d(self.tile_width, self.h_strip,
-                              cx=self.tile_width // 2, cy=self.h_strip // 2,
-                              sigma_x=self.sigma_x, sigma_y=self.sigma_y)
+        # 2D score crop centered at GT
+        strip = load_strip_2d(piece_dir / "strip.png", self.h_strip)  # (H, W)
+        crop  = crop_score(strip, gt_x, self.tile_width)               # (H, W)
+        gt    = make_gt_mask(self.h_strip, self.tile_width, self.gt_width)
 
-        cqt_arr = cqt_win.numpy() if hasattr(cqt_win, "numpy") else np.array(cqt_win)
+        # Their model expects (seq_len, bs, 1, H, W) for score and perf.
+        # We return (1, H, W) tensors; train.py adds seq_len/bs dims.
         return {
-            "audio_cqt":  torch.from_numpy(cqt_arr),
-            "score_crop": torch.from_numpy(crop),
-            "gt_mask":    torch.from_numpy(gt),
-            "piece_id":   pid,
+            'score_crop': torch.from_numpy(crop[np.newaxis]),       # (1, H, W)
+            'perf':       torch.from_numpy(perf[np.newaxis]),       # (1, n_mels, n_frames)
+            'gt_mask':    torch.from_numpy(gt[np.newaxis]),         # (1, H, W)
+            'piece_id':   pid,
         }
+
+    def compute_spec_stats(self) -> tuple:
+        """Compute mean and std over training spectra for normalisation."""
+        specs = []
+        for pid in self.piece_ids:
+            piece_dir = self.root / pid
+            try:
+                s = self._load_spec(pid, piece_dir)  # (n_mels, T)
+                specs.append(s)
+            except Exception:
+                pass
+        if not specs:
+            return np.zeros(self.n_mels), np.ones(self.n_mels)
+        cat = np.concatenate(specs, axis=-1)   # (n_mels, T_total)
+        means = cat.mean(axis=1).astype(np.float32)
+        stds  = cat.std(axis=1).astype(np.float32)
+        stds[stds < 1e-6] = 1.0
+        return means, stds
