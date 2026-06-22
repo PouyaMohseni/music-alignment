@@ -1,0 +1,39 @@
+seed: 42
+
+# v10 — CPJKU ConditionalUNet with MERT-v1-95M audio conditioning.
+# Audio encoder: MERTProjector (768-dim precomputed → 128-dim via 2-layer MLP).
+# Everything else identical to v9 (FiLM, GroupNorm, additive skips, dice loss).
+# Hypothesis: richer audio embeddings → better FiLM conditioning → better tracking.
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    MERTProjector
+  spec_enc:         128   # 4x v9 — richer 768-dim MERT embeddings justify larger projection
+
+data:
+  processed_root: data/MSMD/processed
+  mert_emb_root:  data/MSMD/mert_emb
+  tile_width:     512
+  h_strip:        128
+  fps:            20
+  gt_width:       10
+  batch_size:     16
+  num_workers:    4
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 1.0e-5
+  patience:     5
+  clip_grads:   null
+
+train:
+  steps:      50000
+  log_every:  100
+  eval_every: 5000
+  ckpt_every: 5000
+  out_dir:    results/v10_mert_unet
