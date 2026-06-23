@@ -12,6 +12,7 @@ echo "Job started on $(hostname) at $(date)"
 
 cd /project/def-ichiro/pmohseni/music-alignment
 source .venv/bin/activate
+pip install --quiet opencv-python-headless
 
 # Make sure submodule is checked out
 git submodule update --init third_party/cpjku_unet
