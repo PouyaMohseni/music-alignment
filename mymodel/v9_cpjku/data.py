@@ -164,10 +164,11 @@ class CPJKUDataset(Dataset):
         # Their model expects (seq_len, bs, 1, H, W) for score and perf.
         # We return (1, H, W) tensors; train.py adds seq_len/bs dims.
         return {
-            'score_crop': torch.from_numpy(crop[np.newaxis]),       # (1, H, W)
-            'perf':       torch.from_numpy(perf[np.newaxis]),       # (1, n_mels, n_frames)
-            'gt_mask':    torch.from_numpy(gt[np.newaxis]),         # (1, H, W)
-            'piece_id':   pid,
+            'score_crop':  torch.from_numpy(crop[np.newaxis]),       # (1, H, W)
+            'perf':        torch.from_numpy(perf[np.newaxis]),       # (1, n_mels, n_frames)
+            'gt_mask':     torch.from_numpy(gt[np.newaxis]),         # (1, H, W)
+            'local_gt_x':  actual_local_gt_x,                       # int — GT x within crop
+            'piece_id':    pid,
         }
 
     def compute_spec_stats(self) -> tuple:

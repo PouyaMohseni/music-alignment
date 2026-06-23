@@ -53,11 +53,12 @@ def _step(network, b, device):
 
     loss = dice_loss(pred, gt.view(B, 1, *gt.shape[-2:]))
 
-    # Accuracy: is predicted center within 10% of crop width from true center?
+    # Accuracy: is predicted peak within 10% of crop width from actual GT position?
     W   = pred.shape[-1]
     col = pred.squeeze(1).sum(dim=1)              # (B, W) — sum over H
-    pred_x = col.argmax(dim=-1)                   # (B,)
-    acc = ((pred_x - W // 2).abs() <= W // 10).float().mean()
+    pred_x  = col.argmax(dim=-1)                  # (B,)
+    gt_x_local = b['local_gt_x'].to(device)       # (B,)
+    acc = ((pred_x - gt_x_local).abs() <= W // 10).float().mean()
     return loss, float(loss.detach()), float(acc.detach())
 
 

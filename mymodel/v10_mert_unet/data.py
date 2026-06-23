@@ -79,10 +79,11 @@ class MERTDataset(Dataset):
         # Reshape perf to (1, 768, 1) — mirrors CBEncoder's (1, n_mels, n_frames) format.
         # train.py unsqueezes batch dim → (B, 1, 768, 1), then seq_len → (1, B, 1, 768, 1).
         return {
-            'score_crop': torch.from_numpy(crop[np.newaxis]),                      # (1, H, W)
-            'perf':       torch.from_numpy(perf[np.newaxis, :, np.newaxis]),       # (1, 768, 1)
-            'gt_mask':    torch.from_numpy(gt[np.newaxis]),                        # (1, H, W)
-            'piece_id':   pid,
+            'score_crop':  torch.from_numpy(crop[np.newaxis]),                      # (1, H, W)
+            'perf':        torch.from_numpy(perf[np.newaxis, :, np.newaxis]),       # (1, 768, 1)
+            'gt_mask':     torch.from_numpy(gt[np.newaxis]),                        # (1, H, W)
+            'local_gt_x':  actual_local_gt_x,                                      # int — GT x within crop
+            'piece_id':    pid,
         }
 
     def compute_spec_stats(self):

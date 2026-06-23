@@ -51,8 +51,9 @@ def _step(network, b, device):
 
     W   = pred.shape[-1]
     col = pred.squeeze(1).sum(dim=1)
-    pred_x = col.argmax(dim=-1)
-    acc = ((pred_x - W // 2).abs() <= W // 10).float().mean()
+    pred_x     = col.argmax(dim=-1)
+    gt_x_local = b['local_gt_x'].to(device)
+    acc = ((pred_x - gt_x_local).abs() <= W // 10).float().mean()
     return loss, float(loss.detach()), float(acc.detach())
 
 
