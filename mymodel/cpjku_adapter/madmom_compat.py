@@ -54,8 +54,20 @@ def _midi_to_spec_otf(midi, spec_params: dict, sound_font_path=None) -> np.ndarr
 
 def patch():
     """Monkey-patch madmom-dependent functions in audio_conditioned_unet.utils."""
-    # Stub out the madmom import so the module loads without it
     import types
+
+    # Stub out cv2 if not installed — we never call resize (scale_factor=1)
+    try:
+        import cv2  # noqa: F401
+    except ImportError:
+        fake_cv2 = types.ModuleType('cv2')
+        fake_cv2.resize = None
+        fake_cv2.INTER_AREA = 0
+        sys.modules.setdefault('cv2', fake_cv2)
+        print('[cpjku_adapter] cv2 not found — stubbed out (scale_factor=1, resize unused)',
+              flush=True)
+
+    # Stub out the madmom import so the module loads without it
     fake_madmom = types.ModuleType('madmom')
     fake_madmom.io = types.ModuleType('madmom.io')
     fake_madmom.io.midi = types.ModuleType('madmom.io.midi')
