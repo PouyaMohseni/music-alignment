@@ -261,8 +261,7 @@ def main(cfg: DictConfig):
                                  lr=cfg.optim.lr,
                                  weight_decay=cfg.optim.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', patience=cfg.optim.patience,
-        factor=0.5, verbose=True)
+        optimizer, mode='min', patience=cfg.optim.patience, factor=0.5)
 
     max_epochs     = cfg.train.max_epochs
     early_patience = cfg.optim.patience * 2   # 10 by default
