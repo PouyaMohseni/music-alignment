@@ -66,8 +66,15 @@ class MERTDataset(Dataset):
         perf = mert_emb[t]   # (768,)
 
         strip = load_strip_2d(piece_dir / 'strip.png', self.h_strip)
-        crop  = crop_score(strip, gt_x, self.tile_width)
-        gt    = make_gt_mask(self.h_strip, self.tile_width, self.gt_width)
+        margin = self.tile_width // 8
+        local_gt_x = int(rng.integers(margin, self.tile_width - margin))
+        x0 = int(np.clip(gt_x - local_gt_x, 0, max(0, strip.shape[1] - self.tile_width)))
+        actual_local_gt_x = int(np.clip(gt_x - x0, 0, self.tile_width - 1))
+        crop = strip[:, x0:x0 + self.tile_width]
+        if crop.shape[1] < self.tile_width:
+            crop = np.pad(crop, ((0, 0), (0, self.tile_width - crop.shape[1])))
+        gt   = make_gt_mask(self.h_strip, self.tile_width, self.gt_width,
+                            cx=actual_local_gt_x)
 
         # Reshape perf to (1, 768, 1) — mirrors CBEncoder's (1, n_mels, n_frames) format.
         # train.py unsqueezes batch dim → (B, 1, 768, 1), then seq_len → (1, B, 1, 768, 1).

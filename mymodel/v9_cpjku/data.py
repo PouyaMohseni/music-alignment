@@ -71,11 +71,13 @@ def crop_score(strip: np.ndarray, cx: int, tile_width: int) -> np.ndarray:
     return crop
 
 
-def make_gt_mask(H: int, W: int, gt_width: int = 10, gt_height: int = None) -> np.ndarray:
-    """Binary rectangle GT mask at center (H/2, W/2). Returns (H, W) float32."""
+def make_gt_mask(H: int, W: int, gt_width: int = 10, gt_height: int = None,
+                 cx: int = None) -> np.ndarray:
+    """Binary rectangle GT mask. cx defaults to W//2 (center). Returns (H, W) float32."""
     gt_height = gt_height or H // 2
+    cx = cx if cx is not None else W // 2
     mask = np.zeros((H, W), dtype=np.float32)
-    cy, cx = H // 2, W // 2
+    cy = H // 2
     y0 = max(0, cy - gt_height // 2)
     y1 = min(H, cy + gt_height // 2)
     x0 = max(0, cx - gt_width // 2)
@@ -145,10 +147,19 @@ class CPJKUDataset(Dataset):
         if perf.shape[-1] < self.n_frames:
             perf = np.pad(perf, ((0, 0), (self.n_frames - perf.shape[-1], 0)))
 
-        # 2D score crop centered at GT
+        # 2D score crop: GT placed at random position within the tile.
+        # This forces the model to use audio FiLM to locate the note,
+        # rather than learning the trivial "output center" shortcut.
         strip = load_strip_2d(piece_dir / "strip.png", self.h_strip)  # (H, W)
-        crop  = crop_score(strip, gt_x, self.tile_width)               # (H, W)
-        gt    = make_gt_mask(self.h_strip, self.tile_width, self.gt_width)
+        margin = self.tile_width // 8   # 64px at tile_width=512
+        local_gt_x = int(rng.integers(margin, self.tile_width - margin))
+        x0 = int(np.clip(gt_x - local_gt_x, 0, max(0, strip.shape[1] - self.tile_width)))
+        actual_local_gt_x = int(np.clip(gt_x - x0, 0, self.tile_width - 1))
+        crop = strip[:, x0:x0 + self.tile_width]
+        if crop.shape[1] < self.tile_width:
+            crop = np.pad(crop, ((0, 0), (0, self.tile_width - crop.shape[1])))
+        gt   = make_gt_mask(self.h_strip, self.tile_width, self.gt_width,
+                            cx=actual_local_gt_x)
 
         # Their model expects (seq_len, bs, 1, H, W) for score and perf.
         # We return (1, H, W) tensors; train.py adds seq_len/bs dims.
