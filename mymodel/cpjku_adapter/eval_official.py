@@ -15,6 +15,61 @@ import argparse, json, sys
 from pathlib import Path
 
 
+def _patched_load_piece(params):
+    """Module-level so multiprocessing pool.map can pickle it."""
+    import os
+    import numpy as np
+    from scipy import interpolate
+
+    i, path, piece_name = params['i'], params['path'], params['piece_name']
+    spec_params  = params['spectrogram_params']
+    scale_factor = params.get('scale_factor', 1)
+
+    npz = np.load(os.path.join(path, 'score', piece_name + '.npz'), allow_pickle=True)
+    sheet        = npz['sheet']
+    coords       = npz['coords'].astype(np.float32)
+    onset_frames = npz['onset_frames']
+
+    from audio_conditioned_unet.utils import wav_to_spec_otf
+
+    score = 1 - sheet.astype(np.float32) / 255.
+    if scale_factor != 1:
+        import cv2
+        score  = cv2.resize(score,
+                            (score.shape[1] // scale_factor, score.shape[0] // scale_factor),
+                            interpolation=cv2.INTER_AREA)
+        coords = coords / scale_factor
+
+    wav_path = os.path.join(path, 'performance', piece_name + '.wav')
+    spec     = wav_to_spec_otf(wav_path, spec_params)
+
+    onsets     = onset_frames
+    coords_new = coords
+
+    interpol_fnc = interpolate.interp1d(
+        onsets, coords_new.T, kind='previous', bounds_error=False,
+        fill_value=(coords_new[0, :], coords_new[-1, :]))
+
+    unrolled_x = coords_new[:, 1]
+    interpol_c2o = interpolate.interp1d(
+        unrolled_x, onsets, kind='previous', bounds_error=False,
+        fill_value=(onsets[0], onsets[-1]))
+
+    staff_coords   = sorted(np.unique(coords_new[:, 0]))
+    add_per_staff  = np.array([0] * len(staff_coords))
+
+    perf = {
+        1000: {
+            'interpol_fnc':  interpol_fnc,
+            'spec':          spec,
+            'onsets':        onsets,
+            'interpol_c2o':  interpol_c2o,
+            'add_per_staff': [staff_coords, add_per_staff],
+        }
+    }
+    return i, score, piece_name, perf
+
+
 def build_split_file(processed_root: str, cpjku_data: str, split: str):
     """Write a YAML split file listing the piece IDs for the given split."""
     import yaml
@@ -139,61 +194,8 @@ def main():
 
     _utils.load_performance = _patched_load_performance
 
-    # Also patch load_piece in dataset to pass add_per_staff correctly
+    # Patch load_piece with module-level function (must be picklable for pool.map)
     import audio_conditioned_unet.dataset as _ds
-    _orig_load_piece = _ds.load_piece
-
-    def _patched_load_piece(params):
-        import os, numpy as np
-        from scipy import interpolate
-        i, path, piece_name = params['i'], params['path'], params['piece_name']
-        spec_params = params['spectrogram_params']
-
-        npz = np.load(os.path.join(path, 'score', piece_name + '.npz'), allow_pickle=True)
-        sheet     = npz['sheet']
-        coords    = npz['coords'].astype(np.float32)
-        onset_frames = npz['onset_frames']
-
-        from audio_conditioned_unet.utils import load_score, wav_to_spec_otf
-        scale_factor = params.get('scale_factor', 1)
-
-        # Scale score image and coords
-        import cv2
-        score = 1 - sheet.astype(np.float32) / 255.
-        if scale_factor != 1:
-            score = cv2.resize(score, (score.shape[1] // scale_factor, score.shape[0] // scale_factor),
-                               interpolation=cv2.INTER_AREA)
-            coords = coords / scale_factor
-
-        wav_path = os.path.join(path, 'performance', piece_name + '.wav')
-        spec = wav_to_spec_otf(wav_path, spec_params)  # (n_bands, T+pad)
-
-        onsets = onset_frames
-        coords_new = coords
-
-        interpol_fnc = interpolate.interp1d(
-            onsets, coords_new.T, kind='previous', bounds_error=False,
-            fill_value=(coords_new[0, :], coords_new[-1, :]))
-
-        unrolled_x = coords_new[:, 1]
-        interpol_c2o = interpolate.interp1d(
-            unrolled_x, onsets, kind='previous', bounds_error=False,
-            fill_value=(onsets[0], onsets[-1]))
-
-        staff_coords = sorted(np.unique(coords_new[:, 0]))
-        add_per_staff = np.array([0] * len(staff_coords))
-
-        perf = {
-            1000: {
-                'interpol_fnc': interpol_fnc,
-                'spec': spec,
-                'onsets': onsets,
-                'interpol_c2o': interpol_c2o,
-                'add_per_staff': [staff_coords, add_per_staff],
-            }
-        }
-        return i, score, piece_name, perf
-
     _ds.load_piece = _patched_load_piece
 
     # Load dataset
