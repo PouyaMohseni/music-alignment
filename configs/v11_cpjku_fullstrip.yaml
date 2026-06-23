@@ -1,0 +1,36 @@
+seed: 42
+
+# v11 — CPJKU approach reproduced faithfully:
+#   Full strip as score input (not a crop) → GT at TRUE note position
+#   BPTT seq_len=16, epoch-based training (100 max), early stop at patience×2
+#   CB_TA net config: CBEncoder, LSTM, film_layers=[2..8], n_filters_start=8
+#   Spectrogram normalisation computed from training set before first epoch
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    CBEncoder
+  spec_enc:         32
+
+data:
+  processed_root: data/MSMD/processed
+  h_strip:        128     # strip height (power-of-2 for UNet)
+  w_scale:        4       # downscale strip width by 4 (memory efficiency)
+  n_mels:         78      # matches their ~78-band log-mel (60–6000 Hz)
+  fps:            20      # their fps
+  n_frames:       40      # CBEncoder context window (40 frames = 2s at fps=20)
+  gt_width:       10      # GT rectangle width (their value)
+
+optim:
+  lr:           1.0e-4    # their learning rate
+  weight_decay: 1.0e-5    # their weight decay
+  patience:     5         # ReduceLROnPlateau patience (early_stop = patience×2 = 10)
+
+train:
+  max_epochs: 100         # their maximum
+  seq_len:    16          # BPTT chunk length (their default)
+  out_dir:    results/v11_cpjku_fullstrip
