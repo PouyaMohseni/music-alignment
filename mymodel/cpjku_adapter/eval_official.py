@@ -46,9 +46,16 @@ def _patched_load_piece(params):
     onsets     = onset_frames
     coords_new = coords
 
+    # Their interpol_fnc must return [y, x, height] (3 values).
+    # They split it as: true_position, height = result[:-1], result[-1]
+    # height = adaptive staff height; we use H//2 (our strip is single-line).
+    H_strip = sheet.shape[0]
+    height_col = np.full((len(coords_new), 1), H_strip // 2, dtype=np.float32)
+    coords_3 = np.concatenate([coords_new, height_col], axis=1)  # (N, 3)
+
     interpol_fnc = interpolate.interp1d(
-        onsets, coords_new.T, kind='previous', bounds_error=False,
-        fill_value=(coords_new[0, :], coords_new[-1, :]))
+        onsets, coords_3.T, kind='previous', bounds_error=False,
+        fill_value=(coords_3[0, :], coords_3[-1, :]))
 
     unrolled_x = coords_new[:, 1]
     interpol_c2o = interpolate.interp1d(
