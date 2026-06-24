@@ -210,16 +210,18 @@ def _patched_load_piece(params):
     return i, score, piece_name, perf
 
 
-def _memory_efficient_eval(network, dataset, device, seq_len=8, threshold=0.5):
-    """Eval loop that avoids T×H×W score copies (OOM workaround for large strips).
+def _memory_efficient_eval(network, piece_names, cpjku_data, config,
+                           device, seq_len=8, scale_factor=1,
+                           n_frames=40, threshold=0.5):
+    """Eval loop: loads each piece sequentially (no multiprocessing pool).
 
-    ScoreAudioDataset.__getitem__ materialises (T, H, W) score arrays; for a
-    3-min piece with a 128×3000 strip this is ~5 GB per piece — instant OOM.
-    We access dataset.scores / dataset.performances directly and keep the score
-    as a single (1,1,1,H,W) tensor, expanded zero-copy with torch.expand().
+    Their load_dataset uses multiprocessing.Pool with fork; forked workers
+    call librosa → numpy/BLAS and inherit locked BLAS thread pools, causing
+    an indefinite deadlock on SLURM nodes.  We load each piece one at a time
+    in the main process to avoid the deadlock entirely.
 
-    Returns {'frame_differences': {'onset_diffs': [frame_diff, ...]}} which
-    matches the format produced by iterate_dataset with eval_only_onsets=True.
+    Returns {'frame_differences': {'onset_diffs': [frame_diff, ...]}} matching
+    the format produced by iterate_dataset with eval_only_onsets=True.
     """
     import torch
     import numpy as np
@@ -227,16 +229,19 @@ def _memory_efficient_eval(network, dataset, device, seq_len=8, threshold=0.5):
 
     network.eval()
     onset_diffs = []
+    pad = config['spectrogram_params']['pad']
 
-    pad      = dataset.pad        # 40
-    n_frames = dataset.n_frames   # 40
-    n_pieces = len(dataset.scores)
-
-    for score_id in range(n_pieces):
-        score      = dataset.scores[score_id]        # (H, W) float32
-        piece_name = dataset.piece_names[score_id]
-        perfs      = dataset.performances[score_id]
-        perf       = perfs[list(perfs.keys())[0]]    # our single tempo key (1000)
+    for piece_idx, piece_name in enumerate(piece_names):
+        print(f'[{piece_idx+1}/{len(piece_names)}] Loading {piece_name}...', flush=True)
+        params = {
+            'i':                 piece_idx,
+            'path':              cpjku_data,
+            'piece_name':        piece_name,
+            'spectrogram_params': config['spectrogram_params'],
+            'scale_factor':      scale_factor,
+        }
+        _, score, _, perf_dict = _patched_load_piece(params)
+        perf = perf_dict[list(perf_dict.keys())[0]]   # single tempo key (1000)
 
         spec             = perf['spec']              # (78, T_total)
         onsets_set       = set(perf['onsets'].tolist())
@@ -256,11 +261,10 @@ def _memory_efficient_eval(network, dataset, device, seq_len=8, threshold=0.5):
         piece_diffs = 0
 
         while t < T_total:
-            end          = min(t + seq_len, T_total)
-            frame_range  = list(range(t, end))
-            sl           = len(frame_range)
+            end         = min(t + seq_len, T_total)
+            frame_range = list(range(t, end))
+            sl          = len(frame_range)
 
-            # perf: (sl, 1, 1, 78, n_frames)
             clips = []
             for i in frame_range:
                 clip = spec[:, max(0, i - n_frames + 1):i + 1]
@@ -268,51 +272,42 @@ def _memory_efficient_eval(network, dataset, device, seq_len=8, threshold=0.5):
                     clip = np.pad(clip, ((0, 0), (n_frames - clip.shape[-1], 0)))
                 clips.append(clip)
             perf_t = torch.from_numpy(
-                np.array(clips)[:, np.newaxis, np.newaxis]   # (sl,1,1,78,n_frames)
+                np.array(clips)[:, np.newaxis, np.newaxis]
             ).to(device)
 
-            # score: (sl,1,1,H,W) — zero-copy broadcast
             score_batch = score_t.expand(sl, -1, -1, -1, -1)
 
             with torch.no_grad():
-                out    = network(score=score_batch, perf=perf_t, hidden=hidden)
-            pred   = out['segmentation']   # (sl, 1, H, W)
+                out  = network(score=score_batch, perf=perf_t, hidden=hidden)
+            pred   = out['segmentation']
             hidden = out.get('hidden')
 
             for j, i in enumerate(frame_range):
-                frame_idx = i - pad   # frame index relative to audio start
+                frame_idx = i - pad
                 if frame_idx not in onsets_set:
                     continue
 
-                p        = pred[j, 0]                       # (H, W) on device
+                p        = pred[j, 0]
                 p_thresh = (p >= threshold).float()
+                com_pred = (center_of_mass(p_thresh)
+                            if p_thresh.sum() > 0
+                            else torch.zeros(2, device=device))
+                com_np   = com_pred.cpu().numpy()
 
-                if p_thresh.sum() == 0:
-                    com_pred = torch.zeros(2, device=device)
-                else:
-                    com_pred = center_of_mass(p_thresh)
+                gt_pos   = np.asarray(interpol_fnc(frame_idx))
+                x_gt     = float(gt_pos[1])
 
-                com_np = com_pred.cpu().numpy()             # [y_pred, x_pred]
-
-                # GT position from interpol_fnc → [y_gt, x_gt, height]
-                gt_pos = np.asarray(interpol_fnc(frame_idx))
-                x_gt   = float(gt_pos[1])
-
-                # Unroll to global x (single staff: add_per_staff[0] == 0)
                 x_pred_g = float(com_np[1]) + float(add_per_staff[0])
                 x_gt_g   = x_gt             + float(add_per_staff[0])
 
-                frame_diff = abs(
-                    float(interpol_c2o(x_pred_g)) -
-                    float(interpol_c2o(x_gt_g))
-                )
+                frame_diff = abs(float(interpol_c2o(x_pred_g)) -
+                                 float(interpol_c2o(x_gt_g)))
                 onset_diffs.append(frame_diff)
                 piece_diffs += 1
 
             t += sl
 
-        print(f'  [{score_id+1}/{n_pieces}] {piece_name}: {piece_diffs} onset frames evaluated',
-              flush=True)
+        print(f'  -> {piece_diffs} onset frames evaluated', flush=True)
 
     return {'frame_differences': {'onset_diffs': onset_diffs}}
 
@@ -371,7 +366,6 @@ def main():
 
     import torch
     from audio_conditioned_unet.network import ConditionalUNet
-    from audio_conditioned_unet.dataset import load_dataset
 
     config = {
         'spectrogram_params': {
@@ -417,17 +411,15 @@ def main():
     if not available:
         raise RuntimeError('No converted pieces found. Run: python -m mymodel.cpjku_adapter.convert')
 
-    # Patch load_piece with our module-level function (picklable for pool.map)
-    import audio_conditioned_unet.dataset as _ds
-    _ds.load_piece = _patched_load_piece
-
     n_frames = network.perf_encoder.n_input_frames
-    print(f'Loading dataset ({a.split}, scale_factor={a.scale_factor})...', flush=True)
-    dataset = load_dataset(a.cpjku_data, config, n_frames=n_frames,
-                           split_file=split_file, scale_factor=a.scale_factor)
 
-    print(f'Running eval (seq_len={a.seq_len}, device={device})...', flush=True)
-    stats = _memory_efficient_eval(network, dataset, device=str(device), seq_len=a.seq_len)
+    print(f'Running eval on {len(available)} pieces '
+          f'(seq_len={a.seq_len}, scale_factor={a.scale_factor}, device={device})...',
+          flush=True)
+    stats = _memory_efficient_eval(
+        network, available, a.cpjku_data, config,
+        device=str(device), seq_len=a.seq_len,
+        scale_factor=a.scale_factor, n_frames=n_frames)
 
     import numpy as np
     frame_diffs  = stats['frame_differences']
