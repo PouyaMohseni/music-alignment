@@ -211,22 +211,36 @@ def _val_epoch(network: ConditionalUNet, dataset: FullStripDataset,
     return total_loss / max(1, n_frames_seen)
 
 
-def _save_best(network: ConditionalUNet, epoch: int, cfg: DictConfig,
-               out_dir: Path) -> Path:
+def _save_checkpoint(network: ConditionalUNet, optimizer, scheduler,
+                     epoch: int, best_val_loss: float, wait: int,
+                     means: np.ndarray, stds: np.ndarray,
+                     cfg: DictConfig, out_dir: Path,
+                     is_best: bool) -> Path:
     ckpt_path = out_dir / f'checkpoint_epoch{epoch:03d}.pt'
     best_path  = out_dir / 'best_model.pt'
     payload = {
-        'epoch':      epoch,
-        'state_dict': network.state_dict(),
-        'net_config': OmegaConf.to_container(cfg.net),
-        'cfg':        OmegaConf.to_container(cfg),
+        'epoch':          epoch,
+        'state_dict':     network.state_dict(),
+        'optimizer':      optimizer.state_dict(),
+        'scheduler':      scheduler.state_dict(),
+        'best_val_loss':  best_val_loss,
+        'wait':           wait,
+        'spec_means':     means,
+        'spec_stds':      stds,
+        'net_config':     OmegaConf.to_container(cfg.net),
+        'cfg':            OmegaConf.to_container(cfg),
     }
     torch.save(payload, ckpt_path)
-    torch.save(payload, best_path)
+    if is_best:
+        torch.save(payload, best_path)
+    # keep only last two epoch checkpoints to save disk
+    old = out_dir / f'checkpoint_epoch{epoch - 2:03d}.pt'
+    if old.exists():
+        old.unlink()
     return ckpt_path
 
 
-def main(cfg: DictConfig):
+def main(cfg: DictConfig, resume: str | None = None):
     _seed(cfg.seed)
     device  = 'cuda' if torch.cuda.is_available() else 'cpu'
     out_dir = Path(os.getcwd()) / cfg.train.out_dir
@@ -245,17 +259,8 @@ def main(cfg: DictConfig):
 
     print(f'train={len(train_ds)} pieces  val={len(val_ds)} pieces', flush=True)
 
-    # Spectrogram normalisation — computed from training set, stored in model params
-    print('Computing spectrogram stats...', flush=True)
-    means, stds = train_ds.compute_spec_stats()
-    print(f'  means={means.mean():.4f}  stds={stds.mean():.4f}', flush=True)
-
     net_config = OmegaConf.to_container(cfg.net)
     network    = ConditionalUNet(net_config)
-    network.perf_encoder.set_stats(means, stds)   # BEFORE .to(device)
-    network    = network.to(device)
-    print(f'params: {sum(p.numel() for p in network.parameters() if p.requires_grad):,}',
-          flush=True)
 
     optimizer = torch.optim.Adam(network.parameters(),
                                  lr=cfg.optim.lr,
@@ -264,13 +269,58 @@ def main(cfg: DictConfig):
         optimizer, mode='min', patience=cfg.optim.patience, factor=0.5)
 
     max_epochs     = cfg.train.max_epochs
-    early_patience = cfg.optim.patience * 2   # 10 by default
+    early_patience = cfg.optim.patience * 2
     best_val_loss  = float('inf')
     wait           = 0
+    start_epoch    = 1
     best_path      = None
-    t0             = time.time()
 
-    for epoch in range(1, max_epochs + 1):
+    # Auto-detect latest checkpoint for resume if --resume flag is set
+    ckpt_to_load = None
+    if resume:
+        ckpt_to_load = resume if resume != 'auto' else None
+        if ckpt_to_load is None:
+            # Find the highest-epoch checkpoint in out_dir
+            candidates = sorted(out_dir.glob('checkpoint_epoch*.pt'))
+            if candidates:
+                ckpt_to_load = str(candidates[-1])
+                print(f'Auto-resume: found {ckpt_to_load}', flush=True)
+            else:
+                print('Auto-resume: no checkpoint found, starting fresh.', flush=True)
+
+    if ckpt_to_load and Path(ckpt_to_load).exists():
+        print(f'Resuming from {ckpt_to_load}', flush=True)
+        ckpt = torch.load(ckpt_to_load, map_location='cpu', weights_only=False)
+        network.load_state_dict(ckpt['state_dict'])
+        optimizer.load_state_dict(ckpt['optimizer'])
+        scheduler.load_state_dict(ckpt['scheduler'])
+        best_val_loss = ckpt['best_val_loss']
+        wait          = ckpt['wait']
+        start_epoch   = ckpt['epoch'] + 1
+        means         = ckpt['spec_means']
+        stds          = ckpt['spec_stds']
+        print(f'  resumed epoch={ckpt["epoch"]}  best_val={best_val_loss:.5f}  '
+              f'wait={wait}  lr={optimizer.param_groups[0]["lr"]:.2e}', flush=True)
+    else:
+        # Compute spectrogram normalisation from training set
+        print('Computing spectrogram stats...', flush=True)
+        means, stds = train_ds.compute_spec_stats()
+        print(f'  means={means.mean():.4f}  stds={stds.mean():.4f}', flush=True)
+
+    network.perf_encoder.set_stats(means, stds)
+    network = network.to(device)
+    # Re-map optimizer tensors to device after loading state dict
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+
+    print(f'params: {sum(p.numel() for p in network.parameters() if p.requires_grad):,}',
+          flush=True)
+
+    t0 = time.time()
+
+    for epoch in range(start_epoch, max_epochs + 1):
         train_loss, train_acc = _train_epoch(
             network, train_ds, optimizer,
             seq_len=cfg.train.seq_len,
@@ -288,6 +338,7 @@ def main(cfg: DictConfig):
         scheduler.step(val_loss)
         elapsed = time.time() - t0
 
+        is_best = val_loss < best_val_loss
         print(
             f'epoch {epoch:3d}/{max_epochs}  '
             f'train_dice={train_loss:.4f}  acc={train_acc:.3f}  '
@@ -296,13 +347,19 @@ def main(cfg: DictConfig):
             f'{elapsed:.0f}s',
             flush=True)
 
-        if val_loss < best_val_loss:
+        if is_best:
             best_val_loss = val_loss
             wait          = 0
-            best_path     = _save_best(network, epoch, cfg, out_dir)
+            best_path     = _save_checkpoint(
+                network, optimizer, scheduler, epoch,
+                best_val_loss, wait, means, stds, cfg, out_dir, is_best=True)
             print(f'  -> new best (val={best_val_loss:.5f}), saved {best_path}', flush=True)
         else:
             wait += 1
+            # Save latest checkpoint so we can resume even on non-best epochs
+            _save_checkpoint(
+                network, optimizer, scheduler, epoch,
+                best_val_loss, wait, means, stds, cfg, out_dir, is_best=False)
             print(f'  no improvement ({wait}/{early_patience})', flush=True)
             if wait >= early_patience:
                 print(f'Early stopping at epoch {epoch}.', flush=True)
@@ -311,16 +368,19 @@ def main(cfg: DictConfig):
     print(f'Training done. best_val_loss={best_val_loss:.5f}  best={best_path}', flush=True)
 
 
-def _parse() -> DictConfig:
+def _parse():
     p = argparse.ArgumentParser()
     p.add_argument('--config', default='configs/v11_cpjku_fullstrip.yaml')
+    p.add_argument('--resume', nargs='?', const='auto', default=None,
+                   help='Resume from checkpoint. Pass path or omit for auto-detect.')
     p.add_argument('overrides', nargs='*')
     a = p.parse_args()
     cfg = OmegaConf.load(a.config)
     if a.overrides:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(a.overrides))
-    return cfg
+    return cfg, a.resume
 
 
 if __name__ == '__main__':
-    main(_parse())
+    cfg, resume = _parse()
+    main(cfg, resume=resume)

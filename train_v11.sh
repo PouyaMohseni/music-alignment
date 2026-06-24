@@ -20,8 +20,15 @@ source .venv/bin/activate
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 
 echo "=== Train v11: CPJKU full-strip BPTT ==="
+# Auto-resume if a checkpoint already exists (supports multi-job continuation)
+RESUME_FLAG=""
+if ls results/v11_cpjku_fullstrip/checkpoint_epoch*.pt 1>/dev/null 2>&1; then
+    echo "Found existing checkpoint — resuming."
+    RESUME_FLAG="--resume"
+fi
 python -m mymodel.v11_cpjku_fullstrip.train \
     --config configs/v11_cpjku_fullstrip.yaml \
+    $RESUME_FLAG \
     data.processed_root=$PROC
 
 echo "Training finished at $(date). Running eval..."
