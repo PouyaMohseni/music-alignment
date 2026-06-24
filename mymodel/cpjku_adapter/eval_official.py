@@ -18,26 +18,108 @@ import argparse, json, sys
 from pathlib import Path
 
 
-def _wav_to_spec_librosa(wav_path: str, spec_params: dict):
-    """78-band log-mel spectrogram matching CB_TA's expected input shape.
+def _build_log_filterbank(sr: int, n_fft: int,
+                          fmin: float = 60.0, fmax: float = 6000.0,
+                          bands_per_octave: int = 12) -> 'np.ndarray':
+    """Build triangular log-frequency filterbank matching madmom LogarithmicFilterbank.
 
-    Their madmom LogarithmicFilterbank: 12 bands/octave, 60-6000 Hz → ~78 bins.
-    We replicate shape with librosa mel (same n_mels=78, same fps/pad).
-    Defined at module level so it works in multiprocessing workers.
+    Parameters match their spectrogram_processor() call exactly:
+        FilteredSpectrogramProcessor(LogarithmicFilterbank, num_bands=12,
+                                     fmin=60, fmax=6000,
+                                     norm_filters=True, unique_filters=False)
+
+    Returns filterbank matrix (n_filters, n_fft//2+1) float32.
     """
     import numpy as np
-    import librosa
+    n_fft_bins = n_fft // 2 + 1
+
+    # Center frequencies: fmin * 2^(k / bands_per_octave)
+    # Include one extra on each side for triangular boundaries.
+    num_octaves = int(np.ceil(np.log2(fmax / fmin)))
+    n_total = bands_per_octave * num_octaves + 1
+    all_centers = fmin * 2 ** (np.arange(-1, n_total + 1) / bands_per_octave)
+
+    mask    = (all_centers >= fmin) & (all_centers <= fmax)
+    centers = all_centers[mask]
+
+    def freq_to_bin(f):
+        return int(round(f * n_fft / sr))
+
+    # Boundary bin below fmin and above fmax (for outermost filter slopes)
+    lo_bin = freq_to_bin(all_centers[np.searchsorted(all_centers, fmin) - 1])
+    hi_bin = freq_to_bin(all_centers[np.searchsorted(all_centers, fmax, side='right')])
+
+    boundary_bins = (
+        [np.clip(lo_bin, 0, n_fft_bins - 1)]
+        + [np.clip(freq_to_bin(c), 0, n_fft_bins - 1) for c in centers]
+        + [np.clip(hi_bin, 0, n_fft_bins - 1)]
+    )
+
+    # Build filters — skip degenerate ones (left == center == right in bin space).
+    # madmom drops these automatically; they arise when adjacent center freqs
+    # fall in the same STFT bin (happens at lowest frequencies with 10.8 Hz/bin).
+    rows = []
+    for k in range(len(centers)):
+        left   = boundary_bins[k]
+        center = boundary_bins[k + 1]
+        right  = boundary_bins[k + 2]
+
+        if left == center == right:
+            continue  # degenerate — zero area after normalisation
+
+        row = np.zeros(n_fft_bins, dtype=np.float64)
+
+        if center > left:
+            b = np.arange(left, center + 1)
+            row[left:center + 1] = (b - left) / (center - left)
+        else:
+            row[center] = 1.0
+
+        if right > center:
+            b = np.arange(center, right + 1)
+            row[center:right + 1] = (right - b) / (right - center)
+
+        # norm_filters=True: divide by filter area
+        s = row.sum()
+        if s > 0:
+            row /= s
+
+        rows.append(row)
+
+    return np.array(rows, dtype=np.float32)  # (n_valid_filters, n_fft_bins)
+
+
+def _wav_to_spec_logfilter(wav_path: str, spec_params: dict) -> 'np.ndarray':
+    """Approximate madmom's exact pipeline:
+      SignalProcessor → FramedSignalProcessor → FilteredSpectrogramProcessor
+        (LogarithmicFilterbank, num_bands=12, fmin=60, fmax=6000,
+         norm_filters=True, unique_filters=False)
+      → LogarithmicSpectrogramProcessor  (= log10(1 + spec))
+
+    Uses librosa STFT + numpy triangular filterbank.
+    Key differences vs our old _wav_to_spec_librosa:
+      - Logarithmic (constant-Q-like) filterbank instead of mel
+      - log10(1+x) instead of ln(1+x)  ← what their model trained on
+      - center=False to match madmom's FramedSignalProcessor
+    """
+    import numpy as np, librosa
     sr    = spec_params['sample_rate']
     n_fft = spec_params['frame_size']
     fps   = spec_params['fps']
     pad   = spec_params['pad']
     hop   = int(sr / fps)
-    y, _  = librosa.load(wav_path, sr=sr, mono=True)
-    mel   = librosa.feature.melspectrogram(
-        y=y, sr=sr, n_fft=n_fft, hop_length=hop,
-        n_mels=78, fmin=60.0, fmax=6000.0, power=1.0)
-    log_mel = np.log1p(mel).astype(np.float32)
-    return np.pad(log_mel, ((0, 0), (pad, 0)), mode='constant')  # (78, T+pad)
+
+    y, _ = librosa.load(wav_path, sr=sr, mono=True)
+
+    # STFT magnitude — center=False matches madmom's non-centered frames
+    D = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop,
+                            window='hann', center=False))  # (n_fft//2+1, T)
+
+    fb      = _build_log_filterbank(sr, n_fft)           # (n_filters, n_fft//2+1)
+    filt    = fb @ D                                       # (n_filters, T)
+    log_s   = np.log10(1.0 + filt).astype(np.float32)    # log10 matches madmom
+
+    return np.pad(log_s, ((0, 0), (pad, 0)), mode='constant')  # (n_filters, T+pad)
 
 
 def _patched_load_piece(params):
@@ -74,22 +156,33 @@ def _patched_load_piece(params):
 
     score = 1 - sheet.astype(np.float32) / 255.
     if scale_factor != 1:
-        import cv2
-        score  = cv2.resize(score,
-                            (score.shape[1] // scale_factor, score.shape[0] // scale_factor),
-                            interpolation=cv2.INTER_AREA)
+        new_h = sheet.shape[0] // scale_factor
+        new_w = sheet.shape[1] // scale_factor
+        try:
+            import cv2 as _cv2
+            if not callable(_cv2.resize):
+                raise TypeError('cv2 stub')
+            score = _cv2.resize(score, (new_w, new_h), interpolation=_cv2.INTER_AREA)
+        except (ImportError, TypeError):
+            # Fallback: PIL — available everywhere without module load
+            from PIL import Image as _Image
+            resized = np.array(
+                _Image.fromarray(sheet).resize((new_w, new_h), _Image.LANCZOS)
+            )
+            score = 1 - resized.astype(np.float32) / 255.
         coords = coords / scale_factor
 
     wav_path = os.path.join(path, 'performance', piece_name + '.wav')
-    spec     = _wav_to_spec_librosa(wav_path, spec_params)
+    spec     = _wav_to_spec_logfilter(wav_path, spec_params)
 
     onsets     = onset_frames
     coords_new = coords
 
     # Their interpol_fnc must return [y, x, height] (3 values).
     # They split it as: true_position, height = result[:-1], result[-1]
-    # height = adaptive staff height; we use H//2 (our strip is single-line).
-    H_strip = sheet.shape[0]
+    # height = adaptive staff height; we scale H//2 by scale_factor so GT
+    # rectangle covers the strip centre after downscaling.
+    H_strip = sheet.shape[0] // scale_factor if scale_factor != 1 else sheet.shape[0]
     height_col = np.full((len(coords_new), 1), H_strip // 2, dtype=np.float32)
     coords_3 = np.concatenate([coords_new, height_col], axis=1)  # (N, 3)
 

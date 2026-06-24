@@ -37,6 +37,6 @@ python -m mymodel.cpjku_adapter.eval_official \
     --split       test \
     --batch_size  1 \
     --seq_len     8 \
-    --scale_factor 1
+    --scale_factor 3
 
 echo "Job finished at $(date)"
