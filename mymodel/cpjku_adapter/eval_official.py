@@ -342,12 +342,18 @@ def main():
     p.add_argument('--processed',   default='data/MSMD/processed')
     p.add_argument('--model',       default='CB_TA',
                    choices=['CB_TA', 'CB_noTA', 'FB_TA', 'FB_noTA', 'NTC_TA', 'NTC_noTA'])
+    p.add_argument('--param_path',  default=None,
+                   help='Path to a trained best_model.pt. If set, evaluates OUR trained '
+                        'model instead of the bundled pretrained --model. '
+                        'net_config.json must sit next to it (or pass --net_config).')
+    p.add_argument('--net_config',  default=None,
+                   help='Path to net_config.json for --param_path (default: alongside it).')
     p.add_argument('--split',       default='test')
     p.add_argument('--batch_size',  type=int, default=1,
                    help='Unused (kept for CLI compatibility). Always 1 in memory-efficient loop.')
     p.add_argument('--seq_len',     type=int, default=128)
     p.add_argument('--scale_factor', type=int, default=1,
-                   help='Score downscale factor. Use 1 for our strips (already small).')
+                   help='Score downscale factor. Use 3 to match training; 1 for full-res strips.')
     a = p.parse_args()
 
     cpjku_root = Path(a.cpjku_root).resolve()
@@ -380,10 +386,22 @@ def main():
         'sf_path': '',
     }
 
-    param_path  = cpjku_root / 'models' / a.model / 'best_model.pt'
-    config_path = cpjku_root / 'models' / a.model / 'net_config.json'
+    if a.param_path is not None:
+        # Evaluate OUR trained model.
+        param_path  = Path(a.param_path)
+        config_path = (Path(a.net_config) if a.net_config
+                       else param_path.parent / 'net_config.json')
+        model_label = f'trained:{param_path.parent.name}'
+    else:
+        # Evaluate their bundled pretrained model.
+        param_path  = cpjku_root / 'models' / a.model / 'best_model.pt'
+        config_path = cpjku_root / 'models' / a.model / 'net_config.json'
+        model_label = a.model
+
     if not param_path.exists():
         raise FileNotFoundError(f'Model not found: {param_path}')
+    if not config_path.exists():
+        raise FileNotFoundError(f'net_config.json not found: {config_path}')
 
     with open(config_path) as f:
         net_config = json.load(f)
@@ -392,8 +410,8 @@ def main():
     network = ConditionalUNet(net_config)
     network.load_state_dict(torch.load(param_path, map_location='cpu'))
     network.to(device).eval()
-    print(f'Loaded {a.model} ({sum(p.numel() for p in network.parameters()):,} params) on {device}',
-          flush=True)
+    print(f'Loaded {model_label} ({sum(p.numel() for p in network.parameters()):,} params) '
+          f'on {device}', flush=True)
 
     split_file, available = build_split_file(a.processed, a.cpjku_data, a.split)
     if not available:
@@ -416,7 +434,7 @@ def main():
     onset_diffs  = np.array(frame_diffs['onset_diffs']) / config['spectrogram_params']['fps']
     total_onsets = len(onset_diffs)
 
-    print(f'\n=== CPJKU {a.model} on MSMD {a.split} ({len(available)} pieces) ===')
+    print(f'\n=== CPJKU {model_label} on MSMD {a.split} ({len(available)} pieces) ===')
     for th in [0.05, 0.1, 0.5, 1.0, 5.0]:
         pct = 100 * np.sum(onset_diffs <= th) / total_onsets
         print(f'  <= {th}s: {pct:.1f}%')
