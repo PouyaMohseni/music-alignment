@@ -35,7 +35,7 @@ python -m mymodel.cpjku_adapter.eval_official \
     --processed   $PROC \
     --model       CB_TA \
     --split       test \
-    --batch_size  4 \
+    --batch_size  1 \
     --scale_factor 1
 
 echo "Job finished at $(date)"
