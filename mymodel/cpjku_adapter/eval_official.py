@@ -117,7 +117,7 @@ def _patched_load_piece(params):
     return i, score, piece_name, perf
 
 
-def _memory_efficient_eval(network, dataset, device, seq_len=128, threshold=0.5):
+def _memory_efficient_eval(network, dataset, device, seq_len=8, threshold=0.5):
     """Eval loop that avoids T×H×W score copies (OOM workaround for large strips).
 
     ScoreAudioDataset.__getitem__ materialises (T, H, W) score arrays; for a
