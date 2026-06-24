@@ -15,11 +15,50 @@ import argparse, json, sys
 from pathlib import Path
 
 
+def _wav_to_spec_librosa(wav_path: str, spec_params: dict):
+    """78-band log-mel spectrogram matching CB_TA's expected input shape.
+
+    Their madmom LogarithmicFilterbank: 12 bands/octave, 60-6000 Hz → ~78 bins.
+    We replicate shape with librosa mel (same n_mels=78, same fps/pad).
+    Defined at module level so it works in multiprocessing workers.
+    """
+    import numpy as np
+    import librosa
+    sr    = spec_params['sample_rate']
+    n_fft = spec_params['frame_size']
+    fps   = spec_params['fps']
+    pad   = spec_params['pad']
+    hop   = int(sr / fps)
+    y, _  = librosa.load(wav_path, sr=sr, mono=True)
+    mel   = librosa.feature.melspectrogram(
+        y=y, sr=sr, n_fft=n_fft, hop_length=hop,
+        n_mels=78, fmin=60.0, fmax=6000.0, power=1.0)
+    log_mel = np.log1p(mel).astype(np.float32)
+    return np.pad(log_mel, ((0, 0), (pad, 0)), mode='constant')  # (78, T+pad)
+
+
 def _patched_load_piece(params):
-    """Module-level so multiprocessing pool.map can pickle it."""
-    import os
+    """Module-level so multiprocessing pool.map can pickle it.
+
+    Stubs are re-applied here because pool.map workers are forked/spawned
+    without the parent's sys.modules patches.
+    """
+    import os, sys, types
     import numpy as np
     from scipy import interpolate
+
+    # Re-stub cv2 and madmom in each worker process
+    if 'cv2' not in sys.modules:
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            _fake = types.ModuleType('cv2')
+            _fake.resize = None; _fake.INTER_AREA = 0
+            sys.modules['cv2'] = _fake
+
+    for _mod in ['madmom', 'madmom.io', 'madmom.io.midi', 'madmom.audio',
+                 'madmom.audio.signal', 'madmom.audio.spectrogram', 'madmom.processors']:
+        sys.modules.setdefault(_mod, types.ModuleType(_mod))
 
     i, path, piece_name = params['i'], params['path'], params['piece_name']
     spec_params  = params['spectrogram_params']
@@ -30,8 +69,6 @@ def _patched_load_piece(params):
     coords       = npz['coords'].astype(np.float32)
     onset_frames = npz['onset_frames']
 
-    from audio_conditioned_unet.utils import wav_to_spec_otf
-
     score = 1 - sheet.astype(np.float32) / 255.
     if scale_factor != 1:
         import cv2
@@ -41,7 +78,7 @@ def _patched_load_piece(params):
         coords = coords / scale_factor
 
     wav_path = os.path.join(path, 'performance', piece_name + '.wav')
-    spec     = wav_to_spec_otf(wav_path, spec_params)
+    spec     = _wav_to_spec_librosa(wav_path, spec_params)
 
     onsets     = onset_frames
     coords_new = coords
@@ -125,7 +162,7 @@ def main():
     # Now import CPJKU modules
     import torch
     from audio_conditioned_unet.network import ConditionalUNet
-    from audio_conditioned_unet.dataset import load_dataset, iterate_dataset, NonSequentialDatasetWrapper
+    from audio_conditioned_unet.dataset import load_dataset, iterate_dataset
     from audio_conditioned_unet.utils import load_game_config
 
     # Config: use their msmd.yaml but with real_perf=True (we have wav files, no MIDI synthesis)
@@ -215,10 +252,11 @@ def main():
     dataset = load_dataset(a.cpjku_data, config, n_frames=n_frames,
                            split_file=split_file, scale_factor=a.scale_factor)
 
-    wrapped = NonSequentialDatasetWrapper(dataset)
-
+    # Use ScoreAudioDataset directly — their eval_model.py does the same.
+    # NonSequentialDatasetWrapper.__getitem__ strips add_per_staff/interpol_c2o
+    # which calculate_batch_stats requires.
     print(f'Running eval (batch_size={a.batch_size}, seq_len={a.seq_len})...', flush=True)
-    stats = iterate_dataset(network, None, wrapped,
+    stats = iterate_dataset(network, None, dataset,
                             batch_size=a.batch_size, seq_len=a.seq_len,
                             device=str(device), train=False,
                             average_stats=False,
