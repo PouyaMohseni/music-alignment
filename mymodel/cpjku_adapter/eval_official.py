@@ -1,8 +1,11 @@
 """Run the official CPJKU CB_TA eval on our MSMD test split.
 
-Uses their exact network, their exact eval loop, their exact metric
-(% of onset frames within time threshold). Only difference: librosa
-spectrogram instead of madmom (madmom incompatible with Python ≥3.11).
+Uses their exact network and metric (% of onset frames within time threshold).
+Differences from their eval_model.py:
+  - librosa spectrogram instead of madmom (madmom incompatible with Python >=3.11)
+  - memory-efficient eval loop: score stored once as (1,1,1,H,W) and expanded
+    zero-copy per chunk — avoids OOM from ScoreAudioDataset.__getitem__ which
+    materialises (T, H, W) copies of the full score for every piece.
 
     python -m mymodel.cpjku_adapter.eval_official \
         --cpjku_root  third_party/cpjku_unet \
@@ -114,6 +117,113 @@ def _patched_load_piece(params):
     return i, score, piece_name, perf
 
 
+def _memory_efficient_eval(network, dataset, device, seq_len=128, threshold=0.5):
+    """Eval loop that avoids T×H×W score copies (OOM workaround for large strips).
+
+    ScoreAudioDataset.__getitem__ materialises (T, H, W) score arrays; for a
+    3-min piece with a 128×3000 strip this is ~5 GB per piece — instant OOM.
+    We access dataset.scores / dataset.performances directly and keep the score
+    as a single (1,1,1,H,W) tensor, expanded zero-copy with torch.expand().
+
+    Returns {'frame_differences': {'onset_diffs': [frame_diff, ...]}} which
+    matches the format produced by iterate_dataset with eval_only_onsets=True.
+    """
+    import torch
+    import numpy as np
+    from audio_conditioned_unet.utils import center_of_mass
+
+    network.eval()
+    onset_diffs = []
+
+    pad      = dataset.pad        # 40
+    n_frames = dataset.n_frames   # 40
+    n_pieces = len(dataset.scores)
+
+    for score_id in range(n_pieces):
+        score      = dataset.scores[score_id]        # (H, W) float32
+        piece_name = dataset.piece_names[score_id]
+        perfs      = dataset.performances[score_id]
+        perf       = perfs[list(perfs.keys())[0]]    # our single tempo key (1000)
+
+        spec             = perf['spec']              # (78, T_total)
+        onsets_set       = set(perf['onsets'].tolist())
+        interpol_fnc     = perf['interpol_fnc']
+        interpol_c2o     = perf['interpol_c2o']
+        staff_coords, add_per_staff = perf['add_per_staff']
+
+        T_total = spec.shape[-1]
+
+        # Single score tile — (1,1,1,H,W), expanded zero-copy per chunk
+        score_t = torch.from_numpy(
+            score[np.newaxis, np.newaxis, np.newaxis]
+        ).to(device)
+
+        hidden      = None
+        t           = pad
+        piece_diffs = 0
+
+        while t < T_total:
+            end          = min(t + seq_len, T_total)
+            frame_range  = list(range(t, end))
+            sl           = len(frame_range)
+
+            # perf: (sl, 1, 1, 78, n_frames)
+            clips = []
+            for i in frame_range:
+                clip = spec[:, max(0, i - n_frames + 1):i + 1]
+                if clip.shape[-1] < n_frames:
+                    clip = np.pad(clip, ((0, 0), (n_frames - clip.shape[-1], 0)))
+                clips.append(clip)
+            perf_t = torch.from_numpy(
+                np.array(clips)[:, np.newaxis, np.newaxis]   # (sl,1,1,78,n_frames)
+            ).to(device)
+
+            # score: (sl,1,1,H,W) — zero-copy broadcast
+            score_batch = score_t.expand(sl, -1, -1, -1, -1)
+
+            with torch.no_grad():
+                out    = network(score=score_batch, perf=perf_t, hidden=hidden)
+            pred   = out['segmentation']   # (sl, 1, H, W)
+            hidden = out.get('hidden')
+
+            for j, i in enumerate(frame_range):
+                frame_idx = i - pad   # frame index relative to audio start
+                if frame_idx not in onsets_set:
+                    continue
+
+                p        = pred[j, 0]                       # (H, W) on device
+                p_thresh = (p >= threshold).float()
+
+                if p_thresh.sum() == 0:
+                    com_pred = torch.zeros(2, device=device)
+                else:
+                    com_pred = center_of_mass(p_thresh)
+
+                com_np = com_pred.cpu().numpy()             # [y_pred, x_pred]
+
+                # GT position from interpol_fnc → [y_gt, x_gt, height]
+                gt_pos = np.asarray(interpol_fnc(frame_idx))
+                x_gt   = float(gt_pos[1])
+
+                # Unroll to global x (single staff: add_per_staff[0] == 0)
+                x_pred_g = float(com_np[1]) + float(add_per_staff[0])
+                x_gt_g   = x_gt             + float(add_per_staff[0])
+
+                frame_diff = abs(
+                    float(interpol_c2o(x_pred_g)) -
+                    float(interpol_c2o(x_gt_g))
+                )
+                onset_diffs.append(frame_diff)
+                piece_diffs += 1
+
+            t += sl
+
+        print(f'  [{score_id+1}/{n_pieces}] {piece_name}: {piece_diffs} onset frames evaluated',
+              flush=True)
+
+    return {'frame_differences': {'onset_diffs': onset_diffs}}
+
+
 def build_split_file(processed_root: str, cpjku_data: str, split: str):
     """Write a YAML split file listing the piece IDs for the given split."""
     import yaml
@@ -140,7 +250,8 @@ def main():
     p.add_argument('--model',       default='CB_TA',
                    choices=['CB_TA', 'CB_noTA', 'FB_TA', 'FB_noTA', 'NTC_TA', 'NTC_noTA'])
     p.add_argument('--split',       default='test')
-    p.add_argument('--batch_size',  type=int, default=4)
+    p.add_argument('--batch_size',  type=int, default=1,
+                   help='Unused (kept for CLI compatibility). Always 1 in memory-efficient loop.')
     p.add_argument('--seq_len',     type=int, default=128)
     p.add_argument('--scale_factor', type=int, default=1,
                    help='Score downscale factor. Use 1 for our strips (already small).')
@@ -159,13 +270,10 @@ def main():
     from mymodel.cpjku_adapter import madmom_compat
     madmom_compat.patch()
 
-    # Now import CPJKU modules
     import torch
     from audio_conditioned_unet.network import ConditionalUNet
-    from audio_conditioned_unet.dataset import load_dataset, iterate_dataset
-    from audio_conditioned_unet.utils import load_game_config
+    from audio_conditioned_unet.dataset import load_dataset
 
-    # Config: use their msmd.yaml but with real_perf=True (we have wav files, no MIDI synthesis)
     config = {
         'spectrogram_params': {
             'sample_rate': 22050,
@@ -175,12 +283,11 @@ def main():
         },
         'gt_width': 10,
         'real_perf': True,
-        'tempo_factors': [1000],   # dummy — not used with real_perf
-        'sf_path': '',             # not needed with real_perf
+        'tempo_factors': [1000],
+        'sf_path': '',
     }
 
-    # Their model checkpoint
-    param_path = cpjku_root / 'models' / a.model / 'best_model.pt'
+    param_path  = cpjku_root / 'models' / a.model / 'best_model.pt'
     config_path = cpjku_root / 'models' / a.model / 'net_config.json'
     if not param_path.exists():
         raise FileNotFoundError(f'Model not found: {param_path}')
@@ -195,90 +302,35 @@ def main():
     print(f'Loaded {a.model} ({sum(p.numel() for p in network.parameters()):,} params) on {device}',
           flush=True)
 
-    # Build split file
     split_file, available = build_split_file(a.processed, a.cpjku_data, a.split)
     if not available:
         raise RuntimeError('No converted pieces found. Run: python -m mymodel.cpjku_adapter.convert')
 
-    # Patch their load_performance to handle our wav naming convention:
-    # They expect: performance/<piece>_<tempo>.wav  but we have: performance/<piece>.wav
-    import audio_conditioned_unet.utils as _utils
-    _orig_load_perf = _utils.load_performance
-
-    def _patched_load_performance(path, piece, spec_params, coords, coord2onset,
-                                   sf_path, tempo_factor=1., real_perf=False, transpose=0):
-        import os
-        from scipy import interpolate
-        import copy
-        # Load pre-saved coords and onset frames from our NPZ
-        npz = __import__('numpy').load(os.path.join(path, 'score', piece + '.npz'), allow_pickle=True)
-        onset_frames = npz['onset_frames']          # (N,) int64
-        coords_orig  = npz['coords']                # (N, 2) float32
-
-        # Build spectrogram from our wav
-        wav_path = os.path.join(path, 'performance', piece + '.wav')
-        spec = _utils.wav_to_spec_otf(wav_path, spec_params)  # (n_bands, T+pad)
-
-        onsets     = onset_frames
-        coords_new = coords_orig
-        interpol_fnc = interpolate.interp1d(
-            onsets, coords_new.T, kind='previous', bounds_error=False,
-            fill_value=(coords_new[0, :], coords_new[-1, :]))
-
-        # coord2onset for interpol_c2o
-        unrolled_x = coords_new[:, 1]
-        interpol_c2o = interpolate.interp1d(
-            unrolled_x, onsets, kind='previous', bounds_error=False,
-            fill_value=(onsets[0], onsets[-1]))
-
-        staff_coords = [0]
-        add_per_staff = [0]
-
-        return spec, onsets, coords_new, interpol_fnc
-
-    _utils.load_performance = _patched_load_performance
-
-    # Patch load_piece with module-level function (must be picklable for pool.map)
+    # Patch load_piece with our module-level function (picklable for pool.map)
     import audio_conditioned_unet.dataset as _ds
     _ds.load_piece = _patched_load_piece
 
-    # Load dataset
     n_frames = network.perf_encoder.n_input_frames
     print(f'Loading dataset ({a.split}, scale_factor={a.scale_factor})...', flush=True)
-
-    # Patch config to use our tempo key
-    config['tempo_factors'] = [1000]
-
     dataset = load_dataset(a.cpjku_data, config, n_frames=n_frames,
                            split_file=split_file, scale_factor=a.scale_factor)
 
-    # Use ScoreAudioDataset directly — their eval_model.py does the same.
-    # NonSequentialDatasetWrapper.__getitem__ strips add_per_staff/interpol_c2o
-    # which calculate_batch_stats requires.
-    print(f'Running eval (batch_size={a.batch_size}, seq_len={a.seq_len})...', flush=True)
-    stats = iterate_dataset(network, None, dataset,
-                            batch_size=a.batch_size, seq_len=a.seq_len,
-                            device=str(device), train=False,
-                            average_stats=False,
-                            eval_center_of_mass=True,
-                            eval_only_onsets=True)
+    print(f'Running eval (seq_len={a.seq_len}, device={device})...', flush=True)
+    stats = _memory_efficient_eval(network, dataset, device=str(device), seq_len=a.seq_len)
 
-    # Print results matching their eval_model.py --eval_onsets output
-    frame_diffs = stats['frame_differences']
-    thresholds  = [0.05, 0.1, 0.5, 1.0, 5.0]
-    fps = config['spectrogram_params']['fps']
-
-    onset_diffs  = np.array(frame_diffs['onset_diffs']) / fps
+    import numpy as np
+    frame_diffs  = stats['frame_differences']
+    onset_diffs  = np.array(frame_diffs['onset_diffs']) / config['spectrogram_params']['fps']
     total_onsets = len(onset_diffs)
 
     print(f'\n=== CPJKU {a.model} on MSMD {a.split} ({len(available)} pieces) ===')
-    for th in thresholds:
+    for th in [0.05, 0.1, 0.5, 1.0, 5.0]:
         pct = 100 * np.sum(onset_diffs <= th) / total_onsets
         print(f'  <= {th}s: {pct:.1f}%')
-    print(f'  mean error: {onset_diffs.mean():.3f}s')
+    print(f'  mean error:   {onset_diffs.mean():.3f}s')
     print(f'  median error: {np.median(onset_diffs):.3f}s')
+    print(f'  total onsets: {total_onsets}')
 
 
 if __name__ == '__main__':
-    import numpy as np
     main()
