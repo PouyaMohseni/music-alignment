@@ -50,6 +50,49 @@ from mymodel.cpjku_adapter.eval_official import (
 )
 
 
+def _load_dataset_sequential(cpjku_data, config, n_frames, augment, scale_factor,
+                              split_file, ScoreAudioDataset):
+    """Sequential drop-in for load_dataset — bypasses Pool.map BLAS-fork deadlock on SLURM.
+
+    Their load_dataset calls multiprocessing.Pool(8).map; forked workers inherit
+    locked BLAS thread pools from the parent and deadlock indefinitely.  Loading
+    each piece in the main process avoids the fork entirely.
+    """
+    import glob, yaml
+    import tqdm as _tqdm
+
+    if split_file is not None:
+        with open(split_file, 'rb') as fp:
+            split = yaml.load(fp, Loader=yaml.FullLoader)
+        files = [os.path.join(cpjku_data, 'score', f'{f}.npz') for f in split['files']]
+    else:
+        files = glob.glob(os.path.join(cpjku_data, 'score', '*.npz'))
+
+    scores, piece_names, performances = {}, {}, {}
+
+    for i, score_path in enumerate(_tqdm.tqdm(files, desc='Loading')):
+        params = dict(
+            i=i,
+            piece_name=os.path.basename(score_path)[:-4],
+            path=cpjku_data,
+            sf_path=config.get('sf_path', ''),
+            scale_factor=scale_factor,
+            spectrogram_params=config['spectrogram_params'],
+            tempo_factors=config.get('tempo_factors', [1000]),
+            real_perf=config.get('real_perf', True),
+        )
+        try:
+            _, score, piece_name, perfs = _patched_load_piece(params)
+            scores[i] = score
+            piece_names[i] = piece_name
+            performances[i] = perfs
+        except Exception as e:
+            print(f'  FAIL {os.path.basename(score_path)}: {e}', flush=True)
+
+    return ScoreAudioDataset(scores, performances, piece_names, n_frames=n_frames,
+                             config=config, augment=augment, all_tempi=False)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Lazy strip dataset — memory-efficient drop-in for ScoreAudioDataset.
 # Subclass that overrides __getitem__ only; everything else (set_random_perfs,
@@ -235,7 +278,7 @@ def main():
     from torch.optim.lr_scheduler import ReduceLROnPlateau
     from audio_conditioned_unet.network import ConditionalUNet
     from audio_conditioned_unet.dataset import (
-        load_dataset, iterate_dataset, ScoreAudioDataset,
+        iterate_dataset, ScoreAudioDataset,
     )
     import audio_conditioned_unet.dataset as _ds
     from audio_conditioned_unet.dataset import MSMD_Y_OFFSET
@@ -293,15 +336,17 @@ def main():
 
     n_frames = network.perf_encoder.n_input_frames
 
-    # ── Load data (their load_dataset, our patched load_piece) ───────────────
+    # ── Load data sequentially (bypasses Pool.map BLAS-fork deadlock on SLURM) ──
     print('Loading train dataset...', flush=True)
-    train_dataset = load_dataset(args.cpjku_data, config, n_frames=n_frames,
-                                 augment=args.augment, scale_factor=args.scale_factor,
-                                 split_file=train_split)
+    train_dataset = _load_dataset_sequential(
+        args.cpjku_data, config, n_frames=n_frames, augment=args.augment,
+        scale_factor=args.scale_factor, split_file=train_split,
+        ScoreAudioDataset=ScoreAudioDataset)
     print('Loading val dataset...', flush=True)
-    val_dataset = load_dataset(args.cpjku_data, val_config, n_frames=n_frames,
-                               augment=False, scale_factor=args.scale_factor,
-                               split_file=val_split)
+    val_dataset = _load_dataset_sequential(
+        args.cpjku_data, val_config, n_frames=n_frames, augment=False,
+        scale_factor=args.scale_factor, split_file=val_split,
+        ScoreAudioDataset=ScoreAudioDataset)
 
     # ── Spectrogram normalisation from the training set (their exact code) ───
     specs = [train_dataset.performances[elem][1000]['spec'] for elem in train_dataset.performances]
