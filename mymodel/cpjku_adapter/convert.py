@@ -29,6 +29,17 @@ import numpy as np
 from PIL import Image
 
 
+def _count_midi_notes(midi_path: Path) -> int:
+    """Count note_on events with velocity > 0 in a MIDI file using mido."""
+    try:
+        import mido
+        mid = mido.MidiFile(str(midi_path))
+        return sum(1 for t in mid.tracks for m in t
+                   if m.type == 'note_on' and m.velocity > 0)
+    except Exception:
+        return -1
+
+
 def convert_piece(piece_dir: Path, out_score: Path, out_perf: Path, fps: int = 20):
     ann   = json.load(open(piece_dir / 'annotations.json'))
     notes = np.load(piece_dir / 'noteheads.npz')
@@ -53,9 +64,31 @@ def convert_piece(piece_dir: Path, out_score: Path, out_perf: Path, fps: int = 2
         np.full(N, H // 2,   dtype=np.float32),   # height: GT rect height
     ], axis=1)   # (N, 3)
 
+    # ── MIDI: symlink our score.midi as <pid>.mid ─────────────────────────────
+    # Their load_performance always loads the MIDI to extract onset times, even
+    # with real_perf=True.  They expect <pid>.mid (not .midi).
+    mid_src = piece_dir / 'score.midi'
+    mid_dst = out_perf / f'{pid}.mid'
+    if mid_src.exists() and not mid_dst.exists():
+        os.symlink(mid_src.resolve(), mid_dst)
+
     # ── coord2onset: note_idx → onset_frame at fps ───────────────────────────
+    # Their merge_onsets() indexes cur_onsets (MIDI note array) using coord2onset
+    # values.  If N_coords > N_midi the identity map overruns the MIDI array.
+    # Clip N to min(N_coords, N_midi) so the mapping is always in bounds.
     onset_frames = np.round(onset_sec * fps).astype(np.int64)  # (N,)
-    coords2onsets = {i: i for i in range(N)}                   # identity: each note → its own onset slot
+    n_midi = _count_midi_notes(mid_dst) if mid_dst.exists() else -1
+    if n_midi > 0 and N > n_midi:
+        N = n_midi
+        strip_x     = strip_x[:N]
+        onset_sec   = onset_sec[:N]
+        onset_frames = onset_frames[:N]
+        coords = np.stack([
+            np.full(N, H // 2,   dtype=np.float32),
+            strip_x,
+            np.full(N, H // 2,   dtype=np.float32),
+        ], axis=1)
+    coords2onsets = {i: i for i in range(N)}
     coord2onset = np.array([coords2onsets], dtype=object)
 
     npz_path = out_score / f'{pid}.npz'
@@ -70,14 +103,6 @@ def convert_piece(piece_dir: Path, out_score: Path, out_perf: Path, fps: int = 2
         wav_dst = out_perf / wav_name
         if wav_src.exists() and not wav_dst.exists():
             os.symlink(wav_src.resolve(), wav_dst)
-
-    # ── MIDI: symlink our score.midi as <pid>.mid ─────────────────────────────
-    # Their load_performance always loads the MIDI to extract onset times, even
-    # with real_perf=True.  They expect <pid>.mid (not .midi).
-    mid_src = piece_dir / 'score.midi'
-    mid_dst = out_perf / f'{pid}.mid'
-    if mid_src.exists() and not mid_dst.exists():
-        os.symlink(mid_src.resolve(), mid_dst)
 
     return N
 
