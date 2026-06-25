@@ -72,6 +72,14 @@ pip install torch --no-index
 echo "=== Installing remaining deps from CVMFS ==="
 pip install packaging tqdm PyYAML tensorboard soundfile --no-index
 
+echo "=== Installing cv2 stub (system OpenCV is Python 3.11-only, ABI-incompatible with 3.10) ==="
+# The cluster's opencv module provides cv2 compiled for Python 3.11 only.
+# We install a pure-Python stub that implements resize/cvtColor/constants via PIL.
+CPJKU_CV2_STUB=/lustre06/project/6002780/pmohseni/music-alignment/mymodel/cpjku_adapter/cv2_stub
+mkdir -p "${SITE}/cv2"
+cp "${CPJKU_CV2_STUB}/__init__.py" "${SITE}/cv2/__init__.py"
+echo "  wrote ${SITE}/cv2/__init__.py"
+
 echo "=== Making audio_conditioned_unet importable via .pth (avoids setup.py download) ==="
 # Their setup.py downloads MSMD dataset (~GB) on install; we bypass it entirely
 # by writing a .pth file into site-packages so Python finds the package directly.
