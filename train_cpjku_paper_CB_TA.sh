@@ -34,8 +34,9 @@ cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
-# FluidSynth shared library (installed via setup_cpjku_paper_login.sh)
+# FluidSynth: shared library + CLI binary (midi_to_spec_otf uses subprocess "fluidsynth -F ...")
 export LD_LIBRARY_PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/lib:${LD_LIBRARY_PATH:-}
+export PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/bin:${PATH}
 
 # Prevent BLAS-fork deadlock (Pool.map forks workers that inherit BLAS thread locks)
 export OMP_NUM_THREADS=1
@@ -50,9 +51,11 @@ mkdir -p "$OUT/runs" "$OUT/params"
 # (configs/, sound_fonts/) resolve exactly as intended
 cd "$REPO/audio_conditioned_unet"
 
+TRAIN_SPLIT=$REPO/data/msmd/msmd_train_complete.yaml
+
 echo "=== Train CB_TA (their exact setup) ==="
-echo "train:  ../data/msmd/msmd_train  (945 pieces)"
-echo "val:    ../data/msmd/msmd_valid  (28 pieces)"
+echo "train:  ../data/msmd/msmd_train  (168 pieces with all 7 tempi)"
+echo "val:    ../data/msmd/msmd_valid  (28 pieces, all complete)"
 echo "config: msmd_aug.yaml (tempo augmentation: 500/750/950/1000/1050/1250/1500)"
 echo "encoder: CBEncoder + LSTM + FiLM layers 2-8"
 echo ""
@@ -63,6 +66,7 @@ python train_model.py \
     --dump_root "$OUT/params" \
     --train_set ../data/msmd/msmd_train \
     --val_set   ../data/msmd/msmd_valid \
+    --split_file "$TRAIN_SPLIT" \
     --use_lstm \
     --augment \
     --config    configs/msmd_aug.yaml \

@@ -34,8 +34,9 @@ cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
-# FluidSynth shared library
+# FluidSynth: shared library + CLI binary (midi_to_spec_otf uses subprocess "fluidsynth -F ...")
 export LD_LIBRARY_PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/lib:${LD_LIBRARY_PATH:-}
+export PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/bin:${PATH}
 
 # Prevent BLAS-fork deadlock
 export OMP_NUM_THREADS=1
