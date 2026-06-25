@@ -28,8 +28,8 @@ nvidia-smi
 
 cd /project/def-ichiro/pmohseni/music-alignment
 
-git submodule update --init third_party/cpjku_unet
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+git submodule update --init third_party/cpjku_unet || true
+cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../.. || true
 
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate
