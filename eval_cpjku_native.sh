@@ -24,7 +24,7 @@ cd /project/def-ichiro/pmohseni/music-alignment
 mkdir -p results/cpjku_native
 
 module load gcc opencv python/3.10
-source .venv_cpjku310/bin/activate
+source /scratch/pmohseni/venv_cpjku310/bin/activate
 
 # Ensure submodule is on the right branch
 git submodule update --init third_party/cpjku_unet
