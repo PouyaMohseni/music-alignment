@@ -46,10 +46,15 @@ echo "=== Installing scipy 1.10.1 + Cython (madmom build deps) ==="
 # (scipy >= 1.11 requires numpy >= 1.23.5 which isn't available here)
 pip install "scipy==1.10.1" "Cython>=0.25"
 
-echo "=== Installing madmom (--no-build-isolation uses venv Cython) ==="
-# madmom 0.16.1 uses Cython extensions; pip's isolated build env won't have
-# Cython, so we disable isolation.
-pip install "madmom==0.16.1" --no-build-isolation
+echo "=== Installing madmom from local tarball (compute nodes have no internet) ==="
+# Tarball pre-downloaded to scratch on the login node.
+# --no-build-isolation: pip's isolated build env won't have Cython.
+MADMOM_TGZ=/scratch/pmohseni/pip_packages/madmom-0.16.1.tar.gz
+if [ ! -f "$MADMOM_TGZ" ]; then
+    echo "ERROR: $MADMOM_TGZ not found. Run on login node: curl -L -o $MADMOM_TGZ 'https://files.pythonhosted.org/packages/c7/a3/9f3de3e8068a3606331134d96b84c8db4f7624d6715be8ab3c1f56e6731d/madmom-0.16.1.tar.gz'"
+    exit 1
+fi
+pip install "$MADMOM_TGZ" --no-build-isolation
 
 echo "=== Patching madmom for Python 3.10 ==="
 # madmom 0.16.1 uses 'from collections import MutableSequence' which was
@@ -61,11 +66,11 @@ echo "  patched $PROCESSORS"
 echo "=== Installing soundfile (madmom audio I/O) ==="
 pip install soundfile
 
-echo "=== Installing PyTorch (CUDA 12.1 wheels) ==="
-pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+echo "=== Installing PyTorch from CVMFS (no internet needed on compute nodes) ==="
+pip install torch --no-index
 
-echo "=== Installing remaining deps ==="
-pip install tqdm PyYAML tensorboard
+echo "=== Installing remaining deps from CVMFS ==="
+pip install packaging tqdm PyYAML tensorboard soundfile --no-index
 
 echo "=== Making audio_conditioned_unet importable via .pth (avoids setup.py download) ==="
 # Their setup.py downloads MSMD dataset (~GB) on install; we bypass it entirely
