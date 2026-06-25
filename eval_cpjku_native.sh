@@ -26,6 +26,13 @@ mkdir -p results/cpjku_native
 module load gcc opencv python/3.10
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
+# Prevent BLAS-fork deadlock: their eval_model.py uses multiprocessing.Pool(8)
+# to load data; forked workers inherit locked BLAS thread pools and hang.
+# Setting threads=1 makes BLAS single-threaded → no pool → no deadlock.
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
 # Ensure submodule is on the right branch
 git submodule update --init third_party/cpjku_unet
 cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
