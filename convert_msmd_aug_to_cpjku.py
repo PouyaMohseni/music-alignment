@@ -13,7 +13,12 @@ Usage:
 
 The converter reads MuNG XML annotations (which record exact notehead pixel
 positions and note_event_idx per performance) to build the CPJKU-style NPZ
-files, then extracts per-page MIDIs from the full-piece performance MIDIs.
+files, then writes per-page MIDIs derived from the pre-computed _notes.npy
+feature files (which are the MSMD's authoritative note list).
+
+Key design: we use _notes.npy as the canonical note source so that
+note_event_idx values from the MuNG XML are guaranteed to be valid indices,
+avoiding the parser-count-mismatch that caused IndexError in merge_onsets.
 """
 
 import argparse
@@ -28,8 +33,7 @@ import numpy as np
 import yaml
 from PIL import Image
 
-# ── soundfont priority (determines which MIDI is used per tempo) ───────────────
-# Grand-piano covers 500,750,1000,1250,1500,1750,2000; others cover 900,950,1050,1100
+# ── soundfont priority (determines which _notes.npy is used per tempo) ────────
 SF_PRIORITY = [
     'grand-piano-YDP-20160804',
     'acoustic_piano_imis_1',
@@ -52,7 +56,6 @@ def parse_mung_page(xml_path: str, piece_name: str):
         w    = float(obj.findtext('Width', 1))
         h    = float(obj.findtext('Height', 1))
 
-        # Extract note_event_idx from any available performance key
         idx = None
         for item in obj.iter('DataItem'):
             key = item.get('key', '')
@@ -63,94 +66,69 @@ def parse_mung_page(xml_path: str, piece_name: str):
                 except (TypeError, ValueError):
                     continue
         if idx is None:
-            continue  # notehead not linked to any MIDI note
+            continue
 
         noteheads.append({'top': top, 'left': left, 'w': w, 'h': h, 'note_idx': idx})
 
-    # Sort by note index (temporal/reading order)
     noteheads.sort(key=lambda x: x['note_idx'])
     return noteheads
 
 
 def load_page_image_gray(png_path: str) -> np.ndarray:
-    """Load RGBA score page image → grayscale uint8 (same dtype as Zenodo NPZ)."""
+    """Load RGBA score page image → grayscale uint8."""
     img = Image.open(png_path).convert('RGBA')
     bg = Image.new('RGBA', img.size, (255, 255, 255, 255))
     bg.paste(img, mask=img.split()[3])
     return np.array(bg.convert('L'), dtype=np.uint8)
 
 
-def midi_to_note_list(midi_path: str):
-    """Return (notes, ticks_per_beat, tempo_msgs).
-    notes: list of (onset_ticks, offset_ticks, pitch, velocity) sorted by onset.
-    tempo_msgs: list of (abs_tick, tempo_us) for preserving original tempo.
+def find_best_notes_npy(perf_dir: str, piece_name: str, tempo: str):
+    """Return path to the .flac_notes.npy for this tempo, using SF priority."""
+    for sf in SF_PRIORITY:
+        perf_id = f'{piece_name}_tempo-{tempo}_{sf}'
+        feat_dir = os.path.join(perf_dir, perf_id, 'features')
+        notes_path = os.path.join(feat_dir, f'{perf_id}.flac_notes.npy')
+        if os.path.exists(notes_path):
+            return notes_path
+    return None
+
+
+def write_page_midi_from_notes(notes_rows, out_path: str, ticks_per_beat: int = 480):
+    """Write a page MIDI from rows of _notes.npy: [onset_sec, pitch, dur_sec, vel, ch].
+
+    Uses a fixed 120 BPM template so onset_sec maps unambiguously to ticks.
+    FluidSynth will synthesize audio with exactly these onset times in seconds.
     """
-    mid = mido.MidiFile(midi_path)
-    tpb = mid.ticks_per_beat
+    TEMPO_US = 500000  # 120 BPM = 500 000 μs/beat
 
-    all_msgs = []
-    tempo_msgs = []
-    for track in mid.tracks:
-        abs_tick = 0
-        for msg in track:
-            abs_tick += msg.time
-            if msg.type == 'set_tempo':
-                tempo_msgs.append((abs_tick, msg.tempo))
-            elif msg.type in ('note_on', 'note_off'):
-                all_msgs.append((abs_tick, msg.type, msg.note, msg.velocity))
+    def sec_to_ticks(s):
+        return max(0, int(round(s * ticks_per_beat * 1e6 / TEMPO_US)))
 
-    all_msgs.sort(key=lambda x: x[0])
-
-    open_notes = {}
-    notes = []
-    for abs_tick, msg_type, pitch, velocity in all_msgs:
-        if msg_type == 'note_on' and velocity > 0:
-            open_notes[pitch] = (abs_tick, velocity)
-        else:  # note_off or note_on vel=0
-            if pitch in open_notes:
-                onset, vel = open_notes.pop(pitch)
-                notes.append((onset, abs_tick, pitch, vel))
-
-    notes.sort(key=lambda x: x[0])
-    return notes, tpb, tempo_msgs
-
-
-def write_page_midi(notes_subset, start_tick, ticks_per_beat, tempo_msgs, out_path: str):
-    """Write a MIDI file containing only notes_subset, time-shifted to start at 0."""
     mid = mido.MidiFile(ticks_per_beat=ticks_per_beat)
     track = mido.MidiTrack()
     mid.tracks.append(track)
+    track.append(mido.MetaMessage('set_tempo', tempo=TEMPO_US, time=0))
 
-    # Preserve original tempo events (shifted)
-    for abs_tick, tempo in tempo_msgs:
-        shifted = max(0, abs_tick - start_tick)
-        track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=int(shifted)))
-
-    # Build sorted event list
     events = []
-    for onset, offset, pitch, velocity in notes_subset:
-        events.append((onset - start_tick, 'note_on',  pitch, velocity))
-        events.append((offset - start_tick, 'note_off', pitch, 0))
-    events.sort(key=lambda x: (x[0], 0 if x[1] == 'note_off' else 1))
+    for row in notes_rows:
+        onset_sec, pitch, dur_sec, vel = float(row[0]), int(row[1]), float(row[2]), int(row[3])
+        onset_t  = sec_to_ticks(onset_sec)
+        offset_t = sec_to_ticks(onset_sec + max(dur_sec, 0.05))  # min 50 ms
+        vel = max(1, min(127, vel))
+        events.append((onset_t,  'note_on',  pitch, vel))
+        events.append((offset_t, 'note_off', pitch, 0))
+
+    # note_on before note_off at the same tick to avoid zero-duration parse issues
+    events.sort(key=lambda x: (x[0], 0 if x[1] == 'note_on' else 1))
 
     prev = 0
     for abs_t, mtype, pitch, vel in events:
-        delta = int(abs_t) - prev
+        delta = abs_t - prev
         track.append(mido.Message(mtype, note=pitch, velocity=vel, time=max(0, delta)))
-        prev = int(abs_t)
+        prev = abs_t
 
     track.append(mido.MetaMessage('end_of_track', time=0))
     mid.save(out_path)
-
-
-def find_best_midi(perf_dir: str, piece_name: str, tempo: str) -> str | None:
-    """Return path to MIDI for given tempo using soundfont priority, or None."""
-    for sf in SF_PRIORITY:
-        perf_id = f'{piece_name}_tempo-{tempo}_{sf}'
-        midi_path = os.path.join(perf_dir, perf_id, f'{perf_id}.midi')
-        if os.path.exists(midi_path):
-            return midi_path
-    return None
 
 
 def convert_piece(args):
@@ -174,32 +152,34 @@ def convert_piece(args):
     if not page_files:
         return []
 
-    # Discover available tempos across all performance dirs
+    # Discover available tempos
     tempo_set = set()
     for d in os.listdir(perf_dir):
         if '_tempo-' in d:
-            tempo = d.split('_tempo-')[1].split('_')[0]
-            tempo_set.add(tempo)
+            tempo_set.add(d.split('_tempo-')[1].split('_')[0])
     if not tempo_set:
         return []
 
-    # Pre-load all piece MIDIs (one per tempo) to avoid re-loading per page
-    midi_cache = {}   # tempo -> (notes, tpb, tempo_msgs)
+    # Pre-load _notes.npy per tempo (authoritative MSMD note list)
+    notes_cache = {}  # tempo -> np.ndarray (N, 5)
     for tempo in tempo_set:
-        midi_path = find_best_midi(perf_dir, piece_name, tempo)
-        if midi_path:
+        npy_path = find_best_notes_npy(perf_dir, piece_name, tempo)
+        if npy_path:
             try:
-                midi_cache[tempo] = midi_to_note_list(midi_path)
+                notes_cache[tempo] = np.load(npy_path)
             except Exception:
                 pass
 
-    if not midi_cache:
+    if not notes_cache:
         return []
+
+    # Use first available tempo's note count as the authoritative N
+    ref_N = len(next(iter(notes_cache.values())))
 
     created = []
 
     for page_idx, png_path in enumerate(page_files):
-        page_num = os.path.splitext(os.path.basename(png_path))[0]  # "01", "02", ...
+        page_num = os.path.splitext(os.path.basename(png_path))[0]
         mung_path = os.path.join(mung_dir, f'{page_num}.xml')
         if not os.path.exists(mung_path):
             continue
@@ -208,30 +188,24 @@ def convert_piece(args):
         if not noteheads:
             continue
 
-        # Get note count from first MIDI to filter out-of-range note_event_idx values.
-        # MuNG annotations sometimes reference notes beyond the MIDI's actual length.
-        ref_notes, _, _ = next(iter(midi_cache.values()))
-        n_midi_notes = len(ref_notes)
-        noteheads = [nh for nh in noteheads if nh['note_idx'] < n_midi_notes]
+        # Filter noteheads whose note_event_idx is out of bounds for the MSMD note list
+        noteheads = [nh for nh in noteheads if nh['note_idx'] < ref_N]
         if not noteheads:
             continue
 
         # ── build NPZ ───────────────────────────────────────────────────────
         sheet = load_page_image_gray(png_path)
 
-        # coords: (N, 3) = [y_center, x_center, h/2]  (float32, like Zenodo)
         coords = np.array(
             [[nh['top'] + nh['h'] / 2, nh['left'] + nh['w'] / 2, nh['h'] / 2]
              for nh in noteheads],
             dtype=np.float32
         )
 
-        # Global note indices for this page
         global_indices = [nh['note_idx'] for nh in noteheads]
-        unique_global = sorted(set(global_indices))
-        g2l = {g: l for l, g in enumerate(unique_global)}  # global→page-local
+        unique_global  = sorted(set(global_indices))
+        g2l = {g: l for l, g in enumerate(unique_global)}
 
-        # coord2onset: {coord_idx: page_local_note_idx}  (stored as 1-elem object array)
         c2o = {i: g2l[nh['note_idx']] for i, nh in enumerate(noteheads)}
         coord2onset = np.empty(1, dtype=object)
         coord2onset[0] = c2o
@@ -239,17 +213,17 @@ def convert_piece(args):
         out_npz = os.path.join(out_score, f'{piece_name}_page_{page_idx}.npz')
         np.savez(out_npz, sheet=sheet, coords=coords, coord2onset=coord2onset)
 
-        # ── write per-tempo MIDIs ────────────────────────────────────────────
-        page_global_set = set(global_indices)
+        # ── write per-tempo MIDIs from _notes.npy rows ──────────────────────
+        page_global_set = set(unique_global)
 
-        for tempo, (all_notes, tpb, tempo_msgs) in midi_cache.items():
-            page_notes = [n for i, n in enumerate(all_notes) if i in page_global_set]
-            if not page_notes:
+        for tempo, notes_npy in notes_cache.items():
+            # Extract rows for this page in page-local order
+            page_rows = [notes_npy[g] for g in unique_global if g < len(notes_npy)]
+            if not page_rows:
                 continue
-            start_tick = page_notes[0][0]
             out_mid = os.path.join(out_perf, f'{piece_name}_page_{page_idx}_tempo_{tempo}.mid')
             try:
-                write_page_midi(page_notes, start_tick, tpb, tempo_msgs, out_mid)
+                write_page_midi_from_notes(page_rows, out_mid)
             except Exception:
                 pass
 
