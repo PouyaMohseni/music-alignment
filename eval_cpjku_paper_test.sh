@@ -45,8 +45,43 @@ export MKL_NUM_THREADS=1
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 
-# Default to their pretrained CB_TA; override with $1 to eval a custom model
+# Default to their pretrained CB_TA; override with $1 to eval a custom model.
+# Also accepts our v9/v11 checkpoint format (dict with 'state_dict' key) — it
+# extracts the bare state dict + net_config.json to a temp dir automatically.
 PARAM_PATH="${1:-$REPO/models/CB_TA/best_model.pt}"
+_TMPDIR=""
+
+if [ -n "${1:-}" ]; then
+    _TMPDIR=$(mktemp -d /scratch/pmohseni/eval_checkpoint_XXXXXX)
+    python3 - <<PYEOF
+import torch, json, os, sys, shutil
+src = "$1"
+dst_dir = "$_TMPDIR"
+sd = torch.load(src, map_location='cpu', weights_only=False)
+if isinstance(sd, dict) and 'state_dict' in sd:
+    torch.save(sd['state_dict'], os.path.join(dst_dir, 'best_model.pt'))
+    cfg = sd.get('net_config')
+    if cfg is None:
+        shutil.copy("$REPO/models/CB_TA/net_config.json", os.path.join(dst_dir, 'net_config.json'))
+    else:
+        with open(os.path.join(dst_dir, 'net_config.json'), 'w') as f:
+            json.dump(cfg, f)
+    print(f"Extracted state_dict from {src} -> {dst_dir}/best_model.pt")
+else:
+    # Bare state dict: copy as-is, find net_config.json from same dir
+    shutil.copy(src, os.path.join(dst_dir, 'best_model.pt'))
+    nc = os.path.join(os.path.dirname(src), 'net_config.json')
+    if os.path.exists(nc):
+        shutil.copy(nc, os.path.join(dst_dir, 'net_config.json'))
+    else:
+        shutil.copy("$REPO/models/CB_TA/net_config.json", os.path.join(dst_dir, 'net_config.json'))
+    print(f"Copied checkpoint {src} -> {dst_dir}/best_model.pt")
+PYEOF
+    PARAM_PATH="$_TMPDIR/best_model.pt"
+    echo "Model path for eval: $PARAM_PATH"
+fi
+
+trap '[ -n "$_TMPDIR" ] && rm -rf "$_TMPDIR"' EXIT
 
 OUT=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_paper
 mkdir -p "$OUT"
