@@ -1,0 +1,42 @@
+seed: 42
+
+# --- encoder settings (used only by precompute_aug.py) ---
+audio_model_id:  m-a-p/MERT-v1-95M
+image_model_id:  google/vit-base-patch16-224-in21k
+audio_sr:        24000
+pool_hz:         10
+tile_size:       224
+tile_stride:     56
+
+data:
+  # multi-tempo aug embeddings — splits.json lives here, not in processed_root
+  emb_root:        data/MSMD/embeddings_aug
+  processed_root:  data/MSMD/processed
+  num_workers:     2
+
+model:
+  d_audio:        768
+  d_image:        768
+  shared_dim:     256
+  n_heads:        4
+  n_cross_layers: 1
+  dropout:        0.1
+
+loss:
+  temperature:    0.07
+  power:          1.0
+  entropy_weight: 0.0
+
+optim:
+  lr:           3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 1000   # more data → longer warmup
+  grad_clip:    1.0
+
+train:
+  steps:            30000   # ~11x more data than v3_fullseq → scale steps
+  grad_accum_steps: 8
+  log_every:        50
+  eval_every:       2000
+  ckpt_every:       5000
+  out_dir:          results/v3_aug

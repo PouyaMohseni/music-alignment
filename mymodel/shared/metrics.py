@@ -81,7 +81,7 @@ def alignment_metrics(
     pred_strip_x_at_onset: np.ndarray,
     gt_strip_x: np.ndarray,
     pixels_per_sec: float,
-    thresholds_sec: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0),
+    thresholds_sec: tuple[float, ...] = (0.05, 0.1, 0.5, 1.0, 5.0),
     beat_times_sec: list[float] | None = None,
     bar_times_sec: list[float] | None = None,
     gt_onset_sec: np.ndarray | None = None,

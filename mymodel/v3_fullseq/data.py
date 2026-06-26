@@ -35,7 +35,11 @@ def _arrays_to_sample(pid, z):
 class FullSeqDataset(Dataset):
     def __init__(self, emb_root: str, processed_root: str, split: str):
         self.emb_root = Path(emb_root)
-        splits = json.load(open(Path(processed_root) / "splits.json"))
+        # aug embedding dirs carry their own splits.json; fall back to processed_root
+        splits_path = self.emb_root / "splits.json"
+        if not splits_path.exists():
+            splits_path = Path(processed_root) / "splits.json"
+        splits = json.load(open(splits_path))
         if split not in splits:
             raise ValueError(f"split must be one of {list(splits)}")
         # keep only pieces whose embedding file exists
@@ -63,7 +67,10 @@ class FullSeqTarDataset(Dataset):
     def __init__(self, tar_root: str, processed_root: str, split: str):
         self.tar_root = Path(tar_root)
         self.index = json.load(open(self.tar_root / "index.json"))   # piece_id -> shard
-        splits = json.load(open(Path(processed_root) / "splits.json"))
+        splits_path = self.tar_root / "splits.json"
+        if not splits_path.exists():
+            splits_path = Path(processed_root) / "splits.json"
+        splits = json.load(open(splits_path))
         if split not in splits:
             raise ValueError(f"split must be one of {list(splits)}")
         self.piece_ids = [p for p in splits[split] if p in self.index]
