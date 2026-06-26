@@ -86,40 +86,78 @@ def alignment_metrics(
     bar_times_sec: list[float] | None = None,
     gt_onset_sec: np.ndarray | None = None,
     thresholds_beats: tuple[float, ...] = (0.5, 1.0),
+    all_strip_x: np.ndarray | None = None,
+    all_onset_sec: np.ndarray | None = None,
 ) -> dict:
     """Per-notehead tracking metrics.
 
     Required:
         pred_strip_x_at_onset : (K,) predicted strip-x at each GT onset
         gt_strip_x            : (K,) ground-truth strip-x
-        pixels_per_sec        : strip width / audio duration
+        pixels_per_sec        : strip width / audio duration (used for px-level
+                                metrics only; time metrics use all_onset_sec lookup)
 
     Optional (enable beat/bar metrics):
         beat_times_sec  : list of beat boundary times in seconds
         bar_times_sec   : list of bar boundary times in seconds
-        gt_onset_sec    : (K,) GT onset times in seconds (needed for beat/bar metrics)
+        gt_onset_sec    : (K,) GT onset times in seconds
         thresholds_beats: thresholds for pct_within_X_beats
+
+    Optional (enable paper-exact onset-accuracy metric):
+        all_strip_x   : (M,) all notehead x-positions in the piece (sorted)
+        all_onset_sec : (M,) all notehead onset times in seconds (same order)
+        When provided, pct_within_Xs uses onset-lookup rather than global
+        px/sec conversion — matching the paper's eval_model.py --eval_onsets.
 
     Always returns:
         n, mean/median_abs_err_px, mean/median_abs_err_sec,
-        pct_within_{0.1,0.25,0.5,1.0}s
+        pct_within_{0.05,0.1,0.5,1.0,5.0}s
 
     Also returns when beat/bar arrays provided:
         mean/median_abs_err_beats, pct_within_{0.5,1.0}_beats,
         mean/median_abs_err_bars
     """
     err_px = np.abs(pred_strip_x_at_onset - gt_strip_x).astype(np.float64)
-    err_sec = err_px / float(pixels_per_sec)
+    err_sec_global = err_px / float(pixels_per_sec)
 
     out: dict = {
         "n": int(len(gt_strip_x)),
         "mean_abs_err_px":    float(err_px.mean())    if len(err_px) else float("nan"),
         "median_abs_err_px":  float(np.median(err_px)) if len(err_px) else float("nan"),
-        "mean_abs_err_sec":   float(err_sec.mean())   if len(err_sec) else float("nan"),
-        "median_abs_err_sec": float(np.median(err_sec)) if len(err_sec) else float("nan"),
     }
-    for thr in thresholds_sec:
-        out[f"pct_within_{thr}s"] = float((err_sec < thr).mean()) * 100.0 if len(err_sec) else float("nan")
+
+    # ---- onset-lookup time error (paper-exact) ----
+    # Map each predicted x-position to the nearest notehead's onset time,
+    # then compare to the GT onset time. This handles non-uniform note density,
+    # rests, and tempo changes correctly — matches eval_model.py --eval_onsets.
+    if all_strip_x is not None and all_onset_sec is not None and gt_onset_sec is not None:
+        sx = np.asarray(all_strip_x, dtype=np.float64)
+        so = np.asarray(all_onset_sec, dtype=np.float64)
+        sort_idx = np.argsort(sx)
+        sx_sorted = sx[sort_idx]
+        so_sorted = so[sort_idx]
+        # nearest notehead index for each predicted x
+        nn_idx = np.searchsorted(sx_sorted, pred_strip_x_at_onset.astype(np.float64))
+        nn_idx = np.clip(nn_idx, 0, len(sx_sorted) - 1)
+        # also check left neighbour and pick whichever is closer
+        nn_left = np.maximum(nn_idx - 1, 0)
+        pick_left = (np.abs(sx_sorted[nn_left] - pred_strip_x_at_onset) <
+                     np.abs(sx_sorted[nn_idx]  - pred_strip_x_at_onset))
+        nn_idx = np.where(pick_left, nn_left, nn_idx)
+        pred_onset_sec = so_sorted[nn_idx]
+        err_sec = np.abs(pred_onset_sec - gt_onset_sec.astype(np.float64))
+        out["mean_abs_err_sec"]   = float(err_sec.mean())
+        out["median_abs_err_sec"] = float(np.median(err_sec))
+        for thr in thresholds_sec:
+            out[f"pct_within_{thr}s"] = float((err_sec < thr).mean()) * 100.0 if len(err_sec) else float("nan")
+    else:
+        # Fallback: global px/sec conversion (approximate — use only when
+        # all_strip_x / all_onset_sec are unavailable)
+        err_sec = err_sec_global
+        out["mean_abs_err_sec"]   = float(err_sec.mean())   if len(err_sec) else float("nan")
+        out["median_abs_err_sec"] = float(np.median(err_sec)) if len(err_sec) else float("nan")
+        for thr in thresholds_sec:
+            out[f"pct_within_{thr}s"] = float((err_sec < thr).mean()) * 100.0 if len(err_sec) else float("nan")
 
     # ---- beat-level metrics (Henkel 2019) ----
     if beat_times_sec is not None and gt_onset_sec is not None and len(beat_times_sec) > 1:
@@ -134,10 +172,13 @@ def alignment_metrics(
             frac = np.where(seg_len > 0, (t_sec - seg_start) / seg_len, 0.0)
             return idx.astype(np.float64) + frac
 
-        # GT and predicted positions both converted to beat-time
-        gt_beat   = sec_to_beat(gt_onset_sec.astype(np.float64))
-        pred_sec  = pred_strip_x_at_onset.astype(np.float64) / float(pixels_per_sec)
-        pred_beat = sec_to_beat(pred_sec)
+        gt_beat = sec_to_beat(gt_onset_sec.astype(np.float64))
+        # Use onset-lookup predicted times when available, else global conversion
+        if all_strip_x is not None and all_onset_sec is not None:
+            pred_beat = sec_to_beat(pred_onset_sec)
+        else:
+            pred_sec_for_beat = pred_strip_x_at_onset.astype(np.float64) / float(pixels_per_sec)
+            pred_beat = sec_to_beat(pred_sec_for_beat)
         err_beats = np.abs(pred_beat - gt_beat)
 
         out["mean_abs_err_beats"]   = float(err_beats.mean())
@@ -157,9 +198,12 @@ def alignment_metrics(
             frac = np.where(seg_len > 0, (t_sec - seg_start) / seg_len, 0.0)
             return idx.astype(np.float64) + frac
 
-        gt_bar   = sec_to_bar(gt_onset_sec.astype(np.float64))
-        pred_sec = pred_strip_x_at_onset.astype(np.float64) / float(pixels_per_sec)
-        pred_bar = sec_to_bar(pred_sec)
+        gt_bar = sec_to_bar(gt_onset_sec.astype(np.float64))
+        if all_strip_x is not None and all_onset_sec is not None:
+            pred_bar = sec_to_bar(pred_onset_sec)
+        else:
+            pred_sec_for_bar = pred_strip_x_at_onset.astype(np.float64) / float(pixels_per_sec)
+            pred_bar = sec_to_bar(pred_sec_for_bar)
         err_bars = np.abs(pred_bar - gt_bar)
 
         out["mean_abs_err_bars"]   = float(err_bars.mean())
