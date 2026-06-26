@@ -208,6 +208,14 @@ def convert_piece(args):
         if not noteheads:
             continue
 
+        # Get note count from first MIDI to filter out-of-range note_event_idx values.
+        # MuNG annotations sometimes reference notes beyond the MIDI's actual length.
+        ref_notes, _, _ = next(iter(midi_cache.values()))
+        n_midi_notes = len(ref_notes)
+        noteheads = [nh for nh in noteheads if nh['note_idx'] < n_midi_notes]
+        if not noteheads:
+            continue
+
         # ── build NPZ ───────────────────────────────────────────────────────
         sheet = load_page_image_gray(png_path)
 
