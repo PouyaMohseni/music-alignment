@@ -9,9 +9,9 @@
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug_train-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug_train-%j.log
 
-# Train CB_TA on the full msmd_aug_v1-1_no-audio dataset (697 pieces, 7 tempos).
-# Uses 7 tempos with complete coverage across all pages:
-#   500 750 1000 1250 1500 1750 2000  (4 partial tempos 900/950/1050/1100 dropped)
+# Train CB_TA on the full msmd_aug_v1-1_no-audio dataset (697 pieces, 11 tempos).
+# All 11 tempos are present for all pages — fill_missing_tempo_midis.py was run
+# to generate the 662 previously-missing page MIDIs by scaling from tempo-1000.
 # Comparison against:
 #   - CPJKU pretrained model (their internal training data)
 #   - train_cpjku_paper_CB_TA.sh (Zenodo subset: 168 pieces, 7 tempos)
@@ -51,13 +51,9 @@ fi
 
 NPAGES=$(ls "$DATA/score/"*.npz 2>/dev/null | wc -l)
 echo "Training on $NPAGES score pages from msmd_aug_v1-1_no-audio"
-echo "Tempos: 500 750 1000 1250 1500 1750 2000 (7 variants with complete coverage)"
+echo "Tempos: 500 750 900 950 1000 1050 1100 1250 1500 1750 2000 (11 variants)"
 echo "Val:    Zenodo msmd_valid (28 pieces, tempo_1000 only)"
 echo ""
-
-# Copy our 7-tempo config into the submodule configs dir (survives git submodule reset)
-cp /project/def-ichiro/pmohseni/music-alignment/configs/msmd_aug_7tempo.yaml \
-   "$REPO/audio_conditioned_unet/configs/msmd_aug_7tempo.yaml"
 
 cd "$REPO/audio_conditioned_unet"
 
@@ -69,7 +65,7 @@ python train_model.py \
     --val_set   ../data/msmd/msmd_valid \
     --use_lstm \
     --augment \
-    --config    configs/msmd_aug_7tempo.yaml \
+    --config    configs/msmd_aug_full.yaml \
     --audio_encoder CBEncoder \
     --tag CB_TA_aug
 
