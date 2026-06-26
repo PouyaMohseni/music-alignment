@@ -36,9 +36,8 @@ export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
-# HuggingFace model cache (MERT + ViT weights, already downloaded)
-export TRANSFORMERS_CACHE=/scratch/pmohseni/hf_cache
-export HF_HOME=/scratch/pmohseni/hf_cache
+# HuggingFace model cache — use default ~/.cache/huggingface where MERT/ViT are cached
+export HF_HOME=${HF_HOME:-$HOME/.cache/huggingface}
 
 mkdir -p results data/MSMD/embeddings_aug
 
