@@ -122,7 +122,9 @@ def eval_split(checkpoint, cfg_path, processed_root, mert_emb_root, split,
                     pred_at_onset, gt_strip_x, px_per_sec,
                     beat_times_sec=ann.get('beat_times_sec') or None,
                     bar_times_sec=ann.get('bar_times_sec') or None,
-                    gt_onset_sec=gt_onset)
+                    gt_onset_sec=gt_onset,
+                    all_strip_x=gt_strip_x,
+                    all_onset_sec=gt_onset)
                 m.update(henkel_metrics(pred_at_onset, gt_strip_x))
                 m['piece_id'] = pid
             except Exception as e:

@@ -46,9 +46,19 @@ ck=$(latest v3_e2e_long); [ -z "$ck" ] && ck=$(latest v3_e2e)
 [ -n "$ck" ] && \
   run python -m mymodel.v3_e2e.eval --checkpoint "$ck" --config configs/v3_e2e.yaml --split test
 
+# --- v10 (CPJKU UNet + MERT audio encoder) ---
+ck=$(latest v10_mert_unet); [ -n "$ck" ] && \
+  run python -m mymodel.v10_mert_unet.eval \
+    --checkpoint "$ck" \
+    --config configs/v10_mert_unet.yaml \
+    --split test \
+    --processed data/MSMD/processed \
+    --mert_emb  data/MSMD/mert_emb \
+    --out_dir   results/v10_mert_unet/eval
+
 # --- comparison table ---
 echo; echo "===================== SUMMARY ====================="
-for m in v1_baseline v1_dtw v1_lora v1_nce v1_nce2 v2_nce v3_fullseq v3_all v3_e2e_long v3_e2e; do
+for m in v10_mert_unet v3_all v3_fullseq v1_nce v1_baseline v1_dtw v1_nce2 v2_nce v3_e2e_long v3_e2e; do
   f="results/$m/eval/test/summary.json"
   [ -f "$f" ] && python -c "
 import json; d=json.load(open('$f'))
