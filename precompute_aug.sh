@@ -44,7 +44,7 @@ mkdir -p results data/MSMD/embeddings_aug
 
 python -m mymodel.v3_fullseq.precompute_aug \
     --processed  data/MSMD/processed \
-    --emb_cache  data/MSMD/embeddings \
+    --emb_cache  /lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora \
     --out        data/MSMD/embeddings_aug \
     --sf         third_party/cpjku_unet/audio_conditioned_unet/sound_fonts/grand-piano-YDP-20160804.sf2 \
     --config     configs/v3_aug.yaml \
