@@ -118,8 +118,9 @@ def write_page_midi_from_notes(notes_rows, out_path: str, ticks_per_beat: int = 
         events.append((onset_t,  'note_on',  pitch, vel))
         events.append((offset_t, 'note_off', pitch, 0))
 
-    # note_on before note_off at the same tick to avoid zero-duration parse issues
-    events.sort(key=lambda x: (x[0], 0 if x[1] == 'note_on' else 1))
+    # note_off before note_on at the same tick (standard MIDI convention):
+    # ensures adjacent same-pitch notes don't get zero duration and dropped by madmom
+    events.sort(key=lambda x: (x[0], 0 if x[1] == 'note_off' else 1))
 
     prev = 0
     for abs_t, mtype, pitch, vel in events:
