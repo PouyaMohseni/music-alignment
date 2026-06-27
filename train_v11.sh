@@ -28,8 +28,8 @@ if ls results/v11_cpjku_fullstrip/checkpoint_epoch*.pt 1>/dev/null 2>&1; then
 fi
 python -m mymodel.v11_cpjku_fullstrip.train \
     --config configs/v11_cpjku_fullstrip.yaml \
-    $RESUME_FLAG \
-    data.processed_root=$PROC
+    data.processed_root=$PROC \
+    $RESUME_FLAG
 
 echo "Training finished at $(date). Running eval..."
 
