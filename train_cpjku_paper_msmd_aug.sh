@@ -69,6 +69,7 @@ python train_model.py \
     --val_set   ../data/msmd/msmd_valid \
     --use_lstm \
     --augment \
+    --batch_size 1 \
     --config    configs/msmd_aug_7tempo.yaml \
     --audio_encoder CBEncoder \
     --tag CB_TA_aug
