@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug_train-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug_train-%j.log
@@ -51,7 +51,7 @@ fi
 
 NPAGES=$(ls "$DATA/score/"*.npz 2>/dev/null | wc -l)
 echo "Training on $NPAGES score pages from msmd_aug_v1-1_no-audio"
-echo "Tempos: 500 750 1000 1250 1500 1750 2000 (7 variants, fits in 64GB)"
+echo "Tempos: 500 750 1000 1250 1500 1750 2000 (7 variants, 128GB)"
 echo "Val:    Zenodo msmd_valid (28 pieces, tempo_1000 only)"
 echo ""
 
