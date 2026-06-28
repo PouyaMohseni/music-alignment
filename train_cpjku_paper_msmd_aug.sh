@@ -40,7 +40,7 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
-DATA=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/msmd_aug_cpjku_pages
+DATA=/scratch/pmohseni/music-alignment/msmd_aug_cpjku_pages
 OUT=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug/CB_TA
 
 mkdir -p "$OUT/runs" "$OUT/params"
