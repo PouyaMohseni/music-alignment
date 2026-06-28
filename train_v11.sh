@@ -3,6 +3,7 @@
 #SBATCH --account=def-ichiro
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
+#SBATCH --exclude=ng[11105-11106,31001]
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
