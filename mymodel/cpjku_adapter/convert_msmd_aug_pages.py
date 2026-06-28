@@ -134,6 +134,10 @@ def convert_piece(piece_id, output_root,
 
         # --- load page image (greyscale, uint8) ---
         sheet = np.array(Image.open(img_path).convert("L"), dtype=np.uint8)
+        # Pad to standard height (1181) so all pages are uniform — allows batch_size>1.
+        if sheet.shape[0] < 1181:
+            pad = np.full((1181 - sheet.shape[0], sheet.shape[1]), 255, dtype=np.uint8)
+            sheet = np.vstack([sheet, pad])
 
         # --- notes on this page ---
         mask = page_idx_all == page_n
