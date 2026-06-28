@@ -19,7 +19,7 @@
 #
 # Prerequisites:
 #   1. run setup_cpjku_paper_login.sh (FluidSynth)
-#   2. run sbatch convert_msmd_aug.sh  (produces data/MSMD/msmd_aug_cpjku/)
+#   2. run sbatch convert_msmd_aug_pages.sh  (produces data/MSMD/msmd_aug_cpjku_pages/)
 
 set -euo pipefail
 echo "Job started on $(hostname) at $(date)"
@@ -40,13 +40,13 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
-DATA=/scratch/pmohseni/music-alignment/msmd_aug_cpjku
+DATA=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/msmd_aug_cpjku_pages
 OUT=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug/CB_TA
 
 mkdir -p "$OUT/runs" "$OUT/params"
 
 if [ ! -d "$DATA/score" ]; then
-    echo "ERROR: $DATA/score not found. Run sbatch convert_msmd_aug.sh first." >&2
+    echo "ERROR: $DATA/score not found. Run sbatch convert_msmd_aug_pages.sh first." >&2
     exit 1
 fi
 
@@ -70,7 +70,6 @@ python train_model.py \
     --val_set   ../data/msmd/msmd_valid \
     --use_lstm \
     --augment \
-    --batch_size 1 \
     --config    configs/msmd_aug_7tempo.yaml \
     --audio_encoder CBEncoder \
     --tag CB_TA_aug
