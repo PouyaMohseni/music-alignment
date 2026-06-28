@@ -211,6 +211,10 @@ def main():
     parser.add_argument("--aug_root", default=AUG_ROOT)
     parser.add_argument("--output_root", default=OUTPUT_ROOT)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--split_file", default=None,
+                        help="Path to splits.json; if set, only convert pieces in --split_key")
+    parser.add_argument("--split_key", default="train",
+                        help="Which split to use: train, val, or test")
     args = parser.parse_args()
 
     out_root = args.output_root
@@ -224,8 +228,16 @@ def main():
     processed_pieces = set(os.listdir(proc_root))
     aug_pieces = set(os.listdir(a_root))
     pieces = sorted(processed_pieces & aug_pieces)
-    # exclude non-directories (e.g. splits.json)
     pieces = [p for p in pieces if os.path.isdir(os.path.join(proc_root, p))]
+
+    # optionally restrict to a specific split
+    if args.split_file is not None:
+        import json
+        with open(args.split_file) as f:
+            splits = json.load(f)
+        keep = set(splits[args.split_key])
+        pieces = [p for p in pieces if p in keep]
+        print(f"Restricting to split '{args.split_key}': {len(pieces)} pieces")
 
     print(f"Converting {len(pieces)} pieces to page format...")
     total_pages = 0

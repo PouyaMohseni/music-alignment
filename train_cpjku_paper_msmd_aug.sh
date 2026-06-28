@@ -67,7 +67,7 @@ python train_model.py \
     --log_root  "$OUT/runs" \
     --dump_root "$OUT/params" \
     --train_set "$DATA" \
-    --val_set   ../data/msmd/msmd_valid \
+    --val_set   /scratch/pmohseni/music-alignment/msmd_val_cpjku_pages \
     --use_lstm \
     --augment \
     --config    configs/msmd_aug_7tempo.yaml \
