@@ -180,10 +180,14 @@ def convert_piece(piece_id, output_root,
         # --- save NPZ ---
         npz_name = f"{piece_id}_page_{page_n}.npz"
         npz_path = os.path.join(output_root, "score", npz_name)
+        # Save coord2onset as (N,2) int32 pairs [coord_idx, onset_idx] to avoid
+        # numpy pickle version incompatibility (numpy 2.x vs 1.x).
+        c2o_pairs = np.array([[k, v] for k, v in sorted(coord2onset.items())],
+                             dtype=np.int32)
         np.savez(npz_path,
                  sheet=sheet,
                  coords=coords,
-                 coord2onset=np.array([coord2onset]))
+                 coord2onset_pairs=c2o_pairs)
 
         # --- save tempo-scaled MIDIs ---
         for tempo in TEMPO_FACTORS:
