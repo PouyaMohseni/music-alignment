@@ -27,8 +27,9 @@ nvidia-smi
 
 cd /project/def-ichiro/pmohseni/music-alignment
 
-# Ensure submodule is on right branch
-git submodule update --init third_party/cpjku_unet
+# Ensure submodule is on right branch (|| true: submodule already init'd; git lock
+# fails when /project is at file-count quota, but checkout still works fine)
+git submodule update --init third_party/cpjku_unet || true
 cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
 
 module load gcc opencv
