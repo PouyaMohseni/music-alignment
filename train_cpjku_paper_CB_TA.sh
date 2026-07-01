@@ -51,8 +51,19 @@ mkdir -p "$OUT/runs" "$OUT/params"
 # (configs/, sound_fonts/) resolve exactly as intended
 cd "$REPO/audio_conditioned_unet"
 
+# Performance MIDIs generated to scratch (avoids /project file-count quota).
+# Score NPZs stay on project; scratch dir has a symlink to them.
+SCRATCH_TRAIN=/scratch/pmohseni/msmd_train_full
+
+if [ ! -d "$SCRATCH_TRAIN/performance" ]; then
+    echo "ERROR: $SCRATCH_TRAIN/performance not found. Run gen_perf_midis.sh first." >&2
+    exit 1
+fi
+NPERF=$(ls "$SCRATCH_TRAIN/performance/"*.mid 2>/dev/null | wc -l)
+echo "Performance MIDIs on scratch: $NPERF / 6615"
+
 echo "=== Train CB_TA (paper-faithful: no split_file, all 945 pages) ==="
-echo "train:  ../data/msmd/msmd_train  (945 pages x 7 tempi = 6615 pairs)"
+echo "train:  $SCRATCH_TRAIN  (945 pages x 7 tempi = 6615 pairs)"
 echo "val:    ../data/msmd/msmd_valid  (28 pieces, all complete)"
 echo "config: msmd_aug.yaml (tempo augmentation: 500/750/950/1000/1050/1250/1500)"
 echo "encoder: CBEncoder + LSTM + FiLM layers 2-8"
@@ -62,7 +73,7 @@ python train_model.py \
     --film_layers 2 3 4 5 6 7 8 \
     --log_root  "$OUT/runs" \
     --dump_root "$OUT/params" \
-    --train_set ../data/msmd/msmd_train \
+    --train_set "$SCRATCH_TRAIN" \
     --val_set   ../data/msmd/msmd_valid \
     --use_lstm \
     --augment \

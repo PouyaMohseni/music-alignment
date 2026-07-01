@@ -42,10 +42,13 @@ def main():
     parser.add_argument('--data_dir', default=
         '/project/def-ichiro/pmohseni/music-alignment/'
         'third_party/cpjku_unet/data/msmd/msmd_train')
+    parser.add_argument('--out_perf_dir', default=None,
+        help='Write performance MIDIs here instead of data_dir/performance/. '
+             'Use to avoid file-count quota on /project (write to /scratch instead).')
     args = parser.parse_args()
 
     score_dir = os.path.join(args.data_dir, 'score')
-    perf_dir  = os.path.join(args.data_dir, 'performance')
+    perf_dir  = args.out_perf_dir if args.out_perf_dir else os.path.join(args.data_dir, 'performance')
     os.makedirs(perf_dir, exist_ok=True)
 
     score_mids = sorted(glob.glob(os.path.join(score_dir, '*.mid')))
