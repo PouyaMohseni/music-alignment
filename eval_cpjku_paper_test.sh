@@ -44,12 +44,25 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
+PARAMS_ROOT=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_paper/CB_TA/params
 
-# Default to their pretrained CB_TA; override with $1 to eval a custom model.
-# Also accepts our v9/v11 checkpoint format (dict with 'state_dict' key) — it
-# extracts the bare state dict + net_config.json to a temp dir automatically.
-PARAM_PATH="${1:-$REPO/models/CB_TA/best_model.pt}"
+# Priority:
+#   1. Explicit path passed as $1
+#   2. Latest best_model.pt under results/cpjku_paper/CB_TA/params/ (auto-discover)
+#   3. Pretrained CB_TA weights from submodule
 _TMPDIR=""
+if [ -n "${1:-}" ]; then
+    PARAM_PATH="$1"
+else
+    LATEST_DIR=$(ls -dt "$PARAMS_ROOT"/*/  2>/dev/null | head -1)
+    if [ -n "$LATEST_DIR" ] && [ -f "${LATEST_DIR}best_model.pt" ]; then
+        PARAM_PATH="${LATEST_DIR}best_model.pt"
+        echo "Auto-discovered model: $PARAM_PATH"
+    else
+        PARAM_PATH="$REPO/models/CB_TA/best_model.pt"
+        echo "No trained model found — using pretrained CB_TA: $PARAM_PATH"
+    fi
+fi
 
 if [ -n "${1:-}" ]; then
     _TMPDIR=$(mktemp -d /scratch/pmohseni/eval_checkpoint_XXXXXX)
