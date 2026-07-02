@@ -29,11 +29,11 @@ export TRANSFORMERS_OFFLINE=1   # DINOv2 + MERT are fully cached; no internet on
 OUT=/scratch/pmohseni/results/cadp_m01
 mkdir -p $OUT
 
-D2_DIR=data/MSMD/dinov2_emb
+D2_DIR=/scratch/pmohseni/dinov2_emb
 mkdir -p $D2_DIR
 N_DONE=$(find $D2_DIR -name "*.npy" -type f 2>/dev/null | wc -l)
 echo "DINOv2 features already computed: $N_DONE"
-if [ "$N_DONE" -lt 400 ]; then
+if [ "$N_DONE" -lt 467 ]; then
     echo "Precomputing DINOv2 features..."
     python scripts/precompute_dinov2.py \
         --processed data/MSMD/processed \
@@ -46,7 +46,8 @@ echo ""
 echo "Training CADP M01..."
 python -m mymodel.cadp.m01_train \
     --config configs/cadp_m01.yaml \
-    train.out_dir=$OUT
+    train.out_dir=$OUT \
+    data.dinov2_root=$D2_DIR
 
 echo ""
 echo "Running eval on test split..."
@@ -54,6 +55,7 @@ python -m mymodel.cadp.m01_eval \
     --checkpoint $OUT/best_model.pt \
     --config     configs/cadp_m01.yaml \
     --split      test \
-    --out_dir    $OUT/eval
+    --out_dir    $OUT/eval \
+    data.dinov2_root=$D2_DIR
 
 echo "Job finished at $(date)"

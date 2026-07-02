@@ -97,7 +97,7 @@ def train(cfg):
     opt = optim.AdamW(model.parameters(), lr=cfg.optim.lr,
                       weight_decay=cfg.optim.weight_decay)
     sched = optim.lr_scheduler.ReduceLROnPlateau(
-        opt, patience=cfg.optim.patience, factor=0.5, verbose=True)
+        opt, patience=cfg.optim.patience, factor=0.5)
 
     best_val = float('inf')
     wait = 0
