@@ -24,7 +24,7 @@ module load gcc opencv
 source .venv/bin/activate
 
 export OMP_NUM_THREADS=4
-# DO NOT set TRANSFORMERS_OFFLINE=1 here — DINOv2 must be loadable from cache
+export TRANSFORMERS_OFFLINE=1   # DINOv2 + MERT are fully cached; no internet on compute nodes
 
 OUT=/scratch/pmohseni/results/cadp_m01
 mkdir -p $OUT
