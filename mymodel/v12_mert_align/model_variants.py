@@ -45,11 +45,14 @@ class MERTEncoderLoRA(nn.Module):
             bias='none',
         )
         self.mert = get_peft_model(base, cfg)
+        # gradient checkpointing trades compute for memory; essential with LoRA on 40GB GPU
+        self.mert.gradient_checkpointing_enable()
 
     def forward(self, wav):
-        out = self.mert(wav.unsqueeze(0), output_hidden_states=True)
-        hidden = torch.stack(out.hidden_states, dim=0)
-        return hidden.mean(0).squeeze(0)                 # (T, 768)
+        # output_hidden_states=True stacks 13×(1,T,768) activations with grad — OOM.
+        # last_hidden_state alone is sufficient; LoRA adapts it end-to-end.
+        out = self.mert(wav.unsqueeze(0), output_hidden_states=False)
+        return out.last_hidden_state.squeeze(0)          # (T, 768)
 
 
 class ResNetScoreEncoder(nn.Module):

@@ -24,7 +24,7 @@ source .venv/bin/activate
 export OMP_NUM_THREADS=4
 export TRANSFORMERS_OFFLINE=1
 
-OUT=results/v12d
+OUT=/scratch/pmohseni/results/v12d
 mkdir -p $OUT
 
 RESUME_FLAG=""
