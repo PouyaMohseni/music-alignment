@@ -53,6 +53,69 @@ class FBEncoder(nn.Module):
         return x.view(seq_len * bs, -1)
 
 
+class MERTProjector(nn.Module):
+    """v13: pre-computed MERT (768-dim, 20fps) → spec_enc dim.
+    Input: (sl, bs, 1, 768, 1). Output: (sl*bs, spec_enc).
+    """
+    def __init__(self, spec_enc, mert_dim=768):
+        super().__init__()
+        self.n_input_frames = 1
+        self.proj = nn.Linear(mert_dim, spec_enc)
+        self.norm = nn.LayerNorm(spec_enc)
+
+    def set_stats(self, means, stds): pass
+
+    def forward(self, x):
+        sl, bs = x.shape[0], x.shape[1]
+        x = x.reshape(sl * bs, -1)
+        return F.elu(self.norm(self.proj(x)))
+
+
+class MERTBiLSTM(nn.Module):
+    """v14: 8-frame MERT window → BiLSTM → spec_enc dim.
+    Input: (sl, bs, 1, 768, 8). Output: (sl*bs, spec_enc).
+    """
+    def __init__(self, spec_enc, mert_dim=768, lstm_hidden=256):
+        super().__init__()
+        self.n_input_frames = 8
+        self.lstm = nn.LSTM(mert_dim, lstm_hidden, batch_first=True, bidirectional=True)
+        self.proj = nn.Linear(lstm_hidden * 2, spec_enc)
+        self.norm = nn.LayerNorm(spec_enc)
+
+    def set_stats(self, means, stds): pass
+
+    def forward(self, x):
+        sl, bs = x.shape[0], x.shape[1]
+        n_frames = x.shape[-1]
+        x = x.reshape(sl * bs, -1, n_frames).permute(0, 2, 1)  # (sl*bs, n_frames, 768)
+        _, (h, _) = self.lstm(x)
+        h = torch.cat([h[0], h[1]], dim=-1)   # (sl*bs, lstm_hidden*2)
+        return F.elu(self.norm(self.proj(h)))
+
+
+class MERTMlpProjector(nn.Module):
+    """v15: pre-computed MERT → 2-layer MLP → spec_enc dim.
+    Input: (sl, bs, 1, 768, 1). Output: (sl*bs, spec_enc).
+    """
+    def __init__(self, spec_enc, mert_dim=768, hidden=256):
+        super().__init__()
+        self.n_input_frames = 1
+        self.mlp = nn.Sequential(
+            nn.Linear(mert_dim, hidden),
+            nn.ELU(),
+            nn.LayerNorm(hidden),
+            nn.Linear(hidden, spec_enc),
+        )
+        self.norm = nn.LayerNorm(spec_enc)
+
+    def set_stats(self, means, stds): pass
+
+    def forward(self, x):
+        sl, bs = x.shape[0], x.shape[1]
+        x = x.reshape(sl * bs, -1)
+        return F.elu(self.norm(self.mlp(x)))
+
+
 class CBEncoder(FBEncoder):
     """Context-based encoder: 40-frame window of 78-bin spectrogram → spec_enc dim.
 

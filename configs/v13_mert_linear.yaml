@@ -1,0 +1,35 @@
+seed: 42
+
+# v13: CPJKU ConditionalUNet + Dice + full-strip BPTT
+#      Audio: pre-computed MERT features → Linear(768→32)
+#      Hypothesis: foundation-model features > hand-crafted mel, same architecture
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    MERTProjector
+  spec_enc:         32
+
+data:
+  processed_root: data/MSMD/processed
+  mert_emb_root:  data/MSMD/mert_emb
+  h_strip:        128
+  w_scale:        4
+  fps:            20
+  n_mels:         768
+  n_frames:       1
+  gt_width:       10
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 1.0e-5
+  patience:     5
+
+train:
+  max_epochs: 100
+  seq_len:    16
+  out_dir:    results/v13_mert_linear
