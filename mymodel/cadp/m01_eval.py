@@ -20,8 +20,11 @@ from mymodel.shared.metrics import alignment_metrics, henkel_metrics, dtw_backtr
 
 @torch.no_grad()
 def eval_split(checkpoint: str, cfg_path: str, split: str,
-               out_dir: str = None, device: str = None) -> dict | None:
-    cfg    = OmegaConf.load(cfg_path)
+               out_dir: str = None, device: str = None,
+               overrides: list[str] | None = None) -> dict | None:
+    cfg = OmegaConf.load(cfg_path)
+    if overrides:
+        cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(overrides))
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
     model = M01FrozenBaseline(
@@ -143,8 +146,9 @@ def main():
     p.add_argument('--split',      default='test', choices=['train', 'val', 'test'])
     p.add_argument('--out_dir',    default=None)
     p.add_argument('--device',     default=None)
+    p.add_argument('overrides', nargs='*')
     a = p.parse_args()
-    eval_split(a.checkpoint, a.config, a.split, a.out_dir, a.device)
+    eval_split(a.checkpoint, a.config, a.split, a.out_dir, a.device, a.overrides)
 
 
 if __name__ == '__main__':
