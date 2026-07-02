@@ -30,7 +30,8 @@ OUT=/scratch/pmohseni/results/cadp_m01
 mkdir -p $OUT
 
 D2_DIR=data/MSMD/dinov2_emb
-N_DONE=$(ls $D2_DIR/*.npy 2>/dev/null | wc -l)
+mkdir -p $D2_DIR
+N_DONE=$(find $D2_DIR -name "*.npy" -type f 2>/dev/null | wc -l)
 echo "DINOv2 features already computed: $N_DONE"
 if [ "$N_DONE" -lt 400 ]; then
     echo "Precomputing DINOv2 features..."
