@@ -23,6 +23,7 @@ source .venv/bin/activate
 
 export OMP_NUM_THREADS=4
 export TRANSFORMERS_OFFLINE=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 OUT=/scratch/pmohseni/results/v12d
 mkdir -p $OUT

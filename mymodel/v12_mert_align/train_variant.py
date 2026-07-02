@@ -54,7 +54,7 @@ def trainable_params(model, variant):
             {'params': head_params, 'lr': 3e-4}]
 
 
-def train_epoch(model, dataset, optimizer, device, args):
+def train_epoch(model, dataset, optimizer, device, args, scaler=None):
     model.train()
     model.score_enc.eval()                       # ResNet always frozen
     if args.variant == 'v12b':
@@ -74,15 +74,24 @@ def train_epoch(model, dataset, optimizer, device, args):
         oc   = torch.from_numpy(p.onset_cols).long().to(device)
 
         optimizer.zero_grad()
-        sim = model(wav, cols)
-        loss, bd = alignment_loss(sim, of, oc,
-                                  w_infonce=args.w_infonce,
-                                  w_expected=args.w_expected,
-                                  tau=args.tau)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            [p for p in model.parameters() if p.requires_grad], 1.0)
-        optimizer.step()
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            sim = model(wav, cols)
+            loss, bd = alignment_loss(sim, of, oc,
+                                      w_infonce=args.w_infonce,
+                                      w_expected=args.w_expected,
+                                      tau=args.tau)
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                [p for p in model.parameters() if p.requires_grad], 1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                [p for p in model.parameters() if p.requires_grad], 1.0)
+            optimizer.step()
 
         total += loss.item(); n += 1
         for k in bd: bd_sum[k] += bd[k]
@@ -137,6 +146,9 @@ def main():
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
 
     start_ep, best_val, wait = 0, 0.0, 0
+    # BF16 AMP: halves activation memory on A100; essential for LoRA variants
+    use_amp = (device.type == 'cuda') and (args.variant in ('v12c', 'v12d'))
+    scaler  = torch.amp.GradScaler('cuda') if use_amp else None
 
     if args.resume and os.path.exists(args.resume):
         ckpt = torch.load(args.resume, map_location=device, weights_only=False)
@@ -150,7 +162,7 @@ def main():
 
     for epoch in range(start_ep, args.epochs):
         t0 = time.time()
-        tr_loss, bd = train_epoch(model, train_set, optimizer, device, args)
+        tr_loss, bd = train_epoch(model, train_set, optimizer, device, args, scaler=scaler)
         val_pct, val_agg = val_epoch(model, val_set, device)
         scheduler.step()
         lrs = [g['lr'] for g in optimizer.param_groups]
