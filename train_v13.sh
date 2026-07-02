@@ -39,4 +39,12 @@ python -m mymodel.v13_mert_unet.train \
     train.out_dir=$OUT \
     $RESUME_FLAG
 
+echo ""
+echo "Training done. Running test eval..."
+python -m mymodel.v13_mert_unet.eval \
+    --checkpoint $OUT/best_model.pt \
+    --config     configs/v13_mert_linear.yaml \
+    --split      test \
+    --out_dir    $OUT/eval
+
 echo "Job finished at $(date)"
