@@ -1,0 +1,33 @@
+seed: 42
+
+# CADP M01 — Frozen Baseline
+# Audio: 20fps MERT (768-dim), pooled to 20 chunks
+# Score: DINOv2 columns (80px, stride 40px), mean-pooled patches
+# Task:  sim matrix + expected_distance loss + DTW decode
+
+model:
+  mert_dim:       768
+  dinov2_dim:     768
+  embed_dim:      256
+  n_audio_chunks: 20
+
+data:
+  processed_root: data/MSMD/processed
+  mert_root:      data/MSMD/mert_emb
+  dinov2_root:    data/MSMD/dinov2_emb
+  fps:            20.0
+
+loss:
+  temperature:     0.07
+  power:           1.0
+  entropy_weight:  0.0
+
+optim:
+  lr:           1.0e-3
+  weight_decay: 0.0
+  patience:     5
+
+train:
+  max_epochs: 30
+  win_sec:    5.0
+  out_dir:    results/cadp_m01
