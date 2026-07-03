@@ -34,9 +34,14 @@ def _build_perf_frame(feats: np.ndarray, t: int, n_frames: int) -> np.ndarray:
     return window.T[np.newaxis, np.newaxis]   # (1, 1, mert_dim, n_frames)
 
 
-def _predict_x_com(seg: torch.Tensor) -> float:
-    """Center of mass along x axis of segmentation map. seg: (1, H, W)."""
+def _predict_x_com(seg: torch.Tensor, threshold: float = 0.5) -> float:
+    """Center of mass along x axis of the thresholded segmentation map.
+    seg: (1, H, W). Matches CPJKU's eval_official.py: threshold the raw
+    sigmoid output before CoM, else diffuse low-confidence activation
+    elsewhere on the strip drags the CoM off target.
+    """
     arr = seg.squeeze(0).cpu().numpy()
+    arr = (arr >= threshold).astype(np.float32)
     col = arr.sum(axis=0)
     total = col.sum()
     if total < 1e-6:
