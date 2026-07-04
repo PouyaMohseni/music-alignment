@@ -20,6 +20,18 @@
 # Prerequisites:
 #   1. run setup_cpjku_paper_login.sh (FluidSynth)
 #   2. run sbatch convert_msmd_aug_pages.sh  (produces data/MSMD/msmd_aug_cpjku_pages/)
+#
+# IMPORTANT: train_model.py (CPJKU's vendored code) has no epoch/optimizer resume —
+# every job restarts from epoch 0. Every past run (16 attempts, 2026-06-25 to 06-30)
+# either crashed early, OOMed, or hit the 24h wall, and their checkpoints were saved
+# under /project/... where they were later lost (project dir is quota-constrained;
+# all 16 old params/ dirs now contain only net_config.json, no .pt files). One run
+# (64327784) DID train cleanly to epoch 33 with improving val loss before timing out
+# — the approach works, it just never got to keep its progress across resubmissions.
+# Fixed here: (1) checkpoints go to /scratch (no quota risk), (2) auto warm-start
+# from the latest latest_model.pt on resubmission via --param_path. Note this is a
+# WEIGHTS-ONLY warm start, not a true resume — optimizer state, LR schedule, and the
+# epoch/patience counters all restart, but training does not start from random init.
 
 set -euo pipefail
 echo "Job started on $(hostname) at $(date)"
@@ -41,7 +53,7 @@ export MKL_NUM_THREADS=1
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 DATA=/scratch/pmohseni/music-alignment/msmd_aug_cpjku_pages
-OUT=/project/def-ichiro/pmohseni/music-alignment/results/cpjku_aug/CB_TA
+OUT=/scratch/pmohseni/results/cpjku_aug/CB_TA
 
 mkdir -p "$OUT/runs" "$OUT/params"
 
@@ -62,6 +74,17 @@ cp /project/def-ichiro/pmohseni/music-alignment/configs/msmd_aug_7tempo.yaml \
 
 cd "$REPO/audio_conditioned_unet"
 
+# Warm-start from the latest checkpoint if a previous run left one (weights only —
+# train_model.py has no true resume, so epoch/optimizer/LR-schedule state restarts).
+PARAM_FLAG=""
+LATEST_CKPT=$(ls -t "$OUT"/params/*/latest_model.pt 2>/dev/null | head -1)
+if [ -n "$LATEST_CKPT" ]; then
+    echo "Warm-starting from $LATEST_CKPT"
+    PARAM_FLAG="--param_path $LATEST_CKPT"
+else
+    echo "No previous checkpoint found, training from scratch"
+fi
+
 python train_model.py \
     --film_layers 2 3 4 5 6 7 8 \
     --log_root  "$OUT/runs" \
@@ -72,7 +95,8 @@ python train_model.py \
     --augment \
     --config    configs/msmd_aug_7tempo.yaml \
     --audio_encoder CBEncoder \
-    --tag CB_TA_aug
+    --tag CB_TA_aug \
+    $PARAM_FLAG
 
 echo ""
 echo "Training finished at $(date)"
