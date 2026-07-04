@@ -41,9 +41,13 @@ class M03LSTMTemporal(nn.Module):
                 audio: torch.Tensor,   # (B, T_a, 768)
                 score: torch.Tensor,   # (N_cols, 16, 768) or (B, N_cols, 16, 768)
                 hidden=None,
+                n_chunks: int | None = None,
                 ) -> dict:
         B, T_a, _ = audio.shape
-        K = self.n_audio_chunks
+        # n_chunks lets eval pool at the SAME per-chunk time resolution seen in
+        # training (win_sec/n_audio_chunks) instead of collapsing a whole piece
+        # to a fixed count of chunks, which coarsens temporal resolution ~14x.
+        K = n_chunks if n_chunks is not None else self.n_audio_chunks
 
         # Pool audio: T_a → K chunks
         audio_t = audio.permute(0, 2, 1)                                   # (B, 768, T_a)

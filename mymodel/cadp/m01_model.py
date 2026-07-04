@@ -29,14 +29,15 @@ class M01FrozenBaseline(nn.Module):
     def forward(self,
                 audio: torch.Tensor,   # (B, T_a, 768)
                 score: torch.Tensor,   # (N_cols, 16, 768) or (B, N_cols, 16, 768)
+                n_chunks: int | None = None,
                 ) -> dict:
         B, T_a, _ = audio.shape
-        K = self.n_audio_chunks
+        # n_chunks lets eval pool at the SAME per-chunk time resolution seen in
+        # training (win_sec/n_audio_chunks) instead of collapsing a whole piece
+        # to a fixed count of chunks, which coarsens temporal resolution ~14x.
+        K = n_chunks if n_chunks is not None else self.n_audio_chunks
 
         # Pool audio: T_a → K chunks
-        # Split T_a into K equal-ish chunks and mean-pool
-        chunk_size = max(1, T_a // K)
-        n_full = min(K, T_a)
         # Use adaptive_avg_pool1d for clean pooling
         # audio: (B, T_a, 768) → (B, 768, T_a) → pool → (B, 768, K) → (B, K, 768)
         audio_t = audio.permute(0, 2, 1)                            # (B, 768, T_a)

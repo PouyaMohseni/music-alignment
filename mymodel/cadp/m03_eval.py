@@ -46,7 +46,10 @@ def eval_split(checkpoint: str, cfg_path: str, split: str,
     out_root = Path(out_dir or str(Path(checkpoint).parent / 'eval')) / split
     out_root.mkdir(parents=True, exist_ok=True)
 
-    n_chunks = cfg.model.n_audio_chunks
+    # Training only ever saw win_sec/n_audio_chunks-second chunks (e.g. 5s/20=0.25s).
+    # Pooling a whole piece to a fixed n_audio_chunks coarsens resolution far below
+    # the 0.5s eval threshold, so scale chunk count to match training's time-per-chunk.
+    sec_per_chunk = cfg.train.win_sec / cfg.model.n_audio_chunks
     rows = []
     with open(out_root / 'per_piece.jsonl', 'w') as fout:
         for k, pid in enumerate(ds.piece_ids):
@@ -58,12 +61,13 @@ def eval_split(checkpoint: str, cfg_path: str, split: str,
                 mert_feats = torch.from_numpy(piece['mert_feats']).unsqueeze(0).to(device)  # (1, T, 768)
                 d2_feats   = torch.from_numpy(piece['d2_feats']).to(device)                  # (N_cols, 16, 768)
 
-                out = model(mert_feats, d2_feats)
+                T_a = mert_feats.shape[1]
+                n_chunks = max(1, round((T_a / cfg.data.fps) / sec_per_chunk))
+
+                out = model(mert_feats, d2_feats, n_chunks=n_chunks)
                 sim = out['sim'].squeeze(0).cpu().numpy()   # (n_chunks, N_cols)
 
                 path = dtw_backtrack(sim, band_radius_frac=0.25)  # (P, 2) [chunk_idx, col_idx]
-
-                T_a = mert_feats.shape[1]
                 chunk_to_col = np.zeros(n_chunks, dtype=np.float64)
                 for chunk_i, col_i in path:
                     chunk_to_col[chunk_i] = col_i
