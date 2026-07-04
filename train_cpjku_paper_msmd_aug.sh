@@ -77,7 +77,8 @@ cd "$REPO/audio_conditioned_unet"
 # Warm-start from the latest checkpoint if a previous run left one (weights only —
 # train_model.py has no true resume, so epoch/optimizer/LR-schedule state restarts).
 PARAM_FLAG=""
-LATEST_CKPT=$(ls -t "$OUT"/params/*/latest_model.pt 2>/dev/null | head -1)
+LATEST_CKPT=$(find "$OUT/params" -name "latest_model.pt" -type f -printf '%T@ %p\n' 2>/dev/null \
+              | sort -rn | head -1 | cut -d' ' -f2-)
 if [ -n "$LATEST_CKPT" ]; then
     echo "Warm-starting from $LATEST_CKPT"
     PARAM_FLAG="--param_path $LATEST_CKPT"
