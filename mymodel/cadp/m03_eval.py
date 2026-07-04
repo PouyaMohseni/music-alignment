@@ -87,7 +87,9 @@ def eval_split(checkpoint: str, cfg_path: str, split: str,
                 pred_col = chunk_to_col[chunk_idx]
 
                 col_stride = float(piece['col_stride'])
-                pred_strip_x = pred_col * col_stride + col_stride / 2.0
+                col_w      = float(ds.col_w)
+                # Matches dataset.py's GT mapping: column i center = i*stride + col_w/2
+                pred_strip_x = pred_col * col_stride + col_w / 2.0
 
                 m = alignment_metrics(
                     pred_strip_x, strip_x_gt, px_per_sec,
