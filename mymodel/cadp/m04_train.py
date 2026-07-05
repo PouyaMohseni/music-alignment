@@ -20,6 +20,14 @@ from mymodel.cadp.m04_model import M04DenseTokens, subcol_positions
 from mymodel.cadp.dataset import CADPDataset
 from mymodel.shared.losses import expected_distance_loss
 
+# Positions are raw pixels (thousands), but grad clipping below is tuned for
+# M01/M03's normalized-[0,1] loss scale. Without this, pre-clip gradient norms
+# run 500-6000 and get crushed to norm=1 every step, which silently prevents
+# any real learning (confirmed empirically: train loss never decreases).
+# Scaling positions only inside the loss call — not model.forward's own
+# pred_pos, which stays in real pixels — fixes this without touching the model.
+PIX_SCALE = 1000.0
+
 
 def _build_training_sample(piece: dict, fps: float, win_sec: float, device: str):
     """Random win_sec audio window, dense (no pooling); full score always used
@@ -108,7 +116,7 @@ def train(cfg):
 
             out = model(audio_t, score_t)
             loss, _ = expected_distance_loss(
-                out['sim'], pos_subcol, pos_target, valid_mask,
+                out['sim'], pos_subcol / PIX_SCALE, pos_target / PIX_SCALE, valid_mask,
                 temperature=cfg.loss.temperature, power=cfg.loss.power,
                 entropy_weight=cfg.loss.entropy_weight)
             opt.zero_grad()
@@ -128,7 +136,7 @@ def train(cfg):
                 pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
                 out = model(audio_t, score_t)
                 loss, _ = expected_distance_loss(
-                    out['sim'], pos_subcol, pos_target, valid_mask,
+                    out['sim'], pos_subcol / PIX_SCALE, pos_target / PIX_SCALE, valid_mask,
                     temperature=cfg.loss.temperature, power=cfg.loss.power)
                 val_losses.append(loss.item())
         val_loss = float(np.mean(val_losses)) if val_losses else float('nan')
@@ -145,8 +153,9 @@ def train(cfg):
             wait += 1
 
         marker = '*' if improved else ' '
-        print(f'Epoch {epoch:03d}{marker}  train={train_loss:.2f}px  val={val_loss:.2f}px'
-              f'  best={best_val:.2f}px  wait={wait}/{cfg.optim.patience * 2}',
+        # loss is in units of PIX_SCALE px (scaled for gradient health, see above)
+        print(f'Epoch {epoch:03d}{marker}  train={train_loss*PIX_SCALE:.1f}px  val={val_loss*PIX_SCALE:.1f}px'
+              f'  best={best_val*PIX_SCALE:.1f}px  wait={wait}/{cfg.optim.patience * 2}',
               flush=True)
 
         if epoch % 10 == 0:
@@ -158,7 +167,7 @@ def train(cfg):
             print(f'Early stopping at epoch {epoch}')
             break
 
-    print(f'Training done. Best val_loss={best_val:.2f}px')
+    print(f'Training done. Best val_loss={best_val*PIX_SCALE:.1f}px')
 
 
 def main():
