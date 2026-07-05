@@ -15,7 +15,7 @@ EXCLUDE_RADIUS_PX = 30
 TEMPERATURE = 0.07
 
 
-def b5_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network, optimizer):
+def b5_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network, optimizer, pitch_batch=None):
     if decoder_feature is None:
         raise RuntimeError('B5 requires decoder_feature_stage set in iterate_dataset_ext')
 

@@ -10,7 +10,7 @@ QUERY_RESOLUTION_MULTIPLIER = 4
 HEATMAP_SIGMA_PX = 5.0
 
 
-def b3_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network, optimizer):
+def b3_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network, optimizer, pitch_batch=None):
     if decoder_feature is None:
         raise RuntimeError('B3 requires decoder_feature_stage set in iterate_dataset_ext')
 

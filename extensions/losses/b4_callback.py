@@ -11,7 +11,7 @@ from extensions.hooks.position_decoder import soft_argmax_xy, center_of_mass_xy
 from extensions.losses.temporal_consistency import temporal_consistency_loss
 
 
-def b4_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network=None, optimizer=None):
+def b4_aux_loss(pred, y_batch, rnn_out, decoder_feature, seq_len, bs, network=None, optimizer=None, pitch_batch=None):
     H, W = pred.shape[-2], pred.shape[-1]
     pred_grid = pred.view(seq_len, bs, H, W)
     y_grid = y_batch.view(seq_len, bs, H, W)

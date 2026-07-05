@@ -25,6 +25,10 @@ aux_loss_fn signature:
                    BEFORE iterate_dataset is ever called, so any module added
                    to `network` afterward needs this explicit registration or
                    its parameters silently never receive a step.
+  pitch_batch:     (seq_len, bs, 88) active-MIDI-pitch multi-hot target, or None
+                   if need_pitch_roll=False. Requires extensions/hooks/pitch_patch.py's
+                   patch_pitch_pipeline() to have been called (B2 only -- the only
+                   extension needing data the base pipeline doesn't already track).
 """
 from random import shuffle
 
@@ -53,11 +57,24 @@ class RNNOutCapture:
         self._handle.remove()
 
 
+def _prepare_pitch_batch(current_pipeline, indices, max_seq_length, device):
+    """Mirrors prepare_batch's slicing exactly, for the extra 'pitch_roll'
+    target field that base prepare_batch doesn't know about (B2 only)."""
+    import torch
+    pitch_batch = []
+    for idx, data in enumerate(current_pipeline):
+        pr = data['targets']['pitch_roll']
+        start = indices[idx]
+        pitch_batch.append(np.expand_dims(pr[start:start + max_seq_length], 1))
+    return torch.from_numpy(np.concatenate(pitch_batch, axis=1)).to(device)   # (seq_len, bs, 88)
+
+
 def iterate_dataset_ext(network, optimizer, dataset, batch_size, seq_len, train=True, device="cpu",
                         threshold=0.5, average_stats=True, eval_center_of_mass=False,
                         eval_only_onsets=False, clip_grads=None,
                         aux_loss_fn=None, aux_loss_weight=1.0,
-                        need_rnn_capture=False, decoder_feature_stage=None):
+                        need_rnn_capture=False, decoder_feature_stage=None,
+                        need_pitch_roll=False):
     """need_rnn_capture / decoder_feature_stage: hooks are attached to
     `network` lazily on first call (network doesn't exist yet when this
     function is bound via functools.partial in the wrapper script, before
@@ -128,9 +145,11 @@ def iterate_dataset_ext(network, optimizer, dataset, batch_size, seq_len, train=
             if aux_loss_fn is not None:
                 rnn_out = rnn_capture.output if rnn_capture is not None else None
                 dec_feat = feature_capture.feature if feature_capture is not None else None
+                pitch_batch = (_prepare_pitch_batch(current_pipeline, indices, max_seq_length, device)
+                              if need_pitch_roll else None)
                 aux_loss, _ = aux_loss_fn(pred, y_batch, rnn_out, dec_feat,
                                           score_batch.shape[0], score_batch.shape[1],
-                                          network, optimizer)
+                                          network, optimizer, pitch_batch)
                 loss = loss + aux_loss_weight * aux_loss
                 aux_losses.append(aux_loss.item())
 
