@@ -24,7 +24,10 @@ def temporal_consistency_loss(pred_positions: torch.Tensor, gt_positions: torch.
     l1 = (pred_positions - gt_positions).abs().mean()
 
     delta = pred_positions[1:, :, 0] - pred_positions[:-1, :, 0]   # x-only monotonicity
-    backward_penalty = torch.relu(-delta).mean()
+    # last BPTT chunk of a piece can have seq_len==1 -> delta has 0 elements;
+    # .mean() of an empty tensor is NaN, not 0, so this must be guarded
+    # explicitly (unlike jerk_penalty below, which already was).
+    backward_penalty = torch.relu(-delta).mean() if delta.numel() > 0 else delta.sum() * 0.0
 
     accel = delta[1:] - delta[:-1]
     jerk_penalty = accel.pow(2).mean() if accel.numel() > 0 else accel.sum() * 0.0
