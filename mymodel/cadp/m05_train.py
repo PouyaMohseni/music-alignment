@@ -1,0 +1,182 @@
+"""CADP M05 training — learned path predictor, direct pixel-position regression.
+
+No DTW anywhere in this loop: supervision is expected_distance_loss between
+the model's per-frame soft-argmax pixel position and the ground-truth strip_x
+at annotated onset frames. The full score (all columns) stays in context for
+every audio window so train/eval never disagree on spatial resolution — the
+resolution-mismatch bug that broke M01/M03's eval is structurally impossible
+here since there is no separate "pool to K chunks" step to get inconsistent.
+
+    python -m mymodel.cadp.m05_train --config configs/cadp_m05.yaml
+"""
+from __future__ import annotations
+import argparse, json, random
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.optim as optim
+from omegaconf import OmegaConf
+
+from mymodel.cadp.m05_model import M05LearnedPathPredictor
+from mymodel.cadp.m04_model import subcol_positions
+from mymodel.cadp.dataset import CADPDataset
+from mymodel.shared.losses import expected_distance_loss
+
+
+def _build_training_sample(piece: dict, fps: float, win_sec: float, device: str):
+    """Random win_sec audio window (full score always in context)."""
+    mert = piece['mert_feats']    # (T, 768)
+    d2   = piece['d2_feats']      # (N_cols, 16, 768)
+    T = mert.shape[0]
+    N_cols = d2.shape[0]
+
+    win_frames = int(win_sec * fps)
+    t_start = random.randint(0, max(0, T - win_frames))
+    t_end   = min(t_start + win_frames, T)
+    audio_win = mert[t_start:t_end]                          # (win_T, 768)
+
+    audio_t = torch.from_numpy(audio_win).to(device)          # (win_T, 768)
+    score_t = torch.from_numpy(d2).to(device)                  # (N_cols, 16, 768)
+
+    f_idx = piece['frame_idx']
+    strip_x = piece['strip_x']
+    in_win = (f_idx >= t_start) & (f_idx < t_end)
+
+    win_T = t_end - t_start
+    pos_target = torch.zeros(win_T, device=device)
+    valid_mask = torch.zeros(win_T, dtype=torch.bool, device=device)
+    if in_win.any():
+        local_idx = (f_idx[in_win] - t_start).astype(np.int64)
+        pos_target[local_idx] = torch.from_numpy(strip_x[in_win]).float().to(device)
+        valid_mask[local_idx] = True
+
+    return audio_t, score_t, pos_target, valid_mask, N_cols
+
+
+def train(cfg):
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    out_dir = Path(cfg.train.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    torch.manual_seed(cfg.seed)
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+
+    model = M05LearnedPathPredictor(
+        mert_dim=cfg.model.mert_dim,
+        dinov2_dim=cfg.model.dinov2_dim,
+        hidden_dim=cfg.model.hidden_dim,
+        embed_dim=cfg.model.embed_dim,
+        path_channels=cfg.model.path_channels,
+        attention_heads=cfg.model.attention_heads,
+    ).to(device)
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f'Trainable params: {n_params:,}')
+
+    train_ds = CADPDataset(
+        cfg.data.processed_root, cfg.data.mert_root, cfg.data.dinov2_root,
+        split='train', fps=cfg.data.fps)
+    val_ds = CADPDataset(
+        cfg.data.processed_root, cfg.data.mert_root, cfg.data.dinov2_root,
+        split='val', fps=cfg.data.fps)
+
+    print('Loading train pieces...')
+    train_pieces = [p for pid in train_ds.piece_ids
+                    if (p := train_ds.load_piece(pid)) is not None]
+    print(f'  {len(train_pieces)} train pieces loaded')
+    print('Loading val pieces...')
+    val_pieces = [p for pid in val_ds.piece_ids
+                  if (p := val_ds.load_piece(pid)) is not None]
+    print(f'  {len(val_pieces)} val pieces loaded')
+
+    opt = optim.AdamW(model.parameters(), lr=cfg.optim.lr,
+                      weight_decay=cfg.optim.weight_decay)
+    sched = optim.lr_scheduler.ReduceLROnPlateau(
+        opt, patience=cfg.optim.patience, factor=0.5)
+
+    col_stride = float(train_ds.col_stride)
+    col_w = float(train_ds.col_w)
+
+    best_val = float('inf')
+    wait = 0
+
+    for epoch in range(1, cfg.train.max_epochs + 1):
+        model.train()
+        random.shuffle(train_pieces)
+        losses = []
+        for piece in train_pieces:
+            audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
+                piece, cfg.data.fps, cfg.train.win_sec, device)
+            pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+
+            out = model(audio_t, score_t, pos_subcol, temperature=cfg.loss.temperature)
+            # Same temperature as the model's own softmax, so expected_distance_loss's
+            # internal softmax(logits/temperature) reproduces out['p'] exactly.
+            loss, _ = expected_distance_loss(
+                out['logits'], pos_subcol, pos_target, valid_mask,
+                temperature=cfg.loss.temperature, power=cfg.loss.power,
+                entropy_weight=cfg.loss.entropy_weight)
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+            losses.append(loss.item())
+
+        train_loss = float(np.mean(losses)) if losses else float('nan')
+
+        model.eval()
+        val_losses = []
+        with torch.no_grad():
+            for piece in val_pieces:
+                audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
+                    piece, cfg.data.fps, cfg.train.win_sec, device)
+                pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+                out = model(audio_t, score_t, pos_subcol, temperature=cfg.loss.temperature)
+                loss, _ = expected_distance_loss(
+                    out['logits'], pos_subcol, pos_target, valid_mask,
+                    temperature=cfg.loss.temperature, power=cfg.loss.power)
+                val_losses.append(loss.item())
+        val_loss = float(np.mean(val_losses)) if val_losses else float('nan')
+
+        sched.step(val_loss)
+        improved = val_loss < best_val
+        if improved:
+            best_val = val_loss
+            wait = 0
+            torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
+                        'val_loss': val_loss},
+                       str(out_dir / 'best_model.pt'))
+        else:
+            wait += 1
+
+        marker = '*' if improved else ' '
+        print(f'Epoch {epoch:03d}{marker}  train={train_loss:.2f}px  val={val_loss:.2f}px'
+              f'  best={best_val:.2f}px  wait={wait}/{cfg.optim.patience * 2}',
+              flush=True)
+
+        if epoch % 10 == 0:
+            torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
+                        'val_loss': val_loss},
+                       str(out_dir / f'checkpoint_epoch{epoch:03d}.pt'))
+
+        if wait >= cfg.optim.patience * 2:
+            print(f'Early stopping at epoch {epoch}')
+            break
+
+    print(f'Training done. Best val_loss={best_val:.2f}px')
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('--config', required=True)
+    p.add_argument('overrides', nargs='*')
+    args = p.parse_args()
+    cfg = OmegaConf.load(args.config)
+    if args.overrides:
+        cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(args.overrides))
+    train(cfg)
+
+
+if __name__ == '__main__':
+    main()
