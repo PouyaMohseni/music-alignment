@@ -27,6 +27,16 @@ def center_of_mass_xy(heatmap: torch.Tensor) -> torch.Tensor:
     return xy.view(*lead, 2)
 
 
+def thresholded_center_of_mass_xy(pred: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
+    """Hard decode matching eval_official.py's working CB_TA decode (and this
+    session's v11 eval-decode fix): threshold the raw sigmoid output before
+    center-of-mass, else diffuse low-confidence activation elsewhere in the
+    heatmap drags the estimate off target. Used as B3's "coarse peak" (x0,y0)
+    -- the existing, UNCHANGED decode stage 1 refers to."""
+    thresholded = (pred >= threshold).to(pred.dtype)
+    return center_of_mass_xy(thresholded)
+
+
 def soft_argmax_xy(pred: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
     """pred: (..., H, W) raw sigmoid segmentation output -> differentiable
     (..., 2) [x, y] position via softmax-weighted centroid. Used for B4's
