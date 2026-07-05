@@ -5,7 +5,9 @@ __pycache__/
 .pytest_cache/
 
 # --- Virtualenvs ---
-.venv/
+# no trailing slash: .venv is now a symlink to /scratch (project inode quota
+# relief), and a "dir/" pattern doesn't match a symlink-to-dir
+.venv
 venv/
 env/
 
