@@ -12,6 +12,11 @@ model:
   embed_dim:        256
   path_channels:    128
   attention_heads:  4
+  # Axial self-attention over score positions costs O(T_a * N_s^2). Median
+  # piece has N_cols~207 (N_s~828); some reach 1300+ (N_s~5200), which OOMs
+  # a 40GB A100. Cap columns seen per training/eval step; see m05_train.py
+  # and m05_eval.py for how wider pieces are cropped/scanned around this cap.
+  max_n_cols:       120
 
 data:
   processed_root: data/MSMD/processed

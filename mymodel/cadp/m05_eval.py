@@ -67,17 +67,41 @@ def eval_split(checkpoint: str, cfg_path: str, split: str,
                 d2_feats   = piece['d2_feats']        # (N_cols, 16, 768)
                 T = mert_feats.shape[0]
                 n_cols = d2_feats.shape[0]
+                max_n_cols = cfg.model.max_n_cols
 
-                score_t = torch.from_numpy(d2_feats).to(device)
-                pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+                # Score crops covering the whole piece (see m05_train.py — the
+                # same O(T_a*N_s^2) attention cost that forces cropping there
+                # applies here too, and eval can't center on ground truth).
+                # 50% overlap so no true position sits right at a crop edge.
+                if n_cols <= max_n_cols:
+                    crop_starts = [0]
+                else:
+                    stride = max(1, max_n_cols // 2)
+                    crop_starts = list(range(0, n_cols - max_n_cols + 1, stride))
+                    if crop_starts[-1] != n_cols - max_n_cols:
+                        crop_starts.append(n_cols - max_n_cols)
 
                 pred_pos_full = torch.zeros(T, device=device)
                 for t0 in range(0, T, win_frames):
                     t1 = min(t0 + win_frames, T)
                     audio_t = torch.from_numpy(mert_feats[t0:t1]).to(device)
-                    out = model(audio_t, score_t, pos_subcol,
-                                temperature=cfg.loss.temperature)
-                    pred_pos_full[t0:t1] = out['pred_pos']
+
+                    best_pred = None
+                    best_conf = None
+                    for c0 in crop_starts:
+                        c1 = min(c0 + max_n_cols, n_cols)
+                        score_t = torch.from_numpy(d2_feats[c0:c1]).to(device)
+                        pos_subcol = subcol_positions(c1 - c0, col_stride, col_w, c0).to(device)
+                        out = model(audio_t, score_t, pos_subcol,
+                                    temperature=cfg.loss.temperature)
+                        conf = out['p'].max(dim=-1).values          # (win_T,) peak confidence
+                        if best_conf is None:
+                            best_conf, best_pred = conf, out['pred_pos']
+                        else:
+                            take = conf > best_conf
+                            best_conf = torch.where(take, conf, best_conf)
+                            best_pred = torch.where(take, out['pred_pos'], best_pred)
+                    pred_pos_full[t0:t1] = best_pred
 
                 onset_sec  = piece['onset_sec']
                 strip_x_gt = piece['strip_x']

@@ -2,10 +2,16 @@
 
 No DTW anywhere in this loop: supervision is expected_distance_loss between
 the model's per-frame soft-argmax pixel position and the ground-truth strip_x
-at annotated onset frames. The full score (all columns) stays in context for
-every audio window so train/eval never disagree on spatial resolution — the
-resolution-mismatch bug that broke M01/M03's eval is structurally impossible
-here since there is no separate "pool to K chunks" step to get inconsistent.
+at annotated onset frames.
+
+The axial self-attention over score positions costs O(T_a * N_s^2); the median
+training piece has N_s (=N_cols*4) in the high hundreds and some reach several
+thousand, which OOMs a 40GB A100 within the first backward pass. So score
+columns are cropped to MAX_N_COLS, centered on the onsets that fall in the
+current audio window (with margin), whenever a piece is wider than that cap.
+Positions stay in absolute pixel space via subcol_positions' col_offset, so
+this is invisible to the loss — it only shrinks how much of the strip a given
+training step can see, not the coordinate system.
 
     python -m mymodel.cadp.m05_train --config configs/cadp_m05.yaml
 """
@@ -24,24 +30,46 @@ from mymodel.cadp.dataset import CADPDataset
 from mymodel.shared.losses import expected_distance_loss
 
 
-def _build_training_sample(piece: dict, fps: float, win_sec: float, device: str):
-    """Random win_sec audio window (full score always in context)."""
+def _crop_score(d2: np.ndarray, col_idx: np.ndarray, onset_cols_in_win: np.ndarray,
+                 max_n_cols: int) -> tuple[np.ndarray, int]:
+    """Crop d2 (N_cols,16,768) to at most max_n_cols columns, centered on the
+    onsets in the current audio window (random center if none). Returns
+    (cropped_d2, col_offset) — col_offset is the absolute start column so
+    subcol_positions can stay in global pixel space.
+    """
+    n_cols = d2.shape[0]
+    if n_cols <= max_n_cols:
+        return d2, 0
+    if len(onset_cols_in_win) > 0:
+        center = int(round(float(onset_cols_in_win.mean())))
+    else:
+        center = random.randint(0, n_cols - 1)
+    start = max(0, min(n_cols - max_n_cols, center - max_n_cols // 2))
+    return d2[start:start + max_n_cols], start
+
+
+def _build_training_sample(piece: dict, fps: float, win_sec: float, device: str,
+                            max_n_cols: int):
+    """Random win_sec audio window; score cropped to max_n_cols if the piece
+    is wider (see module docstring — avoids O(T_a * N_s^2) attention OOM)."""
     mert = piece['mert_feats']    # (T, 768)
     d2   = piece['d2_feats']      # (N_cols, 16, 768)
     T = mert.shape[0]
-    N_cols = d2.shape[0]
 
     win_frames = int(win_sec * fps)
     t_start = random.randint(0, max(0, T - win_frames))
     t_end   = min(t_start + win_frames, T)
     audio_win = mert[t_start:t_end]                          # (win_T, 768)
 
-    audio_t = torch.from_numpy(audio_win).to(device)          # (win_T, 768)
-    score_t = torch.from_numpy(d2).to(device)                  # (N_cols, 16, 768)
-
     f_idx = piece['frame_idx']
+    c_idx = piece['col_idx']
     strip_x = piece['strip_x']
     in_win = (f_idx >= t_start) & (f_idx < t_end)
+
+    d2_crop, col_offset = _crop_score(d2, c_idx, c_idx[in_win], max_n_cols)
+
+    audio_t = torch.from_numpy(audio_win).to(device)          # (win_T, 768)
+    score_t = torch.from_numpy(d2_crop).to(device)              # (n_cols_crop, 16, 768)
 
     win_T = t_end - t_start
     pos_target = torch.zeros(win_T, device=device)
@@ -51,7 +79,7 @@ def _build_training_sample(piece: dict, fps: float, win_sec: float, device: str)
         pos_target[local_idx] = torch.from_numpy(strip_x[in_win]).float().to(device)
         valid_mask[local_idx] = True
 
-    return audio_t, score_t, pos_target, valid_mask, N_cols
+    return audio_t, score_t, pos_target, valid_mask, d2_crop.shape[0], col_offset
 
 
 def train(cfg):
@@ -106,9 +134,9 @@ def train(cfg):
         random.shuffle(train_pieces)
         losses = []
         for piece in train_pieces:
-            audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
-                piece, cfg.data.fps, cfg.train.win_sec, device)
-            pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+            audio_t, score_t, pos_target, valid_mask, n_cols, col_offset = _build_training_sample(
+                piece, cfg.data.fps, cfg.train.win_sec, device, cfg.model.max_n_cols)
+            pos_subcol = subcol_positions(n_cols, col_stride, col_w, col_offset).to(device)
 
             out = model(audio_t, score_t, pos_subcol, temperature=cfg.loss.temperature)
             # Same temperature as the model's own softmax, so expected_distance_loss's
@@ -129,9 +157,9 @@ def train(cfg):
         val_losses = []
         with torch.no_grad():
             for piece in val_pieces:
-                audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
-                    piece, cfg.data.fps, cfg.train.win_sec, device)
-                pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+                audio_t, score_t, pos_target, valid_mask, n_cols, col_offset = _build_training_sample(
+                    piece, cfg.data.fps, cfg.train.win_sec, device, cfg.model.max_n_cols)
+                pos_subcol = subcol_positions(n_cols, col_stride, col_w, col_offset).to(device)
                 out = model(audio_t, score_t, pos_subcol, temperature=cfg.loss.temperature)
                 loss, _ = expected_distance_loss(
                     out['logits'], pos_subcol, pos_target, valid_mask,

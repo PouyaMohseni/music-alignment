@@ -58,12 +58,16 @@ class M04DenseTokens(nn.Module):
         return {'sim': sim, 'audio_emb': audio_emb, 'score_emb': score_emb}
 
 
-def subcol_positions(n_cols: int, col_stride: float, col_w: float) -> torch.Tensor:
+def subcol_positions(n_cols: int, col_stride: float, col_w: float,
+                      col_offset: int = 0) -> torch.Tensor:
     """Pixel-space center of each of the N_cols*4 horizontal sub-positions.
     Column i (width col_w, stride col_stride) is split into 4 equal sub-bins;
     sub-position j in [0,4) is centered at i*col_stride + (j+0.5)*col_w/4.
+    col_offset shifts to the ABSOLUTE column index when n_cols is a crop of a
+    wider piece (see m05_train._crop_score), so positions stay in the same
+    global pixel space regardless of cropping.
     """
-    i = torch.arange(n_cols).view(-1, 1).float()
+    i = (torch.arange(n_cols) + col_offset).view(-1, 1).float()
     j = torch.arange(4).view(1, -1).float()
     pos = i * col_stride + (j + 0.5) * (col_w / 4.0)   # (N_cols, 4)
     return pos.reshape(-1)                              # (N_cols*4,)
