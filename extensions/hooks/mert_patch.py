@@ -24,6 +24,7 @@ Usage (before calling anything from audio_conditioned_unet):
 """
 from __future__ import annotations
 import copy
+import os
 from pathlib import Path
 
 import numpy as np
@@ -32,19 +33,33 @@ import numpy as np
 # to its precomputed-MERT directory. train_model.py calls load_dataset twice
 # (train_set, then val_set) in the SAME process, each needing a DIFFERENT
 # embeddings root -- a single global root would silently use the wrong
-# directory for one of the two. Populated by patch_mert_pipeline(); module-
-# level so patched_load_piece (pickled by reference for spawned workers)
-# can find it.
+# directory for one of the two.
+#
+# NOTE: this dict must NOT be relied on inside spawned worker processes.
+# train_model.py uses multiprocessing.set_start_method('spawn'), so workers
+# re-import mert_patch.py fresh from disk -- they never see patch_mert_pipeline()'s
+# runtime mutation of this global (only reassigned module-level function
+# *objects*, like load_piece below, are pickled by reference and survive the
+# spawn boundary; plain runtime-set globals reset to their source-level value,
+# i.e. empty, in the fresh import). So _load_mert_spec reads the MERT_PATH_MAP
+# env var instead, which IS inherited by spawned children.
 _PATH_TO_EMB_ROOT: dict[str, str] = {}
+
+
+def _get_path_to_emb_root() -> dict[str, str]:
+    path_map_str = os.environ.get('MERT_PATH_MAP', '')
+    return dict(pair.split('=', 1) for pair in path_map_str.split(';') if pair)
 
 
 def _load_mert_spec(dataset_path: str, piece: str, tempo_factor) -> np.ndarray:
     """Load precomputed MERT embedding, transposed to CPJKU's (768, T) spec
     convention (precompute_mert_zenodo.py saves (T, 768))."""
-    emb_root = _PATH_TO_EMB_ROOT.get(dataset_path)
+    path_to_emb_root = _get_path_to_emb_root()
+    emb_root = path_to_emb_root.get(dataset_path)
     if emb_root is None:
         raise KeyError(f'No MERT embeddings root registered for dataset path {dataset_path!r} '
-                        f'-- known paths: {list(_PATH_TO_EMB_ROOT)}')
+                        f'-- known paths: {list(path_to_emb_root)} '
+                        f'(MERT_PATH_MAP={os.environ.get("MERT_PATH_MAP")!r})')
     key = f'{piece}_tempo_{tempo_factor}' if tempo_factor != -1 else piece
     path = Path(emb_root) / f'{key}.npy'
     emb = np.load(path).astype(np.float32)   # (T, 768)
@@ -156,6 +171,7 @@ def patch_mert_pipeline(path_to_emb_root: dict[str, str]):
     """
     global _PATH_TO_EMB_ROOT
     _PATH_TO_EMB_ROOT = dict(path_to_emb_root)
+    os.environ['MERT_PATH_MAP'] = ';'.join(f'{k}={v}' for k, v in _PATH_TO_EMB_ROOT.items())
 
     from audio_conditioned_unet import dataset as cpjku_dataset
     from audio_conditioned_unet import audio_encoder as cpjku_audio_encoder
