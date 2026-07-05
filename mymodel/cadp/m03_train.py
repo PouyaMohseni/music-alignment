@@ -106,6 +106,18 @@ def train(cfg):
     # Gradient accumulation over batch_size pieces per opt.step() fixes it.
     batch_size = getattr(cfg.train, 'batch_size', 32)
 
+    # Fixed validation windows, sampled ONCE and reused every epoch -- see
+    # m01_train.py for why (resampled val_loss is too noisy to reliably
+    # drive early stopping, confirmed by full-scale runs early-stopping
+    # with train loss still flat and "best" epochs scattered).
+    rng_state = random.getstate()
+    random.seed(cfg.seed + 1)
+    fixed_val_samples = [
+        _build_training_sample(piece, n_chunks, cfg.data.fps, cfg.train.win_sec, device)
+        for piece in val_pieces
+    ]
+    random.setstate(rng_state)
+
     for epoch in range(1, cfg.train.max_epochs + 1):
         model.train()
         random.shuffle(train_pieces)
@@ -134,10 +146,7 @@ def train(cfg):
         model.eval()
         val_losses = []
         with torch.no_grad():
-            for piece in val_pieces:
-                audio_t, score_t, pos_tile, pos_target, valid_mask = \
-                    _build_training_sample(piece, n_chunks, cfg.data.fps,
-                                           cfg.train.win_sec, device)
+            for audio_t, score_t, pos_tile, pos_target, valid_mask in fixed_val_samples:
                 out = model(audio_t, score_t)
                 sim = out['sim'].squeeze(0)
                 loss, _ = expected_distance_loss(

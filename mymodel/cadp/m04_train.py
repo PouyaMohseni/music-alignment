@@ -111,6 +111,20 @@ def train(cfg):
     # Gradient accumulation over batch_size pieces per opt.step() fixes it.
     batch_size = getattr(cfg.train, 'batch_size', 32)
 
+    # Fixed validation windows, sampled ONCE and reused every epoch -- see
+    # m01_train.py for why (resampled val_loss is too noisy to reliably
+    # drive early stopping, confirmed by full-scale runs early-stopping
+    # with train loss still flat and "best" epochs scattered).
+    rng_state = random.getstate()
+    random.seed(cfg.seed + 1)
+    fixed_val_samples = []
+    for piece in val_pieces:
+        audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
+            piece, cfg.data.fps, cfg.train.win_sec, device)
+        pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+        fixed_val_samples.append((audio_t, score_t, pos_target, valid_mask, pos_subcol))
+    random.setstate(rng_state)
+
     for epoch in range(1, cfg.train.max_epochs + 1):
         model.train()
         random.shuffle(train_pieces)
@@ -138,10 +152,7 @@ def train(cfg):
         model.eval()
         val_losses = []
         with torch.no_grad():
-            for piece in val_pieces:
-                audio_t, score_t, pos_target, valid_mask, n_cols = _build_training_sample(
-                    piece, cfg.data.fps, cfg.train.win_sec, device)
-                pos_subcol = subcol_positions(n_cols, col_stride, col_w).to(device)
+            for audio_t, score_t, pos_target, valid_mask, pos_subcol in fixed_val_samples:
                 out = model(audio_t, score_t)
                 loss, _ = expected_distance_loss(
                     out['sim'], pos_subcol / PIX_SCALE, pos_target / PIX_SCALE, valid_mask,

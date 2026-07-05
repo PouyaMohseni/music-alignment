@@ -123,6 +123,19 @@ def train(cfg):
     # Gradient accumulation over batch_size pieces per opt.step() fixes it.
     batch_size = getattr(cfg.train, 'batch_size', 32)
 
+    # Fixed validation windows, sampled ONCE and reused every epoch -- see
+    # m01_train.py for why (resampled val_loss is too noisy to reliably
+    # drive early stopping, confirmed by full-scale runs early-stopping
+    # with train loss still flat and "best" epochs scattered).
+    rng_state = random.getstate()
+    random.seed(cfg.seed + 1)
+    fixed_val_samples = [
+        _build_training_sample(piece, cfg.data.fps, cfg.train.win_sec, device,
+                                max_n_cols, col_stride, col_w, query_res_mult)
+        for piece in val_pieces
+    ]
+    random.setstate(rng_state)
+
     for epoch in range(1, cfg.train.max_epochs + 1):
         model.train()
         random.shuffle(train_pieces)
@@ -149,10 +162,7 @@ def train(cfg):
         val_losses = []
         val_px_errs = []
         with torch.no_grad():
-            for piece in val_pieces:
-                audio_t, score_t, pos_target, valid_mask, query_x = _build_training_sample(
-                    piece, cfg.data.fps, cfg.train.win_sec, device,
-                    max_n_cols, col_stride, col_w, query_res_mult)
+            for audio_t, score_t, pos_target, valid_mask, query_x in fixed_val_samples:
                 out = model(audio_t, score_t, query_x)
                 loss, _ = heatmap_inr_loss(
                     out['confidence'], query_x, pos_target, valid_mask, sigma_px=sigma_px)
