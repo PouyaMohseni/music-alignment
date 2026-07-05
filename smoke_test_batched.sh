@@ -14,4 +14,5 @@ cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
 source .venv/bin/activate
 export TRANSFORMERS_OFFLINE=1
+export DEBUG_NAN=1
 python scripts/smoke_test_batched_train.py
