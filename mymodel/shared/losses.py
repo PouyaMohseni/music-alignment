@@ -28,6 +28,40 @@ def infonce_loss(audio_emb: torch.Tensor,
     return F.cross_entropy(logits, labels)
 
 
+def heatmap_inr_loss(
+    confidence: torch.Tensor,   # (T, Q) raw INR logits over continuous queries
+    query_x: torch.Tensor,      # (Q,) pixel position of each query
+    pos_target: torch.Tensor,   # (T,) ground-truth pixel position
+    valid_mask: torch.Tensor,   # (T,) bool
+    sigma_px: float = 20.0,
+) -> tuple[torch.Tensor, dict]:
+    """Heatmap regression loss for the M06 INR head.
+
+    Target for each valid frame is a Gaussian centered at the true pixel
+    position (width sigma_px), normalized to a distribution over the query
+    grid; loss is the soft cross-entropy between that target and
+    softmax(confidence). Continuous queries (not tied to any discrete tile
+    grid) are what let this break the M01-M05 tile-quantization ceiling —
+    resolution is set by sigma_px and query density, not by column spacing.
+    """
+    T, Q = confidence.shape
+    if valid_mask.sum() == 0:
+        z = confidence.sum() * 0.0
+        return z, {"heatmap_ce": z.detach()}
+
+    diff = (query_x.view(1, Q) - pos_target.view(T, 1)) / sigma_px
+    target = torch.exp(-0.5 * diff ** 2)                      # (T, Q)
+    target = target / target.sum(dim=-1, keepdim=True).clamp_min(1e-9)
+
+    log_p = F.log_softmax(confidence, dim=-1)                  # (T, Q)
+    ce = -(target * log_p).sum(dim=-1)                          # (T,)
+
+    m = valid_mask.float()
+    denom = m.sum().clamp(min=1.0)
+    loss = (ce * m).sum() / denom
+    return loss, {"heatmap_ce": loss.detach()}
+
+
 def expected_distance_loss(
     sim: torch.Tensor,          # (T, N) similarity, audio frame × strip tile
     pos_tile: torch.Tensor,     # (N,) normalized tile position in [0, 1]

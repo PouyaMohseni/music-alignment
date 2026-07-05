@@ -1,0 +1,40 @@
+seed: 42
+
+# CADP M06 — INR Head (continuous position)
+# Replaces M05's discrete soft-argmax (over a fixed x4-sub-column grid) with
+# an implicit neural representation: any continuous pixel query gets a
+# confidence, so resolution isn't capped by column spacing.
+
+model:
+  mert_dim:         768
+  dinov2_dim:       768
+  hidden_dim:       512
+  embed_dim:        256
+  path_channels:    128
+  attention_heads:  4
+  cond_dim:         64
+  inr_hidden_dim:   256
+  fourier_freqs:    [1, 2, 4, 8, 16, 32]
+  query_resolution_multiplier: 4    # queries at 4x the x4 sub-column grid density
+  # Same O(T_a*N_s^2) axial-attention memory constraint as M05 — see that
+  # model's config comment.
+  max_n_cols:       120
+
+data:
+  processed_root: data/MSMD/processed
+  mert_root:      data/MSMD/mert_emb
+  dinov2_root:    data/MSMD/dinov2_emb
+  fps:            20.0
+
+loss:
+  heatmap_sigma_px: 20.0   # Gaussian width for the INR heatmap target
+
+optim:
+  lr:           3.0e-4
+  weight_decay: 0.0
+  patience:     5
+
+train:
+  max_epochs: 50
+  win_sec:    5.0
+  out_dir:    results/cadp_m06
