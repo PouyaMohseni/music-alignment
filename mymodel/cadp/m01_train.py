@@ -131,6 +131,10 @@ def train(cfg):
                 entropy_weight=cfg.loss.entropy_weight)
             (loss / batch_size).backward()
             losses.append(loss.item())
+            if __import__('os').environ.get('DEBUG_NAN') and (
+                    torch.isnan(loss).any() or torch.isinf(loss).any()):
+                print(f'NAN LOSS at i={i} pid={piece["pid"]} n_cols={piece["d2_feats"].shape[0]} '
+                      f'valid={valid_mask.sum().item()}', flush=True)
             if (i + 1) % batch_size == 0 or i == len(train_pieces) - 1:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
