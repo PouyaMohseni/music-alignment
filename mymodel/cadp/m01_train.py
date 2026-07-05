@@ -103,11 +103,22 @@ def train(cfg):
     wait = 0
     n_chunks = cfg.model.n_audio_chunks
 
+    # Diagnostic (scripts/debug_m01_*.py): stepping the optimizer after every
+    # single piece (effective batch size 1) means each step's gradient points
+    # toward a completely different randomly-resampled window/target, and
+    # that noise swamps the learning signal once real dataset diversity (354
+    # pieces) is added -- confirmed by fixed-window overfit working fine
+    # (up to 50 pieces) while resampled-window training flatlines even at 5
+    # pieces. Gradient accumulation over batch_size pieces per opt.step()
+    # measurably recovers real loss reduction in that diagnostic.
+    batch_size = getattr(cfg.train, 'batch_size', 32)
+
     for epoch in range(1, cfg.train.max_epochs + 1):
         model.train()
         random.shuffle(train_pieces)
         losses = []
-        for piece in train_pieces:
+        opt.zero_grad()
+        for i, piece in enumerate(train_pieces):
             audio_t, score_t, pos_tile, pos_target, valid_mask = \
                 _build_training_sample(piece, n_chunks, cfg.data.fps,
                                        cfg.train.win_sec, device)
@@ -118,11 +129,12 @@ def train(cfg):
                 temperature=cfg.loss.temperature,
                 power=cfg.loss.power,
                 entropy_weight=cfg.loss.entropy_weight)
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
+            (loss / batch_size).backward()
             losses.append(loss.item())
+            if (i + 1) % batch_size == 0 or i == len(train_pieces) - 1:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+                opt.zero_grad()
 
         train_loss = float(np.mean(losses)) if losses else float('nan')
 

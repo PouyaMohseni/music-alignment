@@ -37,4 +37,5 @@ optim:
 train:
   max_epochs: 50
   win_sec:    5.0
+  batch_size: 32   # gradient accumulation -- see m06_train.py comment
   out_dir:    results/cadp_m06

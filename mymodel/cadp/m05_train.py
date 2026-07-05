@@ -137,11 +137,18 @@ def train(cfg):
     best_val = float('inf')
     wait = 0
 
+    # See scripts/debug_m01_batch.py: stepping after every single piece
+    # (effective batch size 1) lets each step's random-window target swamp
+    # the learning signal with noise once real dataset diversity is added.
+    # Gradient accumulation over batch_size pieces per opt.step() fixes it.
+    batch_size = getattr(cfg.train, 'batch_size', 32)
+
     for epoch in range(1, cfg.train.max_epochs + 1):
         model.train()
         random.shuffle(train_pieces)
         losses = []
-        for piece in train_pieces:
+        opt.zero_grad()
+        for i, piece in enumerate(train_pieces):
             audio_t, score_t, pos_target, valid_mask, n_cols, col_offset = _build_training_sample(
                 piece, cfg.data.fps, cfg.train.win_sec, device, cfg.model.max_n_cols)
             pos_subcol = subcol_positions(n_cols, col_stride, col_w, col_offset).to(device)
@@ -153,11 +160,12 @@ def train(cfg):
                 out['logits'], pos_subcol / PIX_SCALE, pos_target / PIX_SCALE, valid_mask,
                 temperature=cfg.loss.temperature, power=cfg.loss.power,
                 entropy_weight=cfg.loss.entropy_weight)
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
+            (loss / batch_size).backward()
             losses.append(loss.item())
+            if (i + 1) % batch_size == 0 or i == len(train_pieces) - 1:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+                opt.zero_grad()
 
         train_loss = float(np.mean(losses)) if losses else float('nan')
 
