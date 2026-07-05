@@ -89,8 +89,20 @@ def main():
 
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument('--mert_root', required=True)
+    pre.add_argument('--cpjku_root', default='third_party/cpjku_unet')
     known, remaining = pre.parse_known_args()
     _MERT_ROOT = known.mert_root
+
+    # audio_conditioned_unet isn't pip-installed in this venv (.venv, not
+    # venv_cpjku310) -- eval_official.main() normally adds cpjku_root to
+    # sys.path itself before importing it, but we need to import it here
+    # first (to register MERTProjector) so that must happen before main() runs.
+    cpjku_root = str(Path(known.cpjku_root).resolve())
+    if cpjku_root not in sys.path:
+        sys.path.insert(0, cpjku_root)
+
+    from mymodel.cpjku_adapter import madmom_compat
+    madmom_compat.patch()
 
     from mymodel.cpjku_adapter import eval_official as _eo
     _eo._patched_load_piece = _patched_load_piece_mert
