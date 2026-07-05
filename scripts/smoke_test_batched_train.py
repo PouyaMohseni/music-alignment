@@ -11,5 +11,6 @@ cfg = OmegaConf.load('configs/cadp_m01.yaml')
 cfg.train.max_epochs = 15
 cfg.train.batch_size = 8
 cfg.train.out_dir = '/scratch/pmohseni/results/cadp_m01_smoketest'
+cfg.data.dinov2_root = '/scratch/pmohseni/dinov2_emb'
 cfg.optim.patience = 100  # disable early stop for this quick check
 train(cfg)
