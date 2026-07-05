@@ -27,7 +27,7 @@ n_chunks = 20
 
 random.shuffle(train_pieces)
 opt.zero_grad()
-for i, piece in enumerate(train_pieces[:64]):
+for i, piece in enumerate(train_pieces):
     audio_t, score_t, pos_tile, pos_target, valid_mask = \
         _build_training_sample(piece, n_chunks, 20.0, 5.0, device)
     out = model(audio_t, score_t)
@@ -39,8 +39,14 @@ for i, piece in enumerate(train_pieces[:64]):
     grad_norm = torch.norm(torch.stack(
         [p.grad.norm() for p in model.parameters() if p.grad is not None]))
     has_nan_grad = any(torch.isnan(p.grad).any() for p in model.parameters() if p.grad is not None)
-    print(f'i={i:3d}  loss={loss.item():.4f}  accumulated_grad_norm={grad_norm.item():.4f}  '
-          f'nan_in_grad={has_nan_grad}', flush=True)
+    has_nan_loss = torch.isnan(loss).any() or torch.isinf(loss).any()
+    if has_nan_grad or has_nan_loss or i % 50 == 0:
+        print(f'i={i:3d}  pid={piece["pid"]}  loss={loss.item()}  '
+              f'accumulated_grad_norm={grad_norm.item()}  '
+              f'nan_in_grad={has_nan_grad}  nan_in_loss={has_nan_loss}', flush=True)
+    if has_nan_grad or has_nan_loss:
+        print('FOUND NaN -- stopping', flush=True)
+        break
 
     if (i + 1) % batch_size == 0:
         pre_clip_norm = grad_norm.item()
