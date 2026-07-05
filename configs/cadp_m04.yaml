@@ -1,0 +1,34 @@
+seed: 42
+
+# CADP M04 — Dense Tokens (no pooling), DTW-decoded
+# Isolates the effect of dense audio+score tokens alone (vs M01's pooled/M03's
+# LSTM-pooled), using the same whole-piece monotonic DTW decode as M01/M03 —
+# comparison against M05 (learned decode) shows how much of the gain is from
+# dense tokens vs. from replacing DTW.
+
+model:
+  mert_dim:    768
+  dinov2_dim:  768
+  hidden_dim:  512
+  embed_dim:   256
+
+data:
+  processed_root: data/MSMD/processed
+  mert_root:      data/MSMD/mert_emb
+  dinov2_root:    data/MSMD/dinov2_emb
+  fps:            20.0
+
+loss:
+  temperature:     0.07
+  power:           1.0
+  entropy_weight:  0.0
+
+optim:
+  lr:           5.0e-4
+  weight_decay: 0.0
+  patience:     5
+
+train:
+  max_epochs: 40
+  win_sec:    5.0
+  out_dir:    results/cadp_m04
