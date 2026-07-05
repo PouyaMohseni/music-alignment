@@ -402,7 +402,16 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     network = ConditionalUNet(net_config)
-    network.load_state_dict(torch.load(param_path, map_location='cpu'))
+    state_dict = torch.load(param_path, map_location='cpu')
+    # B2/B3/B5's auxiliary heads (e.g. _ext_b2_pitch_head) are attached as plain
+    # attributes on the network module during training (so optimizer.add_param_group
+    # sees them), which makes them registered submodules included in state_dict --
+    # but they're irrelevant to the base segmentation forward pass evaluated here.
+    missing, unexpected = network.load_state_dict(state_dict, strict=False)
+    if unexpected:
+        print(f'Ignoring extension-only checkpoint keys: {unexpected}', flush=True)
+    if missing:
+        raise RuntimeError(f'Checkpoint is missing base-network keys: {missing}')
     network.to(device).eval()
     print(f'Loaded {model_label} ({sum(p.numel() for p in network.parameters()):,} params) '
           f'on {device}', flush=True)

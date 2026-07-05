@@ -17,8 +17,10 @@ cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
 source .venv/bin/activate
 
-git submodule update --init third_party/cpjku_unet
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+if [ ! -f third_party/cpjku_unet/network.py ]; then
+    git submodule update --init third_party/cpjku_unet
+fi
+git -C third_party/cpjku_unet checkout ismir-2020
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 CPJKU_FMT=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/cpjku_fmt
