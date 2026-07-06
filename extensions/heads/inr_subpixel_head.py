@@ -82,4 +82,15 @@ def heatmap_inr_loss_2d(confidence, query_offsets_px, gt_offset_px, sigma_px=5.0
     target = target / target.sum(dim=-1, keepdim=True).clamp_min(1e-9)
 
     log_p = F.log_softmax(confidence, dim=-1)
-    return -(target * log_p).sum(dim=-1).mean()
+    cross_entropy = -(target * log_p).sum(dim=-1)
+    # Raw cross-entropy's minimum achievable value is H(target), not 0 -- since
+    # target itself is a spread-out Gaussian (sigma_px=5 over a ~4225-point
+    # query grid), that floor is several nats, not negligible. Subtracting it
+    # turns this into KL(target || p), which is properly >= 0 and -> 0 as p
+    # matches target -- without this, loss can (and did, confirmed in job
+    # 64703458's log) climb for many epochs even as the refiner genuinely
+    # improves, because a sharpening target (smaller gt_offset as the coarse
+    # peak gets more accurate) raises H(target, p) growth faster than the
+    # refiner's own convergence, even though KL is shrinking the whole time.
+    target_entropy = -(target * target.clamp_min(1e-9).log()).sum(dim=-1)
+    return (cross_entropy - target_entropy).mean()

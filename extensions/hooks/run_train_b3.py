@@ -29,7 +29,14 @@ from extensions.losses.b3_callback import b3_aux_loss
 
 import audio_conditioned_unet.dataset as cpjku_dataset
 
-AUX_LOSS_WEIGHT = float(os.environ.get('B3_AUX_LOSS_WEIGHT', '1.0'))
+# weight=1.0 let the INR loss (unbounded cross-entropy over a ~4225-point
+# query grid) dominate the dice loss (~0.1-0.3) in the combined val loss used
+# for best-checkpoint selection, LR scheduling, AND early stopping -- so all
+# three tracked the wrong signal from epoch 0 onward (confirmed: best_model.pt
+# never updated past epoch 0 in job 64703458 despite real precision/recall
+# gains through epoch 30). Lowered so dice dominates model-selection again
+# while the refiner still gets a meaningful gradient.
+AUX_LOSS_WEIGHT = float(os.environ.get('B3_AUX_LOSS_WEIGHT', '0.1'))
 DECODER_STAGE = int(os.environ.get('B3_DECODER_STAGE', '9'))   # decoder_final
 
 cpjku_dataset.iterate_dataset = functools.partial(
