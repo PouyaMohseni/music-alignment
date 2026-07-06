@@ -35,6 +35,21 @@ REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 OUT=/project/def-ichiro/pmohseni/music-alignment/results/cb_ta_ext/B5_dense_contrastive_aux
 mkdir -p "$OUT/runs" "$OUT/params"
 
+# Warm-start from the latest checkpoint if a previous run left one (weights
+# only -- CPJKU's train_model.py has no true resume, so epoch/optimizer/
+# LR-schedule/early-stop state all restart, but training does not start
+# from random init). Same pattern as train_cpjku_paper_msmd_aug.sh.
+PARAM_FLAG=""
+LATEST_CKPT=$(find "$OUT/params" -name "latest_model.pt" -type f -printf '%T@ %p\n' 2>/dev/null \
+              | sort -rn | head -1 | cut -d' ' -f2-)
+if [ -n "$LATEST_CKPT" ]; then
+    echo "Warm-starting from $LATEST_CKPT"
+    PARAM_FLAG="--param_path $LATEST_CKPT"
+else
+    echo "No previous checkpoint found, training from scratch"
+fi
+
+
 echo "=== B5: dense contrastive auxiliary loss (same data/config as A0) ==="
 cd "$REPO/audio_conditioned_unet"
 
@@ -48,7 +63,8 @@ python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_train_b
     --augment \
     --config    configs/msmd_aug.yaml \
     --audio_encoder CBEncoder \
-    --tag B5_dense_contrastive_aux
+    --tag B5_dense_contrastive_aux \
+    $PARAM_FLAG
 
 echo ""
 echo "Training finished at $(date)"
