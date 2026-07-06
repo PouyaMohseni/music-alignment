@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import yaml
 
 from precompute_mert_zenodo import _load_model, encode_wav, resample_emb, MERT_FPS
 
@@ -28,6 +29,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--wav_dir', required=True)
     p.add_argument('--out_dir', required=True)
+    p.add_argument('--split_file', required=True,
+                   help='cpjku_fmt/split_test.yaml -- ground truth for which piece names '
+                        'to encode. A filename heuristic (exclude "_<digits>" suffixed wavs, '
+                        'assuming those are tempo variants) is NOT reliable: some real piece '
+                        'names legitimately end in a digit (e.g. "bwv-1006a_5", '
+                        '"Czerny_Op_821_No_004"), which that heuristic wrongly excluded.')
     p.add_argument('--fps', type=int, default=20)
     p.add_argument('--mert_id', default='m-a-p/MERT-v1-95M')
     a = p.parse_args()
@@ -39,9 +46,11 @@ def main():
     out_dir = Path(a.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Only whole-piece wavs, e.g. "AndreJ__O34__andre-sonatine.wav" -- exclude
-    # the "_1000"-suffixed tempo-scaled wavs also present in this directory.
-    wav_files = sorted(w for w in Path(a.wav_dir).glob('*.wav') if not w.stem.split('_')[-1].isdigit())
+    piece_names = yaml.safe_load(open(a.split_file))['files']
+    wav_files = sorted(Path(a.wav_dir) / f'{name}.wav' for name in piece_names)
+    missing = [w for w in wav_files if not w.exists()]
+    if missing:
+        raise FileNotFoundError(f'{len(missing)} split pieces have no wav: {missing[:5]}')
     print(f'{len(wav_files)} whole-piece wavs to encode', flush=True)
 
     done = skip = fail = 0

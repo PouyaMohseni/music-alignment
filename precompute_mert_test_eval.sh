@@ -18,7 +18,8 @@ source .venv/bin/activate
 export TRANSFORMERS_OFFLINE=1
 
 python scripts/precompute_mert_test_eval.py \
-    --wav_dir data/MSMD/cpjku_fmt/performance \
-    --out_dir /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval
+    --wav_dir    data/MSMD/cpjku_fmt/performance \
+    --split_file data/MSMD/cpjku_fmt/split_test.yaml \
+    --out_dir    /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval
 
 echo "Job finished at $(date)"
