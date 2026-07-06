@@ -29,7 +29,7 @@ CKPT_DIR=$(find results/cb_ta_ext/B1a_mert_swap/params -maxdepth 1 -name "*_B1a_
 echo "Using checkpoint dir: $CKPT_DIR"
 
 python -m mymodel.cpjku_adapter.eval_official_mert \
-    --mert_root   /scratch/pmohseni/mert_emb_zenodo/msmd_test \
+    --mert_root   /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval \
     --cpjku_root  third_party/cpjku_unet \
     --cpjku_data  $CPJKU_FMT \
     --processed   $PROC \

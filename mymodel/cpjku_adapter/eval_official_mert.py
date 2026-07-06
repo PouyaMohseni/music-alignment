@@ -47,7 +47,7 @@ def _patched_load_piece_mert(params):
         score = 1 - resized.astype(np.float32) / 255.
         coords = coords / scale_factor
 
-    emb_path = Path(_MERT_ROOT) / f'{piece_name}_tempo_1000.npy'
+    emb_path = Path(_MERT_ROOT) / f'{piece_name}.npy'
     emb = np.load(emb_path).astype(np.float32)   # (T, 768)
     spec = emb.T                                  # (768, T) -- CPJKU spec convention
     spec = np.pad(spec, ((0, 0), (spec_params['pad'], 0)), mode='constant')
