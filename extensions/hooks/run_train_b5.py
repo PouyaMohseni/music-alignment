@@ -16,6 +16,9 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.join(_THIS_DIR, '..', '..')
 sys.path.insert(0, _PROJECT_ROOT)
 
+from extensions.hooks.lenient_load import patch_lenient_load_state_dict
+patch_lenient_load_state_dict()
+
 from extensions.hooks.iterate_dataset_ext import iterate_dataset_ext
 from extensions.losses.b5_callback import b5_aux_loss
 

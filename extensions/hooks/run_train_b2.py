@@ -21,6 +21,9 @@ sys.path.insert(0, _PROJECT_ROOT)
 from extensions.hooks.pitch_patch import patch_pitch_pipeline
 patch_pitch_pipeline()
 
+from extensions.hooks.lenient_load import patch_lenient_load_state_dict
+patch_lenient_load_state_dict()
+
 from extensions.hooks.iterate_dataset_ext import iterate_dataset_ext
 from extensions.losses.b2_callback import b2_aux_loss
 
