@@ -1,0 +1,32 @@
+seed: 42
+
+# C1 -- audio-visual grounding via cross-attention (see mymodel/c1_visual_grounding/model.py).
+# Same data pipeline, BPTT structure, and dice loss as v11 -- only the
+# network (FiLM-CNN+LSTM -> patch cross-attention) differs.
+
+net:
+  spec_enc:  32     # CBEncoder output dim, same as A0/v11
+  rnn_size:  128
+  rnn_layer: 1
+  d_model:   128    # cross-attention embedding dim
+  n_heads:   4
+  patch_w:   32     # score patch width in scaled-strip pixels (~20-40 patches/strip)
+
+data:
+  processed_root: data/MSMD/processed
+  h_strip:        128
+  w_scale:        4
+  n_mels:         78
+  fps:            20
+  n_frames:       40
+  gt_width:       10
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 1.0e-5
+  patience:     5
+
+train:
+  max_epochs: 100
+  seq_len:    16
+  out_dir:    results/c1_visual_grounding
