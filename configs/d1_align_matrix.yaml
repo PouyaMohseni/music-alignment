@@ -1,0 +1,48 @@
+seed: 42
+
+# D1 -- dense frame x column alignment with global monotonic DTW decode.
+# See D1.md. Two-tower (MERT audio + CNN score) -> similarity matrix, trained
+# with dense per-frame CE + downsampled global soft-DTW, decoded by DTW.
+
+model:
+  d_mert:       768     # MERT-v1-95M hidden dim
+  d_model:      128     # shared embedding dim
+  w_downsample: 4       # score-tower width downsample -> column stride (px in /3 strip)
+  n_ctx_layers: 2       # transformer layers over score columns
+  n_heads:      4
+  temperature:  0.07    # similarity logit temperature
+
+data:
+  processed_root: data/MSMD/processed
+  cpjku_data:     data/MSMD/cpjku_fmt
+  # MERT roots searched in order per piece (whole-piece keyed .npy):
+  mert_roots:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece   # train+val
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval    # test
+  scale_factor:   3     # strip downscale (matches eval_official)
+  spec_params:
+    sample_rate: 22050
+    frame_size:  2048
+    fps:         20
+    pad:         0       # D1 uses raw strip coords/onsets; no CBEncoder left-pad
+    real_perf:   true
+    tempo_factors: [1000]
+    sf_path:     ''
+    gt_width:    10
+
+loss:
+  ce_sigma_cols: 3.0     # Gaussian target width (columns) for per-frame CE
+  dtw_weight:    0.1     # weight on soft-DTW path regularizer (CE-dominant, per B3 lesson)
+  dtw_gamma:     0.1     # soft-DTW softmin temperature
+  dtw_max_t:     200     # downsample matrix to <= this before soft-DTW
+  dtw_max_w:     200
+
+optim:
+  lr:            3.0e-4
+  weight_decay:  1.0e-5
+  patience:      5
+  accum_pieces:  8       # gradient accumulation (pieces per optimizer step)
+
+train:
+  max_epochs: 100
+  out_dir:    results/d1_align_matrix
