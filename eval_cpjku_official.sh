@@ -14,9 +14,14 @@ cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
 source .venv/bin/activate
 
-# Make sure submodule is checked out
-git submodule update --init third_party/cpjku_unet
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+# Make sure submodule is checked out. git -C (not cd/cd-back) so a failure
+# here can't leave the shell in the wrong directory for the rest of the
+# script; skip re-init if already present to avoid racing other concurrently
+# running jobs' own `git submodule update --init` on the same lock file.
+if [ ! -f third_party/cpjku_unet/network.py ]; then
+    git submodule update --init third_party/cpjku_unet
+fi
+git -C third_party/cpjku_unet checkout ismir-2020
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 CPJKU_FMT=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/cpjku_fmt
