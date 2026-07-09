@@ -1,0 +1,43 @@
+seed: 42
+
+# D2 -- D1's model/decode + MIDI-privileged training signals (LUPI). MIDI is
+# used ONLY to build training targets (repeat-aware soft CE) and a training-
+# only distillation target (MidiEncoder); eval.py is byte-identical to D1's.
+# See D2.md.
+
+model:
+  d_mert:       768
+  d_model:      128
+  w_downsample: 4
+  n_ctx_layers: 2
+  n_heads:      4
+  temperature:  0.07
+
+data:
+  processed_root: data/MSMD/processed
+  cpjku_data:     data/MSMD/cpjku_fmt
+  mert_roots:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval
+  scale_factor: 3
+  repeat_k:     5       # MIDI pitch-interval n-gram window (notes) for repeat detection
+
+loss:
+  ce_sigma_cols:      3.0
+  repeat_alt_weight:  0.3    # soft-label weight on MIDI-discovered repeat alternates
+  dtw_weight:         0.1
+  dtw_gamma:          0.1
+  dtw_max_t:          200
+  dtw_max_w:          200
+  distill_weight:     0.2    # MIDI->audio-tower distillation weight (train-only)
+  distill_temperature: 0.1
+
+optim:
+  lr:            3.0e-4
+  weight_decay:  1.0e-5
+  patience:      5
+  accum_pieces:  8
+
+train:
+  max_epochs: 100
+  out_dir:    results/d2_midi_privileged
