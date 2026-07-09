@@ -22,8 +22,10 @@ echo "Job started on $(hostname) at $(date)"
 nvidia-smi
 
 cd /project/def-ichiro/pmohseni/music-alignment
-git submodule update --init third_party/cpjku_unet || true
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+if [ ! -f third_party/cpjku_unet/network.py ]; then
+    git submodule update --init third_party/cpjku_unet || true
+fi
+git -C third_party/cpjku_unet checkout ismir-2020
 
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate

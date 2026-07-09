@@ -29,8 +29,10 @@ cd /project/def-ichiro/pmohseni/music-alignment
 
 # Ensure submodule is on right branch (|| true: submodule already init'd; git lock
 # fails when /project is at file-count quota, but checkout still works fine)
-git submodule update --init third_party/cpjku_unet || true
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+if [ ! -f third_party/cpjku_unet/network.py ]; then
+    git submodule update --init third_party/cpjku_unet || true
+fi
+git -C third_party/cpjku_unet checkout ismir-2020
 
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate

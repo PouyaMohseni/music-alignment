@@ -26,8 +26,10 @@ mkdir -p results/cpjku_native
 module load gcc opencv python/3.10
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
-git submodule update --init third_party/cpjku_unet
-cd third_party/cpjku_unet && git checkout ismir-2020 && cd ../..
+if [ ! -f third_party/cpjku_unet/network.py ]; then
+    git submodule update --init third_party/cpjku_unet
+fi
+git -C third_party/cpjku_unet checkout ismir-2020
 export PYTHONPATH="$(pwd)/third_party/cpjku_unet:${PYTHONPATH:-}"
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
