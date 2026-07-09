@@ -29,7 +29,7 @@ FPS = 20
 THRESHOLDS = [0.05, 0.1, 0.5, 1.0, 5.0]
 
 
-def eval_piece(model, piece, device, online=False, band_frac=0.15):
+def eval_piece(model, piece, device, online=False, band_frac=0.05):
     """Returns list of per-onset timing errors (seconds)."""
     with torch.no_grad():
         S = model(piece.mert.to(device), piece.strip.to(device))   # (T, W_col)
@@ -58,7 +58,7 @@ def main():
     ap.add_argument('--checkpoint', required=True)
     ap.add_argument('--split', default='test')
     ap.add_argument('--online', action='store_true', help='causal OLTW decode instead of offline DTW')
-    ap.add_argument('--band_frac', type=float, default=0.15,
+    ap.add_argument('--band_frac', type=float, default=0.05,
                     help='Sakoe-Chiba band as fraction of W for offline DTW (None-like: pass -1 to disable)')
     ap.add_argument('--limit', type=int, default=None)
     a = ap.parse_args()

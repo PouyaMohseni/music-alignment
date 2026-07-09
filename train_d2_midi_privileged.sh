@@ -37,7 +37,7 @@ echo "Training finished at $(date). Running eval (offline DTW, banded)..."
 python -m mymodel.d2_midi_privileged.eval \
     --config configs/d2_midi_privileged.yaml \
     --checkpoint results/d2_midi_privileged/best_model.pt \
-    --split test --band_frac 0.15
+    --split test --band_frac 0.05
 
 echo ""
 echo "=== also evaluating causal OLTW decode ==="
