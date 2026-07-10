@@ -1,0 +1,58 @@
+seed: 42
+
+# E4 -- D2 extended to multi-tempo whole-piece training data. Same model/loss
+# as configs/d2_midi_privileged.yaml; only the `data` block differs (adds
+# tempo_factors + the multitempo MERT/render directories the new tempo
+# variants live under). See mymodel/d2_midi_privileged/data_multitempo.py.
+#
+# PREREQUISITE (not yet run at full scale -- see this run's report):
+#   1. scripts/render_multitempo_wholepiece.py --tempo_factors 750 1250 \
+#        --performance_dir data/MSMD/cpjku_fmt/performance \
+#        --out_dir <multitempo_render_dir>  (produces <piece>_tempo_<T>.wav/.mid)
+#   2. scripts/precompute_mert_test_eval.py-style MERT encoding of those wavs
+#      into <mert_roots_multitempo> as <piece>_tempo_<T>.npy
+# Full 354-train-piece x 2-tempo scale measured at ~10 min/piece on CPU (see
+# report) -- MUST run on GPU (like every other MERT precompute in this
+# project) or this alone would take days; not yet done, config points at
+# placeholder paths until that job is run.
+
+model:
+  d_mert:       768
+  d_model:      128
+  w_downsample: 4
+  n_ctx_layers: 2
+  n_heads:      4
+  temperature:  0.07
+
+data:
+  processed_root: data/MSMD/processed
+  cpjku_data:     data/MSMD/cpjku_fmt
+  mert_roots:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval
+  mert_roots_multitempo:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece_multitempo
+  multitempo_render_dir: /scratch/pmohseni/cpjku_fmt_multitempo
+  tempo_factors: [750, 1000, 1250]
+  scale_factor: 3
+  repeat_k:     5
+
+loss:
+  ce_sigma_cols:      3.0
+  repeat_alt_weight:  0.3
+  dtw_weight:         0.1
+  dtw_gamma:          0.1
+  dtw_max_t:          200
+  dtw_max_w:          200
+  distill_weight:     0.2
+  distill_temperature: 0.1
+
+optim:
+  lr:            3.0e-4
+  weight_decay:  1.0e-5
+  patience:      5
+  accum_pieces:  8
+
+train:
+  max_epochs: 100
+  out_dir:    results/d2_midi_privileged_multitempo
