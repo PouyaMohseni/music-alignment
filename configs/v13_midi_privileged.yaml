@@ -1,0 +1,42 @@
+seed: 42
+
+# E2/E3: v13 architecture (CPJKU ConditionalUNet + Dice + full-strip BPTT,
+# MERTProjector audio encoder) + two MIDI-privileged train-time-only signals:
+# repeat-aware GT (via noteheads.npz's onset/pitch/strip_x, no separate MIDI
+# parse) and MIDI->audio distillation (MidiEncoder, discarded at inference).
+# See mymodel/v13_midi_privileged/train.py.
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    MERTProjector
+  spec_enc:         32
+
+data:
+  processed_root: data/MSMD/processed
+  mert_emb_root:  data/MSMD/mert_emb
+  h_strip:        128
+  w_scale:        4
+  fps:            20
+  n_mels:         768
+  n_frames:       1
+  gt_width:       10
+
+loss:
+  repeat_k:            5      # MIDI pitch-interval n-gram window (notes) for repeat detection
+  repeat_alt_weight:   0.3    # GT stripe weight at repeat-alternate columns (0 disables)
+  distill_weight:      0.2    # MIDI->audio distillation weight (train-only)
+
+optim:
+  lr:           1.0e-4
+  weight_decay: 1.0e-5
+  patience:     5
+
+train:
+  max_epochs: 100
+  seq_len:    16
+  out_dir:    results/v13_midi_privileged
