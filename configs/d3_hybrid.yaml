@@ -1,0 +1,47 @@
+seed: 42
+
+# D3 -- D1/D2's two-tower+DTW architecture and MIDI-privileged training
+# (repeat-aware CE + distillation), but AudioTower replaced by v13's trained
+# MERTProjector (warm-started, not scratch -- isolates "does a stronger audio
+# encoder compound with D2's decode/training-signal advantage" as the only
+# variable under test). See mymodel/d3_hybrid/model.py's module docstring for
+# why v13's encoder (not v14's windowed BiLSTM) was chosen.
+
+model:
+  d_mert:       768
+  spec_enc:     32     # v13 MERTProjector's native output dim (must match its trained weights)
+  d_model:      128
+  w_downsample: 4
+  n_ctx_layers: 2
+  n_heads:      4
+  temperature:  0.07
+  warm_start_ckpt: /scratch/pmohseni/results/v13_mert_linear/best_model.pt
+
+data:
+  processed_root: data/MSMD/processed
+  cpjku_data:     data/MSMD/cpjku_fmt
+  mert_roots:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval
+  scale_factor: 3
+  repeat_k:     5
+
+loss:
+  ce_sigma_cols:      3.0
+  repeat_alt_weight:  0.3
+  dtw_weight:         0.1
+  dtw_gamma:          0.1
+  dtw_max_t:          200
+  dtw_max_w:          200
+  distill_weight:     0.2
+  distill_temperature: 0.1
+
+optim:
+  lr:            3.0e-4
+  weight_decay:  1.0e-5
+  patience:      5
+  accum_pieces:  8
+
+train:
+  max_epochs: 100
+  out_dir:    results/d3_hybrid
