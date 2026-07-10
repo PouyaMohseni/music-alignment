@@ -23,18 +23,27 @@ sys.path.insert(0, _ROOT)
 
 from mymodel.d1_align_matrix.model import D1Model
 from mymodel.d1_align_matrix import data as d1data
-from mymodel.d1_align_matrix.dtw import dtw_decode, oltw_decode
+from mymodel.d1_align_matrix.dtw import dtw_decode, oltw_decode, particle_filter_decode
 
 FPS = 20
 THRESHOLDS = [0.05, 0.1, 0.5, 1.0, 5.0]
 
 
-def eval_piece(model, piece, device, online=False, band_frac=0.05):
-    """Returns list of per-onset timing errors (seconds)."""
+def eval_piece(model, piece, device, decoder='dtw', band_frac=0.05,
+               pf_process_noise_std=1.0, pf_init_std=2.0):
+    """Returns list of per-onset timing errors (seconds). decoder: 'dtw'
+    (offline, primary), 'oltw' (causal, greedy), 'particle_filter' (causal,
+    Bayesian -- see dtw.py's particle_filter_decode)."""
     with torch.no_grad():
         S = model(piece.mert.to(device), piece.strip.to(device))   # (T, W_col)
     S_np = S.float().cpu().numpy()
-    path_cols = oltw_decode(S_np) if online else dtw_decode(S_np, band_frac=band_frac)   # (T,)
+    if decoder == 'oltw':
+        path_cols = oltw_decode(S_np)
+    elif decoder == 'particle_filter':
+        path_cols = particle_filter_decode(S_np, process_noise_std=pf_process_noise_std,
+                                           init_std=pf_init_std)
+    else:
+        path_cols = dtw_decode(S_np, band_frac=band_frac)
     wd = piece.w_downsample
     diffs = []
     for f in piece.onset_frames:
@@ -57,12 +66,19 @@ def main():
     ap.add_argument('--config', default='configs/d1_align_matrix.yaml')
     ap.add_argument('--checkpoint', required=True)
     ap.add_argument('--split', default='test')
-    ap.add_argument('--online', action='store_true', help='causal OLTW decode instead of offline DTW')
+    ap.add_argument('--online', action='store_true',
+                    help='causal OLTW (greedy) decode instead of offline DTW -- deprecated '
+                         'alias for --decoder oltw, kept for existing scripts')
+    ap.add_argument('--decoder', default=None, choices=['dtw', 'oltw', 'particle_filter'],
+                    help='overrides --online; default dtw (offline, primary)')
     ap.add_argument('--band_frac', type=float, default=0.05,
                     help='Sakoe-Chiba band as fraction of W for offline DTW (None-like: pass -1 to disable)')
+    ap.add_argument('--pf_process_noise_std', type=float, default=3.0)
+    ap.add_argument('--pf_init_std', type=float, default=2.0)
     ap.add_argument('--limit', type=int, default=None)
     a = ap.parse_args()
     band_frac = None if a.band_frac is not None and a.band_frac < 0 else a.band_frac
+    decoder = a.decoder if a.decoder is not None else ('oltw' if a.online else 'dtw')
 
     cfg = yaml.safe_load(open(a.config))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -78,12 +94,17 @@ def main():
     pieces = d1data.load_split(a.split, dc['processed_root'], dc['cpjku_data'],
                                dc['mert_roots'], dc['scale_factor'],
                                cfg['model']['w_downsample'], limit=a.limit)
-    decoder = 'OLTW (causal/online)' if a.online else f'DTW (offline, band_frac={band_frac})'
-    print(f'Decoding with {decoder} over {len(pieces)} pieces', flush=True)
+    decoder_label = {'dtw': f'DTW (offline, band_frac={band_frac})',
+                     'oltw': 'OLTW (causal/online, greedy)',
+                     'particle_filter': f'particle filter (causal/online, '
+                                        f'process_noise_std={a.pf_process_noise_std}, '
+                                        f'init_std={a.pf_init_std})'}[decoder]
+    print(f'Decoding with {decoder_label} over {len(pieces)} pieces', flush=True)
 
     all_diffs = []
     for k, piece in enumerate(pieces):
-        d = eval_piece(model, piece, device, online=a.online, band_frac=band_frac)
+        d = eval_piece(model, piece, device, decoder=decoder, band_frac=band_frac,
+                       pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std)
         all_diffs.extend(d)
         if (k + 1) % 10 == 0:
             arr = np.array(all_diffs)
@@ -91,7 +112,7 @@ def main():
                   f'{100.0*(arr <= 0.5).mean():.1f}%', flush=True)
 
     arr = np.array(all_diffs)
-    print(f'\n=== D1 ({decoder}) on MSMD {a.split} ({len(pieces)} pieces) ===', flush=True)
+    print(f'\n=== D1 ({decoder_label}) on MSMD {a.split} ({len(pieces)} pieces) ===', flush=True)
     for th in THRESHOLDS:
         print(f'  <= {th}s: {100.0*(arr <= th).mean():.1f}%', flush=True)
     print(f'  mean error:   {arr.mean():.3f}s', flush=True)
