@@ -101,7 +101,7 @@ def _fuse(heatmaps_list, weights, fusion: str) -> np.ndarray:
 @torch.no_grad()
 def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: str,
               decoders=('original', 'offline_dtw'), fusion: str = 'mean', dtw_band_frac: float = 0.05,
-              pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0,
+              pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0, snap_frac: float = 0.1,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
     weights = weights or [1.0 / len(names)] * len(names)
@@ -183,6 +183,12 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                     pred_x_sc['offline_dtw'] = _decode_offline_dtw(marginals, dtw_band_frac)
                 if 'particle_filter' in decoders:
                     pred_x_sc['particle_filter'] = _decode_particle_filter(marginals, pf_process_noise_std, pf_init_std)
+                if 'hybrid_snap' in decoders:
+                    dtw_path = pred_x_sc.get('offline_dtw')
+                    if dtw_path is None:
+                        dtw_path = _decode_offline_dtw(marginals, dtw_band_frac)
+                    diff = np.abs(pred_x_sc_orig - dtw_path)
+                    pred_x_sc['hybrid_snap'] = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_orig)
 
                 gt_onset = notes['onset_sec']
                 gt_strip_x = notes['strip_x']
@@ -253,11 +259,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--models', default='v13,v14,v15', help='comma-separated names from MODEL_REGISTRY')
     p.add_argument('--weights', default=None, help='comma-separated weights, must sum to 1 (default: uniform)')
-    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw,particle_filter')
+    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw,particle_filter,hybrid_snap')
     p.add_argument('--fusion', default='mean', choices=['mean', 'median', 'max'])
     p.add_argument('--dtw_band_frac', type=float, default=0.05)
     p.add_argument('--pf_process_noise_std', type=float, default=3.0)
     p.add_argument('--pf_init_std', type=float, default=2.0)
+    p.add_argument('--snap_frac', type=float, default=0.1, help='hybrid_snap: fraction of W_sc disagreement (vs offline_dtw) that triggers a snap')
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -271,7 +278,7 @@ def main():
     eval_split(names, weights, a.processed, a.mert_emb_root, a.split,
               decoders=decoders, fusion=a.fusion, dtw_band_frac=a.dtw_band_frac,
               pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std,
-              out_dir=a.out_dir, limit=a.limit, device=a.device)
+              snap_frac=a.snap_frac, out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
 if __name__ == '__main__':
