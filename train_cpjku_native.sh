@@ -26,7 +26,7 @@ mkdir -p results/cpjku_native
 module load gcc opencv python/3.10
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
-if [ ! -f third_party/cpjku_unet/network.py ]; then
+if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
     git submodule update --init third_party/cpjku_unet
 fi
 git -C third_party/cpjku_unet checkout ismir-2020

@@ -23,7 +23,7 @@ module load gcc opencv
 source .venv/bin/activate
 
 # Submodule (their repo) + correct branch.
-if [ ! -f third_party/cpjku_unet/network.py ]; then
+if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
     git submodule update --init third_party/cpjku_unet
 fi
 git -C third_party/cpjku_unet checkout ismir-2020

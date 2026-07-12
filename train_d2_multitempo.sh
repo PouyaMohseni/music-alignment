@@ -20,7 +20,7 @@ nvidia-smi
 
 cd /project/def-ichiro/pmohseni/music-alignment
 mkdir -p results/d2_midi_privileged_multitempo
-if [ ! -f third_party/cpjku_unet/network.py ]; then
+if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
     git submodule update --init third_party/cpjku_unet || true
 fi
 git -C third_party/cpjku_unet checkout ismir-2020
