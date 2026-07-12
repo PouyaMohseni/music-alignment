@@ -83,6 +83,82 @@ def _decode_particle_filter(marginals: np.ndarray, process_noise_std: float = 3.
     return out
 
 
+def _decode_confidence_velocity(marginals: np.ndarray, conf_window: int = 5,
+                                vel_alpha: float = 0.3, conf_gate: float = 0.3) -> np.ndarray:
+    """F5 -- confidence-gated velocity-prior decode.
+
+    Per frame, blend the audio observation (local center-of-mass around the
+    marginal's peak) with a temporal prior (previous position + velocity),
+    weighted by how CONCENTRATED the marginal is around its peak:
+
+        confidence c = (mass within +-conf_window of argmax) / total mass
+        x[t] = c * x_obs + (1 - c) * (x[t-1] + v)
+
+    Both failure clusters produce a low-concentration marginal -- repeat
+    ambiguity (mass split across two peaks) and sparse audio (flat marginal
+    with no dominant peak) -- so both automatically defer to the velocity
+    prior, while a sharp unimodal peak (well-tracked frames) yields c~=1 and
+    reduces to the raw decode (no precision loss on easy pieces).
+
+    Velocity v is an EMA of confident frame-to-frame steps, seeded from the
+    global average scroll rate (W-1)/(T-1) so that even a run of zero
+    confident frames (e.g. a long Satie sustain) extrapolates at roughly the
+    right tempo instead of stalling.
+
+    conf_gate acts as a FLOOR: below it the marginal is treated as pure noise
+    (a flat sustain's argmax is meaningless and would otherwise slowly drag
+    the estimate toward column 0), so the effective blend weight is
+    rescaled c_eff = max(0, (c - gate) / (1 - gate)). Above the gate the
+    blend is smooth; below it the frame is pure velocity extrapolation, and
+    velocity is only updated on above-gate frames so noise never corrupts it.
+    """
+    eps = 1e-6
+    T, W = marginals.shape
+    x_est = np.zeros(T, dtype=np.float64)
+    avg_vel = (W - 1) / max(T - 1, 1)
+
+    def local_com(m):
+        tot = m.sum()
+        if tot < eps:
+            return None, 0.0
+        peak = int(np.argmax(m))
+        lo, hi = max(0, peak - conf_window), min(W, peak + conf_window + 1)
+        local_mass = m[lo:hi].sum()
+        xs = np.arange(lo, hi, dtype=np.float64)
+        x_obs = float((xs * m[lo:hi]).sum() / local_mass)
+        return x_obs, float(local_mass / tot)
+
+    x0, c0 = local_com(marginals[0])
+    x_est[0] = x0 if x0 is not None else 0.0
+    v = avg_vel
+    denom = max(1.0 - conf_gate, eps)
+    last_conf_t, last_conf_x = (0, x_est[0]) if c0 >= conf_gate else (None, None)
+    for t in range(1, T):
+        x_obs, c = local_com(marginals[t])
+        x_prior = x_est[t - 1] + v
+        c_eff = max(0.0, (c - conf_gate) / denom)
+        if x_obs is None or c_eff <= 0.0:
+            x_est[t] = x_prior
+        else:
+            x_est[t] = c_eff * x_obs + (1.0 - c_eff) * x_prior
+        if c >= conf_gate:
+            # Velocity from spacing between CONSECUTIVE confident observations,
+            # divided by the frame gap -- so a big one-frame correction after a
+            # sparse gap is NOT misread as high velocity (which would explode).
+            if last_conf_t is not None and t > last_conf_t:
+                v_obs = (x_obs - last_conf_x) / (t - last_conf_t)
+                v = vel_alpha * v_obs + (1.0 - vel_alpha) * v
+            last_conf_t, last_conf_x = t, x_obs
+    return x_est
+
+
+def _parse_cv_name(dname: str):
+    """Parse 'cv_w5_g0.3' -> (conf_window=5, conf_gate=0.3)."""
+    body = dname[len('cv_'):]
+    w_part, g_part = body.split('_g')
+    return int(w_part[1:]), float(g_part)
+
+
 def _fuse(heatmaps_list, weights, fusion: str) -> np.ndarray:
     """heatmaps_list: list of (H, W_sc) arrays, one per model, for a single frame."""
     if fusion == 'mean':
@@ -102,6 +178,7 @@ def _fuse(heatmaps_list, weights, fusion: str) -> np.ndarray:
 def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: str,
               decoders=('original', 'offline_dtw'), fusion: str = 'mean', dtw_band_frac: float = 0.05,
               pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0, snap_frac: float = 0.1,
+              cv_vel_alpha: float = 0.3,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
     weights = weights or [1.0 / len(names)] * len(names)
@@ -189,6 +266,13 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                         dtw_path = _decode_offline_dtw(marginals, dtw_band_frac)
                     diff = np.abs(pred_x_sc_orig - dtw_path)
                     pred_x_sc['hybrid_snap'] = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_orig)
+                # F5 confidence-velocity decode: any decoder named cv_w<window>_g<gate>
+                # is decoded from the SAME marginals in one pass (grid sweep, cheap).
+                for dname in decoders:
+                    if dname.startswith('cv_'):
+                        w, g = _parse_cv_name(dname)
+                        pred_x_sc[dname] = _decode_confidence_velocity(
+                            marginals, conf_window=w, vel_alpha=cv_vel_alpha, conf_gate=g)
 
                 gt_onset = notes['onset_sec']
                 gt_strip_x = notes['strip_x']
@@ -265,6 +349,7 @@ def main():
     p.add_argument('--pf_process_noise_std', type=float, default=3.0)
     p.add_argument('--pf_init_std', type=float, default=2.0)
     p.add_argument('--snap_frac', type=float, default=0.1, help='hybrid_snap: fraction of W_sc disagreement (vs offline_dtw) that triggers a snap')
+    p.add_argument('--cv_vel_alpha', type=float, default=0.3, help='confidence-velocity (cv_w<W>_g<G>): EMA weight for velocity updates')
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -278,7 +363,8 @@ def main():
     eval_split(names, weights, a.processed, a.mert_emb_root, a.split,
               decoders=decoders, fusion=a.fusion, dtw_band_frac=a.dtw_band_frac,
               pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std,
-              snap_frac=a.snap_frac, out_dir=a.out_dir, limit=a.limit, device=a.device)
+              snap_frac=a.snap_frac, cv_vel_alpha=a.cv_vel_alpha,
+              out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
 if __name__ == '__main__':
