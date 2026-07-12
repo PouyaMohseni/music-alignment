@@ -41,6 +41,7 @@ from mymodel.v11_cpjku_fullstrip.data import load_strip_scaled
 from mymodel.shared.metrics import alignment_metrics, henkel_metrics
 from mymodel.d1_align_matrix.dtw import dtw_decode
 from extensions.decode.particle_filter import ParticleFilterXTracker
+from mymodel.v13_midi_privileged.repeat_gt import build_repeat_alt_cols
 
 MODEL_REGISTRY = {
     'v13':      ('/scratch/pmohseni/results/v13_mert_linear/best_model.pt', 'configs/v13_mert_linear.yaml'),
@@ -152,6 +153,76 @@ def _decode_confidence_velocity(marginals: np.ndarray, conf_window: int = 5,
     return x_est
 
 
+def _build_repeat_group_lookup(col_alternates: dict, radius: float):
+    """col_alternates: {col: [alt_cols]} from build_repeat_alt_cols -- a
+    repeat-equivalence graph derived purely from the score's own pitch-interval
+    structure (transposition-invariant n-gram matching), no ground-truth
+    position or audio info involved. Same information a performer reading the
+    printed score would have (repeat signs, da capo, recurring phrases).
+
+    Returns a function query_col -> [candidate cols] (the repeat GROUP
+    containing the nearest known repeat-ambiguous column within `radius`), or
+    None if no repeat structure exists near query_col."""
+    if not col_alternates:
+        return None
+    keys = np.array(sorted(col_alternates.keys()), dtype=np.int64)
+
+    def nearest_group(query_col):
+        idx = np.searchsorted(keys, query_col)
+        cand_idx = [i for i in (idx - 1, idx) if 0 <= i < len(keys)]
+        if not cand_idx:
+            return None
+        best_key = min((int(keys[i]) for i in cand_idx), key=lambda k: abs(k - query_col))
+        if abs(best_key - query_col) > radius:
+            return None
+        return [best_key] + col_alternates[best_key]
+
+    return nearest_group
+
+
+def _decode_repeat_graph_snap(base_path: np.ndarray, col_alternates: dict, radius: float = 8.0,
+                              window: int = 5) -> np.ndarray:
+    """base_path: (T,) an already-decoded trajectory in W_sc column space
+    (e.g. hybrid_snap's output -- this is a REFINEMENT stacked on top, not a
+    replacement, so it inherits F4's already-confirmed precision/drift-rescue
+    trade rather than re-deriving an observation estimator from scratch --
+    the mistake that sank F5).
+
+    At each frame within `radius` columns of a KNOWN repeat-ambiguous score
+    location, snap to whichever member of that repeat group is closest to
+    the MEDIAN of the last `window` RAW base-path frames (not the corrected
+    output -- comparing against the corrected output creates a self-
+    reinforcing absorbing state: once locked onto one repeat instance it can
+    never recognize a genuine, sustained transition to the other, since
+    "closest to prev" always favors whichever instance was chosen last, even
+    against overwhelming contrary evidence. Using a windowed vote over the
+    untouched base path instead means an isolated single-frame flicker gets
+    corrected, while several consecutive frames genuinely agreeing on a
+    transition are still allowed to flip -- at the cost of `window` frames of
+    recognition lag, an honest trade rather than permanent lock-in.
+
+    No windowed observation estimator, no velocity model -- unlike F5, this
+    never touches frames outside a known repeat-equivalence group, and never
+    invents a position the base decoder didn't already produce for some
+    frame (it only picks AMONG graph-confirmed candidates)."""
+    lookup = _build_repeat_group_lookup(col_alternates, radius)
+    out = base_path.copy()
+    if lookup is None:
+        return out
+    T = len(base_path)
+    for t in range(T):
+        group = lookup(base_path[t])
+        if group is None:
+            continue
+        lo = max(0, t - window)
+        recent = base_path[lo:t]
+        if len(recent) == 0:
+            continue
+        ref = float(np.median(recent))
+        out[t] = float(min(group, key=lambda c: abs(c - ref)))
+    return out
+
+
 def _parse_cv_name(dname: str):
     """Parse 'cv_w5_g0.3' -> (conf_window=5, conf_gate=0.3)."""
     body = dname[len('cv_'):]
@@ -178,7 +249,7 @@ def _fuse(heatmaps_list, weights, fusion: str) -> np.ndarray:
 def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: str,
               decoders=('original', 'offline_dtw'), fusion: str = 'mean', dtw_band_frac: float = 0.05,
               pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0, snap_frac: float = 0.1,
-              cv_vel_alpha: float = 0.3,
+              cv_vel_alpha: float = 0.3, repeat_graph_radius: float = 8.0, repeat_graph_window: int = 5,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
     weights = weights or [1.0 / len(names)] * len(names)
@@ -273,6 +344,16 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                         w, g = _parse_cv_name(dname)
                         pred_x_sc[dname] = _decode_confidence_velocity(
                             marginals, conf_window=w, vel_alpha=cv_vel_alpha, conf_gate=g)
+                if 'repeat_graph_snap' in decoders:
+                    base = pred_x_sc.get('hybrid_snap')
+                    if base is None:
+                        dtw_path = pred_x_sc.get('offline_dtw') or _decode_offline_dtw(marginals, dtw_band_frac)
+                        diff = np.abs(pred_x_sc_orig - dtw_path)
+                        base = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_orig)
+                    col_alt = build_repeat_alt_cols(notes['onset_sec'], notes['midi_pitch'],
+                                                    notes['strip_x'], w_scale, fps=fps)
+                    pred_x_sc['repeat_graph_snap'] = _decode_repeat_graph_snap(
+                        base, col_alt, radius=repeat_graph_radius, window=repeat_graph_window)
 
                 gt_onset = notes['onset_sec']
                 gt_strip_x = notes['strip_x']
@@ -350,6 +431,8 @@ def main():
     p.add_argument('--pf_init_std', type=float, default=2.0)
     p.add_argument('--snap_frac', type=float, default=0.1, help='hybrid_snap: fraction of W_sc disagreement (vs offline_dtw) that triggers a snap')
     p.add_argument('--cv_vel_alpha', type=float, default=0.3, help='confidence-velocity (cv_w<W>_g<G>): EMA weight for velocity updates')
+    p.add_argument('--repeat_graph_radius', type=float, default=8.0, help='repeat_graph_snap: max column distance (W_sc space) to a known repeat-ambiguous column')
+    p.add_argument('--repeat_graph_window', type=int, default=5, help='repeat_graph_snap: frames of raw-path history to majority-vote over before snapping')
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -364,6 +447,7 @@ def main():
               decoders=decoders, fusion=a.fusion, dtw_band_frac=a.dtw_band_frac,
               pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std,
               snap_frac=a.snap_frac, cv_vel_alpha=a.cv_vel_alpha,
+              repeat_graph_radius=a.repeat_graph_radius, repeat_graph_window=a.repeat_graph_window,
               out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
