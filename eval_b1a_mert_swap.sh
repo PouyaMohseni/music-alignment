@@ -17,10 +17,14 @@ cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
 source .venv/bin/activate
 
-if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
-    git submodule update --init third_party/cpjku_unet
-fi
-git -C third_party/cpjku_unet checkout ismir-2020
+SETUP_LOCK=/project/def-ichiro/pmohseni/music-alignment/.cpjku_submodule_setup.flock
+(
+    flock -w 120 200
+    if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
+        git submodule update --init third_party/cpjku_unet || true
+    fi
+    git -C third_party/cpjku_unet checkout ismir-2020
+) 200>"$SETUP_LOCK"
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 CPJKU_FMT=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/cpjku_fmt

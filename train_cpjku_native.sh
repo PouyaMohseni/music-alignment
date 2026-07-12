@@ -26,10 +26,14 @@ mkdir -p results/cpjku_native
 module load gcc opencv python/3.10
 source /scratch/pmohseni/venv_cpjku310/bin/activate
 
-if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
-    git submodule update --init third_party/cpjku_unet
-fi
-git -C third_party/cpjku_unet checkout ismir-2020
+SETUP_LOCK=/project/def-ichiro/pmohseni/music-alignment/.cpjku_submodule_setup.flock
+(
+    flock -w 120 200
+    if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/network.py ]; then
+        git submodule update --init third_party/cpjku_unet || true
+    fi
+    git -C third_party/cpjku_unet checkout ismir-2020
+) 200>"$SETUP_LOCK"
 export PYTHONPATH="$(pwd)/third_party/cpjku_unet:${PYTHONPATH:-}"
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
