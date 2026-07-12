@@ -1,4 +1,4 @@
-"""F3 -- extends F2's zero-retrain heatmap ensemble two ways at once:
+"""F3 -- extends F2's zero-retrain heatmap ensemble several ways at once:
 
 1. Optional 4th member: v13_midi_privileged (E2/E3's checkpoint) shares
    identical strip geometry (h_strip=128, w_scale=4, fps=20) with v13/v14/v15
@@ -6,16 +6,26 @@
    solo eval: 49.5% pct@0.5s at ~epoch 5-6). Testing whether folding it in
    (down-weighted) helps or hurts the F2 ensemble.
 
-2. Offline-DTW decode on the ensemble-averaged column marginals, on top of
-   the existing threshold+CoM decode -- both computed from the SAME forward
-   pass per model-set (collect marginals once, decode 2 ways), mirroring
-   v13_mert_unet/eval_particle_filter.py's E1 pattern. E1 found DTW decode
-   hurt pct@0.5s but helped mean/median error for a converged SINGLE model;
-   testing whether that trade still holds once heatmaps are pre-averaged
-   across models (which should already reduce per-frame noise).
+2. Offline-DTW / particle-filter decode on the ensemble-averaged column
+   marginals, on top of the existing threshold+CoM decode -- all computed
+   from the SAME forward pass per model-set (collect marginals once, decode
+   N ways), mirroring v13_mert_unet/eval_particle_filter.py's E1 pattern. E1
+   found DTW decode hurt pct@0.5s but helped mean/median error for a
+   converged SINGLE model; testing whether that trade still holds once
+   heatmaps are pre-averaged across models (which should already reduce
+   per-frame noise).
+
+3. Fusion method: mean (F2's original), median (robust to one member being
+   confidently wrong on a frame), or max (confident-vote -- if any member is
+   sure, trust it).
+
+4. Pairwise subsets (e.g. --models v13,v14) to check which member pairs
+   carry the ensemble's gain, diagnostic for where variance reduction comes
+   from.
 
     python -m mymodel.f3_ensemble_decode.eval --models v13,v14,v15 --split test
     python -m mymodel.f3_ensemble_decode.eval --models v13,v14,v15,v13_midi --weights 0.3,0.3,0.3,0.1 --split test
+    python -m mymodel.f3_ensemble_decode.eval --models v13,v14 --fusion median --split test
 """
 from __future__ import annotations
 import argparse, json
@@ -30,6 +40,7 @@ from mymodel.v13_mert_unet.eval import _build_perf_frame
 from mymodel.v11_cpjku_fullstrip.data import load_strip_scaled
 from mymodel.shared.metrics import alignment_metrics, henkel_metrics
 from mymodel.d1_align_matrix.dtw import dtw_decode
+from extensions.decode.particle_filter import ParticleFilterXTracker
 
 MODEL_REGISTRY = {
     'v13':      ('/scratch/pmohseni/results/v13_mert_linear/best_model.pt', 'configs/v13_mert_linear.yaml'),
@@ -63,9 +74,34 @@ def _decode_offline_dtw(marginals: np.ndarray, band_frac: float = 0.05) -> np.nd
     return dtw_decode(marginals.astype(np.float64), band_frac=band_frac).astype(np.float64)
 
 
+def _decode_particle_filter(marginals: np.ndarray, process_noise_std: float = 3.0, init_std: float = 2.0) -> np.ndarray:
+    tracker = ParticleFilterXTracker(process_noise_std=process_noise_std, init_std=init_std)
+    T = marginals.shape[0]
+    out = np.zeros(T, dtype=np.float64)
+    for t in range(T):
+        out[t] = tracker.step(marginals[t])
+    return out
+
+
+def _fuse(heatmaps_list, weights, fusion: str) -> np.ndarray:
+    """heatmaps_list: list of (H, W_sc) arrays, one per model, for a single frame."""
+    if fusion == 'mean':
+        out = np.zeros_like(heatmaps_list[0])
+        for w, hm in zip(weights, heatmaps_list):
+            out += w * hm
+        return out
+    stacked = np.stack(heatmaps_list, axis=0)  # (M, H, W_sc)
+    if fusion == 'median':
+        return np.median(stacked, axis=0)
+    if fusion == 'max':
+        return np.max(stacked, axis=0)
+    raise ValueError(f'unknown fusion: {fusion}')
+
+
 @torch.no_grad()
 def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: str,
-              decoders=('original', 'offline_dtw'), dtw_band_frac: float = 0.05,
+              decoders=('original', 'offline_dtw'), fusion: str = 'mean', dtw_band_frac: float = 0.05,
+              pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
     weights = weights or [1.0 / len(names)] * len(names)
@@ -127,7 +163,7 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                 pred_x_sc_orig = np.zeros(T, dtype=np.float64)
                 marginals = np.zeros((T, W_sc), dtype=np.float64)
                 for t in range(T):
-                    avg_heatmap = np.zeros((H, W_sc), dtype=np.float32)
+                    member_heatmaps = []
                     for i, (name, network, cfg) in enumerate(loaded):
                         n_frames = cfg.data.n_frames
                         perf_np = _build_perf_frame(feats, t, n_frames)
@@ -137,13 +173,16 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                         new_hidden = out.get('hidden')
                         if new_hidden is not None:
                             hiddens[i] = (new_hidden[0].detach(), new_hidden[1].detach())
-                        avg_heatmap += weights[i] * seg.squeeze(0).squeeze(0).cpu().numpy()
-                    pred_x_sc_orig[t] = _predict_x_com_from_heatmap(avg_heatmap)
-                    marginals[t] = avg_heatmap.sum(axis=0)
+                        member_heatmaps.append(seg.squeeze(0).squeeze(0).cpu().numpy())
+                    fused_heatmap = _fuse(member_heatmaps, weights, fusion)
+                    pred_x_sc_orig[t] = _predict_x_com_from_heatmap(fused_heatmap)
+                    marginals[t] = fused_heatmap.sum(axis=0)
 
                 pred_x_sc = {'original': pred_x_sc_orig}
                 if 'offline_dtw' in decoders:
                     pred_x_sc['offline_dtw'] = _decode_offline_dtw(marginals, dtw_band_frac)
+                if 'particle_filter' in decoders:
+                    pred_x_sc['particle_filter'] = _decode_particle_filter(marginals, pf_process_noise_std, pf_init_std)
 
                 gt_onset = notes['onset_sec']
                 gt_strip_x = notes['strip_x']
@@ -214,8 +253,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--models', default='v13,v14,v15', help='comma-separated names from MODEL_REGISTRY')
     p.add_argument('--weights', default=None, help='comma-separated weights, must sum to 1 (default: uniform)')
-    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw')
+    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw,particle_filter')
+    p.add_argument('--fusion', default='mean', choices=['mean', 'median', 'max'])
     p.add_argument('--dtw_band_frac', type=float, default=0.05)
+    p.add_argument('--pf_process_noise_std', type=float, default=3.0)
+    p.add_argument('--pf_init_std', type=float, default=2.0)
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -227,7 +269,8 @@ def main():
     weights = [float(w) for w in a.weights.split(',')] if a.weights else None
     decoders = tuple(a.decoders.split(','))
     eval_split(names, weights, a.processed, a.mert_emb_root, a.split,
-              decoders=decoders, dtw_band_frac=a.dtw_band_frac,
+              decoders=decoders, fusion=a.fusion, dtw_band_frac=a.dtw_band_frac,
+              pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std,
               out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
