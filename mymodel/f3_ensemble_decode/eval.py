@@ -42,6 +42,7 @@ from mymodel.shared.metrics import alignment_metrics, henkel_metrics
 from mymodel.d1_align_matrix.dtw import dtw_decode
 from extensions.decode.particle_filter import ParticleFilterXTracker
 from mymodel.v13_midi_privileged.repeat_gt import build_repeat_alt_cols
+from mymodel.g1_repeat_gnn.infer import load_gnn, build_gnn_alt_cols
 
 MODEL_REGISTRY = {
     'v13':      ('/scratch/pmohseni/results/v13_mert_linear/best_model.pt', 'configs/v13_mert_linear.yaml'),
@@ -250,8 +251,10 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
               decoders=('original', 'offline_dtw'), fusion: str = 'mean', dtw_band_frac: float = 0.05,
               pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0, snap_frac: float = 0.1,
               cv_vel_alpha: float = 0.3, repeat_graph_radius: float = 8.0, repeat_graph_window: int = 5,
+              gnn_checkpoint: str = None, gnn_sim_threshold: float = 0.85,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+    gnn_model = load_gnn(gnn_checkpoint, device='cpu') if gnn_checkpoint else None
     weights = weights or [1.0 / len(names)] * len(names)
     assert abs(sum(weights) - 1.0) < 1e-6, 'ensemble weights must sum to 1'
     assert len(weights) == len(names)
@@ -354,6 +357,19 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                                                     notes['strip_x'], w_scale, fps=fps)
                     pred_x_sc['repeat_graph_snap'] = _decode_repeat_graph_snap(
                         base, col_alt, radius=repeat_graph_radius, window=repeat_graph_window)
+                if 'gnn_repeat_snap' in decoders:
+                    assert gnn_model is not None, 'gnn_repeat_snap requires --gnn_checkpoint'
+                    base = pred_x_sc.get('hybrid_snap')
+                    if base is None:
+                        dtw_path = pred_x_sc.get('offline_dtw') or _decode_offline_dtw(marginals, dtw_band_frac)
+                        diff = np.abs(pred_x_sc_orig - dtw_path)
+                        base = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_orig)
+                    gnn_col_alt = build_gnn_alt_cols(notes['onset_sec'], notes['midi_pitch'],
+                                                     notes['strip_x'], notes.get('measure_idx'),
+                                                     w_scale, gnn_model, sim_threshold=gnn_sim_threshold,
+                                                     device='cpu')
+                    pred_x_sc['gnn_repeat_snap'] = _decode_repeat_graph_snap(
+                        base, gnn_col_alt, radius=repeat_graph_radius, window=repeat_graph_window)
 
                 gt_onset = notes['onset_sec']
                 gt_strip_x = notes['strip_x']
@@ -433,6 +449,8 @@ def main():
     p.add_argument('--cv_vel_alpha', type=float, default=0.3, help='confidence-velocity (cv_w<W>_g<G>): EMA weight for velocity updates')
     p.add_argument('--repeat_graph_radius', type=float, default=8.0, help='repeat_graph_snap: max column distance (W_sc space) to a known repeat-ambiguous column')
     p.add_argument('--repeat_graph_window', type=int, default=5, help='repeat_graph_snap: frames of raw-path history to majority-vote over before snapping')
+    p.add_argument('--gnn_checkpoint', default=None, help='gnn_repeat_snap: path to G1 trained GCN checkpoint (best_model.pt)')
+    p.add_argument('--gnn_sim_threshold', type=float, default=0.85, help='gnn_repeat_snap: cosine-similarity threshold for candidate repeat notes')
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -448,6 +466,7 @@ def main():
               pf_process_noise_std=a.pf_process_noise_std, pf_init_std=a.pf_init_std,
               snap_frac=a.snap_frac, cv_vel_alpha=a.cv_vel_alpha,
               repeat_graph_radius=a.repeat_graph_radius, repeat_graph_window=a.repeat_graph_window,
+              gnn_checkpoint=a.gnn_checkpoint, gnn_sim_threshold=a.gnn_sim_threshold,
               out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
