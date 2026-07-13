@@ -3,7 +3,7 @@
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
-#SBATCH --time=2:00:00
+#SBATCH --time=10:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/per_onset_diag_cpu-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/per_onset_diag_cpu-%j.log
 
