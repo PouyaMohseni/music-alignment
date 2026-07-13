@@ -22,18 +22,19 @@ import json
 from pathlib import Path
 
 import numpy as np
-import torch
-from omegaconf import OmegaConf
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mymodel.f3_ensemble_decode.eval import (
-    MODEL_REGISTRY, _load_model, _predict_x_com_from_heatmap,
-    _decode_offline_dtw, _build_perf_frame,
-)
-from mymodel.v11_cpjku_fullstrip.data import load_strip_scaled
-from mymodel.v13_midi_privileged.repeat_gt import build_repeat_alt_cols
+# NOTE: torch/transformers/MERT-related imports (including build_repeat_alt_cols,
+# which transitively imports torch via midi_encoder.py) are deliberately
+# deferred into run_piece()/main() (NOT at module level). --analyze_only only
+# needs numpy + json, and a heavy model-loading process (e.g. per-onset-diag-full
+# running concurrently) can hold a file-lock during its entire lifetime that a
+# second process's mere `import torch`-adjacent chain then blocks on
+# indefinitely -- confirmed via sstat showing near-zero CPU while "hung".
+# Keeping this path import-light avoids that lock entirely, regardless of
+# what else is running.
 
 WORST_SHARED_PIECES = [
     'ChopinFF__O28__Chop-28-9', 'MussorgskyM__pictures-at-an-exhibition__catacombae',
@@ -46,42 +47,47 @@ WORST_SHARED_PIECES = [
 ]
 
 
-@torch.no_grad()
 def run_piece(pid: str, loaded, processed_root: Path, emb_root: Path, device: str,
               w_scale: int, h_strip: int, fps: int, snap_frac: float = 0.2):
+    import torch
+    from mymodel.f3_ensemble_decode.eval import _predict_x_com_from_heatmap, _decode_offline_dtw, _build_perf_frame
+    from mymodel.v11_cpjku_fullstrip.data import load_strip_scaled
+    from mymodel.v13_midi_privileged.repeat_gt import build_repeat_alt_cols
+
     piece_dir = processed_root / pid
     notes = np.load(piece_dir / 'noteheads.npz')
     feats = np.load(str(emb_root / f'{pid}.npy')).astype(np.float32)
     T = feats.shape[0]
 
-    score = load_strip_scaled(piece_dir / 'strip.png', h_strip, w_scale)
-    H, W_sc = score.shape
-    score_1 = torch.from_numpy(score[np.newaxis, np.newaxis, np.newaxis]).to(device)
+    with torch.no_grad():
+        score = load_strip_scaled(piece_dir / 'strip.png', h_strip, w_scale)
+        H, W_sc = score.shape
+        score_1 = torch.from_numpy(score[np.newaxis, np.newaxis, np.newaxis]).to(device)
 
-    hiddens = []
-    for _, network, _ in loaded:
-        if network.use_lstm:
-            hiddens.append((torch.zeros(network.rnn_layers, 1, network.rnn_size, device=device),
-                            torch.zeros(network.rnn_layers, 1, network.rnn_size, device=device)))
-        else:
-            hiddens.append(None)
+        hiddens = []
+        for _, network, _ in loaded:
+            if network.use_lstm:
+                hiddens.append((torch.zeros(network.rnn_layers, 1, network.rnn_size, device=device),
+                                torch.zeros(network.rnn_layers, 1, network.rnn_size, device=device)))
+            else:
+                hiddens.append(None)
 
-    pred_x_sc_orig = np.zeros(T, dtype=np.float64)
-    marginals = np.zeros((T, W_sc), dtype=np.float64)
-    for t in range(T):
-        avg = np.zeros((H, W_sc), dtype=np.float32)
-        for i, (name, network, cfg) in enumerate(loaded):
-            n_frames = cfg.data.n_frames
-            perf_np = _build_perf_frame(feats, t, n_frames)
-            perf_t = torch.from_numpy(perf_np).to(device).unsqueeze(0)
-            out = network(score=score_1, perf=perf_t, hidden=hiddens[i])
-            seg = out['segmentation']
-            new_hidden = out.get('hidden')
-            if new_hidden is not None:
-                hiddens[i] = (new_hidden[0].detach(), new_hidden[1].detach())
-            avg += (1.0 / len(loaded)) * seg.squeeze(0).squeeze(0).cpu().numpy()
-        pred_x_sc_orig[t] = _predict_x_com_from_heatmap(avg)
-        marginals[t] = avg.sum(axis=0)
+        pred_x_sc_orig = np.zeros(T, dtype=np.float64)
+        marginals = np.zeros((T, W_sc), dtype=np.float64)
+        for t in range(T):
+            avg = np.zeros((H, W_sc), dtype=np.float32)
+            for i, (name, network, cfg) in enumerate(loaded):
+                n_frames = cfg.data.n_frames
+                perf_np = _build_perf_frame(feats, t, n_frames)
+                perf_t = torch.from_numpy(perf_np).to(device).unsqueeze(0)
+                out = network(score=score_1, perf=perf_t, hidden=hiddens[i])
+                seg = out['segmentation']
+                new_hidden = out.get('hidden')
+                if new_hidden is not None:
+                    hiddens[i] = (new_hidden[0].detach(), new_hidden[1].detach())
+                avg += (1.0 / len(loaded)) * seg.squeeze(0).squeeze(0).cpu().numpy()
+            pred_x_sc_orig[t] = _predict_x_com_from_heatmap(avg)
+            marginals[t] = avg.sum(axis=0)
 
     dtw_path = _decode_offline_dtw(marginals, 0.05)
     diff = np.abs(pred_x_sc_orig - dtw_path)
@@ -134,6 +140,9 @@ def main():
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--out', default='results/per_onset_diagnostic.json')
     a = p.parse_args()
+
+    import torch
+    from mymodel.f3_ensemble_decode.eval import MODEL_REGISTRY, _load_model
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     names = ['v13', 'v14', 'v15']
