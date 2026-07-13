@@ -127,6 +127,14 @@ def run_piece(pid: str, loaded, processed_root: Path, emb_root: Path, device: st
 
 
 def main():
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('--all_pieces', action='store_true',
+                   help='run on the full split instead of just WORST_SHARED_PIECES')
+    p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
+    p.add_argument('--out', default='results/per_onset_diagnostic.json')
+    a = p.parse_args()
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     names = ['v13', 'v14', 'v15']
     loaded = []
@@ -141,7 +149,12 @@ def main():
     proc = Path('data/MSMD/processed')
     emb = Path('data/MSMD/mert_emb')
 
-    out_path = Path('results/per_onset_diagnostic.json')
+    if a.all_pieces:
+        piece_list = json.load(open(proc / 'splits.json'))[a.split]
+    else:
+        piece_list = WORST_SHARED_PIECES
+
+    out_path = Path(a.out)
     out_path.parent.mkdir(exist_ok=True)
 
     def _dump(results):
@@ -150,11 +163,11 @@ def main():
                       for r in results], f)
 
     all_results = []
-    for pid in WORST_SHARED_PIECES:
+    for k, pid in enumerate(piece_list):
         try:
             r = run_piece(pid, loaded, proc, emb, device, w_scale, h_strip, fps)
             all_results.append(r)
-            print(f'{pid[:50]:50s}  n_onsets={len(r["err_sec"]):4d}  mean_err={r["err_sec"].mean():.2f}s', flush=True)
+            print(f'[{k+1}/{len(piece_list)}] {pid[:50]:50s}  n_onsets={len(r["err_sec"]):4d}  mean_err={r["err_sec"].mean():.2f}s', flush=True)
             _dump(all_results)  # incremental save -- survives a mid-run timeout/kill
         except Exception as e:
             print(f'{pid}: ERROR {e!r}', flush=True)
@@ -201,7 +214,9 @@ def analyze(all_results):
 if __name__ == '__main__':
     import sys
     if '--analyze_only' in sys.argv:
-        json_path = Path('results/per_onset_diagnostic.json')
+        rest = [a for a in sys.argv[1:] if a != '--analyze_only']
+        out_arg = rest[rest.index('--out') + 1] if '--out' in rest else 'results/per_onset_diagnostic.json'
+        json_path = Path(out_arg)
         results = json.load(open(json_path))
         print(f'Loaded {len(results)} pieces from {json_path}')
         analyze(results)
