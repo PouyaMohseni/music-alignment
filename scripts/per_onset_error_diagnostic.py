@@ -141,27 +141,39 @@ def main():
     proc = Path('data/MSMD/processed')
     emb = Path('data/MSMD/mert_emb')
 
+    out_path = Path('results/per_onset_diagnostic.json')
+    out_path.parent.mkdir(exist_ok=True)
+
+    def _dump(results):
+        with open(out_path, 'w') as f:
+            json.dump([{k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in r.items()}
+                      for r in results], f)
+
     all_results = []
     for pid in WORST_SHARED_PIECES:
         try:
             r = run_piece(pid, loaded, proc, emb, device, w_scale, h_strip, fps)
             all_results.append(r)
             print(f'{pid[:50]:50s}  n_onsets={len(r["err_sec"]):4d}  mean_err={r["err_sec"].mean():.2f}s', flush=True)
+            _dump(all_results)  # incremental save -- survives a mid-run timeout/kill
         except Exception as e:
             print(f'{pid}: ERROR {e!r}', flush=True)
 
-    out_path = Path('results/per_onset_diagnostic.json')
-    out_path.parent.mkdir(exist_ok=True)
-    with open(out_path, 'w') as f:
-        json.dump([{k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in r.items()}
-                  for r in all_results], f)
     print(f'Saved per-onset arrays to {out_path}', flush=True)
+    analyze(all_results)
 
-    # ---- aggregate analysis ----
-    all_err = np.concatenate([r['err_sec'] for r in all_results])
-    all_repeat = np.concatenate([r['is_repeat'] for r in all_results])
-    all_density = np.concatenate([r['density'] for r in all_results])
-    all_relpos = np.concatenate([r['rel_pos'] for r in all_results])
+
+def analyze(all_results):
+    """Aggregate analysis -- callable standalone on whatever pieces are
+    available (e.g. a partial JSON from a run killed mid-way), not just at
+    the end of a full main() run."""
+    if not all_results:
+        print('No results to analyze.')
+        return
+    all_err = np.concatenate([np.asarray(r['err_sec']) for r in all_results])
+    all_repeat = np.concatenate([np.asarray(r['is_repeat']) for r in all_results])
+    all_density = np.concatenate([np.asarray(r['density']) for r in all_results])
+    all_relpos = np.concatenate([np.asarray(r['rel_pos']) for r in all_results])
 
     print(f'\n=== Aggregate over {len(all_err)} onsets across {len(all_results)} pieces ===')
     print(f'mean err (repeat-ambiguous onsets):     {all_err[all_repeat].mean():.3f}s  (n={all_repeat.sum()})')
@@ -187,4 +199,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    if '--analyze_only' in sys.argv:
+        json_path = Path('results/per_onset_diagnostic.json')
+        results = json.load(open(json_path))
+        print(f'Loaded {len(results)} pieces from {json_path}')
+        analyze(results)
+    else:
+        main()
