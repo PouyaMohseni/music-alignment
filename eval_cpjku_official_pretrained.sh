@@ -56,6 +56,7 @@ python eval_model.py \
     --seq_len     128 \
     --eval_onsets \
     --piecewise_stats \
+    --dump_raw_onsets "$OUT/raw_onset_errors.json" \
     2>&1 | tee "$OUT/eval_onsets.log"
 
 echo ""
