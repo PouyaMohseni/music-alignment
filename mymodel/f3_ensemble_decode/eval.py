@@ -72,6 +72,22 @@ def _predict_x_com_from_heatmap(heatmap_hw: np.ndarray, threshold: float = 0.5) 
     return float((xs * col).sum() / total)
 
 
+def _heatmap_confidence(heatmap_hw: np.ndarray, window: int = 5) -> float:
+    """[0,1] concentration score: fraction of the RAW (pre-threshold) column-
+    marginal mass within +-window of its argmax column. A sharp unimodal
+    peak scores near 1; a flat, bimodal, or noisy marginal scores low.
+    Used only to COMPARE confidence across whole heatmaps (never to replace
+    the precise thresholded-CoM observation itself -- that mistake, blending
+    a windowed estimator into the decode, is what sank F5)."""
+    col = heatmap_hw.sum(axis=0)
+    total = col.sum()
+    if total < 1e-6:
+        return 0.0
+    peak = int(np.argmax(col))
+    lo, hi = max(0, peak - window), min(len(col), peak + window + 1)
+    return float(col[lo:hi].sum() / total)
+
+
 def _decode_offline_dtw(marginals: np.ndarray, band_frac: float = 0.05) -> np.ndarray:
     return dtw_decode(marginals.astype(np.float64), band_frac=band_frac).astype(np.float64)
 
@@ -252,6 +268,7 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
               pf_process_noise_std: float = 3.0, pf_init_std: float = 2.0, snap_frac: float = 0.1,
               cv_vel_alpha: float = 0.3, repeat_graph_radius: float = 8.0, repeat_graph_window: int = 5,
               gnn_checkpoint: str = None, gnn_sim_threshold: float = 0.85,
+              conf_trust_window: int = 5, conf_trust_margin: float = 0.15, conf_trust_max_shift: float = 5.0,
               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
     gnn_model = load_gnn(gnn_checkpoint, device='cpu') if gnn_checkpoint else None
@@ -312,7 +329,9 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                         hiddens.append(None)
 
                 pred_x_sc_orig = np.zeros(T, dtype=np.float64)
+                pred_x_sc_conftrust = np.zeros(T, dtype=np.float64)
                 marginals = np.zeros((T, W_sc), dtype=np.float64)
+                need_conf_trust = any(d.startswith('conf_trust') for d in decoders)
                 for t in range(T):
                     member_heatmaps = []
                     for i, (name, network, cfg) in enumerate(loaded):
@@ -329,7 +348,28 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                     pred_x_sc_orig[t] = _predict_x_com_from_heatmap(fused_heatmap)
                     marginals[t] = fused_heatmap.sum(axis=0)
 
+                    if need_conf_trust:
+                        fused_conf = _heatmap_confidence(fused_heatmap, window=conf_trust_window)
+                        member_confs = [_heatmap_confidence(hm, window=conf_trust_window) for hm in member_heatmaps]
+                        best_i = int(np.argmax(member_confs))
+                        best_pred = _predict_x_com_from_heatmap(member_heatmaps[best_i])
+                        # Safety valve (found via a synthetic stress test before this ever
+                        # touched real data): a single member can be SHARPLY WRONG -- e.g.
+                        # confidently on the wrong side of a repeat -- while the other
+                        # members correctly agree but are individually less sharp because
+                        # the mean-fusion dilutes them. Trusting sharpness alone would pick
+                        # the confident outlier. Only trust a member when it's ALSO close to
+                        # the fused/consensus position -- i.e. it's SHARPENING the group's
+                        # own answer, never overriding to a different one.
+                        agrees_with_consensus = abs(best_pred - pred_x_sc_orig[t]) <= conf_trust_max_shift
+                        if member_confs[best_i] > fused_conf + conf_trust_margin and agrees_with_consensus:
+                            pred_x_sc_conftrust[t] = best_pred
+                        else:
+                            pred_x_sc_conftrust[t] = pred_x_sc_orig[t]
+
                 pred_x_sc = {'original': pred_x_sc_orig}
+                if need_conf_trust:
+                    pred_x_sc['conf_trust'] = pred_x_sc_conftrust
                 if 'offline_dtw' in decoders:
                     pred_x_sc['offline_dtw'] = _decode_offline_dtw(marginals, dtw_band_frac)
                 if 'particle_filter' in decoders:
@@ -340,6 +380,15 @@ def eval_split(names, weights, processed_root: str, mert_emb_root: str, split: s
                         dtw_path = _decode_offline_dtw(marginals, dtw_band_frac)
                     diff = np.abs(pred_x_sc_orig - dtw_path)
                     pred_x_sc['hybrid_snap'] = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_orig)
+                if 'conf_trust_snap' in decoders:
+                    # Stack F7 (single-model trust on confident frames) with F4's
+                    # DTW-drift snap -- tests whether the two mechanisms compound
+                    # (precision recovery on easy pieces + drift rescue on hard ones).
+                    dtw_path = pred_x_sc.get('offline_dtw')
+                    if dtw_path is None:
+                        dtw_path = _decode_offline_dtw(marginals, dtw_band_frac)
+                    diff = np.abs(pred_x_sc_conftrust - dtw_path)
+                    pred_x_sc['conf_trust_snap'] = np.where(diff > snap_frac * W_sc, dtw_path, pred_x_sc_conftrust)
                 # F5 confidence-velocity decode: any decoder named cv_w<window>_g<gate>
                 # is decoded from the SAME marginals in one pass (grid sweep, cheap).
                 for dname in decoders:
@@ -440,7 +489,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--models', default='v13,v14,v15', help='comma-separated names from MODEL_REGISTRY')
     p.add_argument('--weights', default=None, help='comma-separated weights, must sum to 1 (default: uniform)')
-    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw,particle_filter,hybrid_snap')
+    p.add_argument('--decoders', default='original,offline_dtw', help='comma-separated: original,offline_dtw,particle_filter,hybrid_snap,conf_trust,conf_trust_snap')
     p.add_argument('--fusion', default='mean', choices=['mean', 'median', 'max'])
     p.add_argument('--dtw_band_frac', type=float, default=0.05)
     p.add_argument('--pf_process_noise_std', type=float, default=3.0)
@@ -451,6 +500,9 @@ def main():
     p.add_argument('--repeat_graph_window', type=int, default=5, help='repeat_graph_snap: frames of raw-path history to majority-vote over before snapping')
     p.add_argument('--gnn_checkpoint', default=None, help='gnn_repeat_snap: path to G1 trained GCN checkpoint (best_model.pt)')
     p.add_argument('--gnn_sim_threshold', type=float, default=0.85, help='gnn_repeat_snap: cosine-similarity threshold for candidate repeat notes')
+    p.add_argument('--conf_trust_window', type=int, default=5, help='conf_trust: +-columns for the concentration/confidence score')
+    p.add_argument('--conf_trust_margin', type=float, default=0.15, help='conf_trust: how much more confident a single member must be than the fused mean to be trusted whole')
+    p.add_argument('--conf_trust_max_shift', type=float, default=5.0, help='conf_trust: max column distance (W_sc space) a trusted member may differ from the fused consensus (safety valve against a confidently-wrong member)')
     p.add_argument('--split', default='test', choices=['train', 'val', 'test'])
     p.add_argument('--processed', default='data/MSMD/processed')
     p.add_argument('--mert_emb_root', default='data/MSMD/mert_emb')
@@ -467,6 +519,8 @@ def main():
               snap_frac=a.snap_frac, cv_vel_alpha=a.cv_vel_alpha,
               repeat_graph_radius=a.repeat_graph_radius, repeat_graph_window=a.repeat_graph_window,
               gnn_checkpoint=a.gnn_checkpoint, gnn_sim_threshold=a.gnn_sim_threshold,
+              conf_trust_window=a.conf_trust_window, conf_trust_margin=a.conf_trust_margin,
+              conf_trust_max_shift=a.conf_trust_max_shift,
               out_dir=a.out_dir, limit=a.limit, device=a.device)
 
 
