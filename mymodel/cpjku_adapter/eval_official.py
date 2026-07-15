@@ -172,8 +172,23 @@ def _patched_load_piece(params):
             score = 1 - resized.astype(np.float32) / 255.
         coords = coords / scale_factor
 
-    wav_path = os.path.join(path, 'performance', piece_name + '.wav')
-    spec     = _wav_to_spec_logfilter(wav_path, spec_params)
+    # Prefer a real-madmom spectrogram cached by precompute_madmom_specs.py
+    # (must be run under venv_cpjku310, which has real madmom -- the main
+    # .venv used here cannot). Falls back to the librosa approximation with
+    # a loud warning: that approximation was proven to cause a catastrophic
+    # eval-harness mismatch (frozen official CB_TA checkpoint scored ~85%
+    # via their own real-madmom eval_model.py but only 15.1% via this
+    # librosa path, on the identical test pieces).
+    cached_spec_path = os.path.join(path, 'spec_madmom', piece_name + '.npy')
+    if os.path.exists(cached_spec_path):
+        spec = np.load(cached_spec_path)
+    else:
+        print(f'WARNING: no cached real-madmom spectrogram for {piece_name} '
+              f'-- falling back to librosa approximation. Run '
+              f'mymodel.cpjku_adapter.precompute_madmom_specs under '
+              f'venv_cpjku310 first for trustworthy results.', flush=True)
+        wav_path = os.path.join(path, 'performance', piece_name + '.wav')
+        spec     = _wav_to_spec_logfilter(wav_path, spec_params)
 
     onsets     = onset_frames
     coords_new = coords
