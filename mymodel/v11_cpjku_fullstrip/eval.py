@@ -19,8 +19,19 @@ import torch
 from omegaconf import OmegaConf
 
 from mymodel.v9_cpjku.cpjku_network import ConditionalUNet
-from mymodel.v11_cpjku_fullstrip.data import load_spec, load_strip_scaled
+from mymodel.v11_cpjku_fullstrip.data import load_spec, load_spec_madmom, load_strip_scaled
 from mymodel.shared.metrics import alignment_metrics, henkel_metrics
+
+
+def _load_spec_for_eval(piece_dir: Path, pid: str, fps: int, n_mels: int,
+                        cpjku_fmt_root: str | None) -> np.ndarray:
+    if cpjku_fmt_root:
+        spec = load_spec_madmom(pid, Path(cpjku_fmt_root))
+        if spec is not None:
+            return spec
+        print(f'WARNING: no cached real-madmom spectrogram for {pid} '
+              f'-- falling back to mel-spectrogram approximation.', flush=True)
+    return load_spec(piece_dir / 'audio.wav', fps=fps, n_mels=n_mels)
 
 
 def _build_perf_frame(spec: np.ndarray, t: int, n_frames: int) -> np.ndarray:
@@ -50,7 +61,8 @@ def _predict_x_com(seg: torch.Tensor, threshold: float = 0.5) -> float:
 
 @torch.no_grad()
 def eval_split(checkpoint: str, cfg_path: str, processed_root: str, split: str,
-               out_dir: str = None, limit: int = None, device: str = None) -> dict | None:
+               out_dir: str = None, limit: int = None, device: str = None,
+               cpjku_fmt_root: str = None) -> dict | None:
     cfg    = OmegaConf.load(cfg_path)
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -66,6 +78,7 @@ def eval_split(checkpoint: str, cfg_path: str, processed_root: str, split: str,
     h_strip  = cfg.data.h_strip
     w_scale  = cfg.data.w_scale
     n_mels   = cfg.data.n_mels
+    cpjku_fmt_root = cpjku_fmt_root or cfg.data.get('cpjku_fmt_root', None)
 
     proc = Path(processed_root)
     piece_ids = json.load(open(proc / 'splits.json'))[split]
@@ -87,7 +100,7 @@ def eval_split(checkpoint: str, cfg_path: str, processed_root: str, split: str,
                 dur        = float(ann['audio']['duration_sec'])
                 px_per_sec = strip_w / dur
 
-                spec  = load_spec(piece_dir / 'audio.wav', fps=fps, n_mels=n_mels)
+                spec  = _load_spec_for_eval(piece_dir, pid, fps, n_mels, cpjku_fmt_root)
                 score = load_strip_scaled(piece_dir / 'strip.png', h_strip, w_scale)
                 H, W_sc = score.shape
                 T = spec.shape[-1]
@@ -182,9 +195,13 @@ def main():
     p.add_argument('--out_dir',    default=None)
     p.add_argument('--limit',      type=int, default=None)
     p.add_argument('--device',     default=None)
+    p.add_argument('--cpjku_fmt_root', default=None,
+                   help='If set (or present in config data.cpjku_fmt_root), use cached '
+                        'real-madmom spectrograms instead of the mel-spec approximation.')
     a = p.parse_args()
     eval_split(a.checkpoint, a.config, a.processed, a.split,
-               out_dir=a.out_dir, limit=a.limit, device=a.device)
+               out_dir=a.out_dir, limit=a.limit, device=a.device,
+               cpjku_fmt_root=a.cpjku_fmt_root)
 
 
 if __name__ == '__main__':

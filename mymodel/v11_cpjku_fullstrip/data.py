@@ -17,6 +17,10 @@ from scipy.interpolate import interp1d
 
 def load_spec(wav_path: Path, sr: int = 22050, fps: int = 20,
               n_mels: int = 78, fmin: float = 60.0, fmax: float = 6000.0) -> np.ndarray:
+    """Mel-spectrogram approximation. Kept as the fallback path -- prefer
+    load_spec_madmom (real madmom LogarithmicFilterbank, matches what the
+    CBEncoder architecture was actually designed/tuned around) whenever a
+    cache is available. See mymodel/cpjku_adapter/precompute_madmom_specs.py."""
     import librosa
     y, _ = librosa.load(str(wav_path), sr=sr, mono=True)
     hop = int(sr / fps)
@@ -24,6 +28,19 @@ def load_spec(wav_path: Path, sr: int = 22050, fps: int = 20,
         y=y, sr=sr, n_fft=2048, hop_length=hop,
         n_mels=n_mels, fmin=fmin, fmax=fmax, power=1.0)
     return np.log1p(mel).astype(np.float32)  # (n_mels, T)
+
+
+def load_spec_madmom(pid: str, cpjku_fmt_root: Path, pad: int = 40) -> np.ndarray | None:
+    """Load the real-madmom spectrogram cached by precompute_madmom_specs.py
+    (data/MSMD/cpjku_fmt/spec_madmom/<pid>.npy), de-padded to match this
+    module's frame convention (T = audio_len/hop, no leading context pad --
+    that pad exists only for eval_official.py's rolling-window inference).
+    Returns None if no cache exists for this piece."""
+    path = Path(cpjku_fmt_root) / 'spec_madmom' / f'{pid}.npy'
+    if not path.exists():
+        return None
+    spec = np.load(path)
+    return spec[:, pad:].astype(np.float32)
 
 
 def load_strip_scaled(strip_path: Path, h: int, w_scale: int) -> np.ndarray:
@@ -50,17 +67,28 @@ def make_gt_mask(H: int, W: int, cx: int, gt_width: int = 10) -> np.ndarray:
 
 
 def load_piece(piece_dir: Path, h_strip: int, w_scale: int,
-               n_mels: int = 78, fps: int = 20) -> dict | None:
+               n_mels: int = 78, fps: int = 20,
+               cpjku_fmt_root: Path | None = None) -> dict | None:
     """Load one piece. Returns dict with all data needed for BPTT training."""
     try:
         notes = np.load(piece_dir / 'noteheads.npz')
     except Exception:
         return None
 
-    try:
-        spec = load_spec(piece_dir / 'audio.wav', fps=fps, n_mels=n_mels)
-    except Exception:
-        return None
+    spec = None
+    if cpjku_fmt_root is not None:
+        try:
+            spec = load_spec_madmom(piece_dir.name, cpjku_fmt_root)
+        except Exception:
+            spec = None
+        if spec is None:
+            print(f'WARNING: no cached real-madmom spectrogram for {piece_dir.name} '
+                  f'-- falling back to mel-spectrogram approximation.', flush=True)
+    if spec is None:
+        try:
+            spec = load_spec(piece_dir / 'audio.wav', fps=fps, n_mels=n_mels)
+        except Exception:
+            return None
 
     try:
         score = load_strip_scaled(piece_dir / 'strip.png', h_strip, w_scale)
@@ -105,12 +133,14 @@ class FullStripDataset:
 
     def __init__(self, processed_root: str, split: str,
                  h_strip: int = 128, w_scale: int = 4,
-                 n_mels: int = 78, fps: int = 20):
+                 n_mels: int = 78, fps: int = 20,
+                 cpjku_fmt_root: str | None = None):
         self.root    = Path(processed_root)
         self.h_strip = h_strip
         self.w_scale = w_scale
         self.n_mels  = n_mels
         self.fps     = fps
+        self.cpjku_fmt_root = Path(cpjku_fmt_root) if cpjku_fmt_root else None
 
         splits = json.load(open(self.root / 'splits.json'))
         piece_ids = splits[split]
@@ -118,7 +148,8 @@ class FullStripDataset:
         print(f'Loading {len(piece_ids)} pieces ({split})...', flush=True)
         self.pieces = []
         for pid in piece_ids:
-            d = load_piece(self.root / pid, h_strip, w_scale, n_mels, fps)
+            d = load_piece(self.root / pid, h_strip, w_scale, n_mels, fps,
+                            cpjku_fmt_root=self.cpjku_fmt_root)
             if d is not None:
                 self.pieces.append(d)
             else:

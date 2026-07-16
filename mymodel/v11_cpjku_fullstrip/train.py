@@ -247,15 +247,19 @@ def main(cfg: DictConfig, resume: str | None = None):
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f'device={device}  out={out_dir}', flush=True)
 
+    cpjku_fmt_root = cfg.data.get('cpjku_fmt_root', None)
+
     train_ds = FullStripDataset(
         cfg.data.processed_root, 'train',
         h_strip=cfg.data.h_strip, w_scale=cfg.data.w_scale,
-        n_mels=cfg.data.n_mels, fps=cfg.data.fps)
+        n_mels=cfg.data.n_mels, fps=cfg.data.fps,
+        cpjku_fmt_root=cpjku_fmt_root)
 
     val_ds = FullStripDataset(
         cfg.data.processed_root, 'val',
         h_strip=cfg.data.h_strip, w_scale=cfg.data.w_scale,
-        n_mels=cfg.data.n_mels, fps=cfg.data.fps)
+        n_mels=cfg.data.n_mels, fps=cfg.data.fps,
+        cpjku_fmt_root=cpjku_fmt_root)
 
     print(f'train={len(train_ds)} pieces  val={len(val_ds)} pieces', flush=True)
 

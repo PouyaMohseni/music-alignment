@@ -1,0 +1,45 @@
+seed: 42
+
+# v11-madmom — same architecture as v11_cpjku_fullstrip (faithful CB_TA
+# reproduction), but with the mel-spectrogram approximation swapped for the
+# real-madmom LogarithmicFilterbank spectrogram (cached by
+# mymodel/cpjku_adapter/precompute_madmom_specs.py under venv_cpjku310).
+#
+# Motivation: v11 (mel-spec) plateaued at 56.2%/58.4% pct@0.5s -- well below
+# the paper's 85.1% despite using their exact architecture. The CBEncoder was
+# designed/tuned against madmom's specific log-frequency filterbank features,
+# not a mel-scale approximation; this tests whether that feature mismatch
+# explains most of the gap. Fresh training run (no warm-start from the
+# mel-spec checkpoint -- the input feature distribution is fundamentally
+# different, so the CBEncoder's learned first-layer weights would need to
+# relearn from scratch anyway).
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    CBEncoder
+  spec_enc:         32
+
+data:
+  processed_root:   data/MSMD/processed
+  cpjku_fmt_root:    data/MSMD/cpjku_fmt   # real-madmom spec cache lives under here
+  h_strip:          128     # strip height (power-of-2 for UNet)
+  w_scale:          4       # downscale strip width by 4 (memory efficiency)
+  n_mels:           78      # matches real madmom's ~78-band log filterbank (60-6000 Hz)
+  fps:              20      # their fps
+  n_frames:         40      # CBEncoder context window (40 frames = 2s at fps=20)
+  gt_width:         10      # GT rectangle width (their value)
+
+optim:
+  lr:           1.0e-4    # their learning rate
+  weight_decay: 1.0e-5    # their weight decay
+  patience:     5         # ReduceLROnPlateau patience (early_stop = patience×2 = 10)
+
+train:
+  max_epochs: 100         # their maximum
+  seq_len:    16          # BPTT chunk length (their default)
+  out_dir:    results/v11_madmom
