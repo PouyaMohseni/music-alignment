@@ -1,0 +1,53 @@
+seed: 42
+
+# v11-mert-finetune -- CB_TA-faithful architecture (same FiLM+UNet+LSTM as
+# v11/v11-madmom), but the audio encoder is a LIVE, fine-tunable MERT-v1-95M
+# (mymodel/v10_mert_unet/mert_live.py) instead of a static spectrogram.
+#
+# Nobody in this project has ever let MERT's own weights receive gradient
+# from the alignment task -- v13/v14/v15 and B1a all read precomputed,
+# FROZEN embeddings. MERT's self-supervised pretraining objective was never
+# optimized for 50ms-precision temporal localization; this tests whether
+# letting it adapt end-to-end closes some of the gap between our MERT-based
+# track (73.6% best, F7) and the base architecture (85-87% on early
+# checkpoints of B4/B6/C2, once evaluated correctly).
+#
+# unfreeze_last_n: null fine-tunes the WHOLE MERT encoder stack. Set to an
+# int (e.g. 4) to freeze all but the top N transformer layers if full
+# fine-tuning proves too slow/unstable/memory-hungry.
+
+net:
+  film_layers:      [2, 3, 4, 5, 6, 7, 8]
+  n_encoder_layers: 4
+  n_filters_start:  8
+  rnn_size:         128
+  rnn_layer:        1
+  use_lstm:         true
+  audio_encoder:    MERTProjector   # mymodel/v9_cpjku/cpjku_audio.py -- Linear(768,spec_enc)+LayerNorm+ELU
+  spec_enc:         32
+
+mert:
+  mert_id:          m-a-p/MERT-v1-95M
+  unfreeze_last_n:  null            # null = fine-tune every encoder layer
+
+data:
+  processed_root: data/MSMD/processed
+  h_strip:        128     # strip height (power-of-2 for UNet)
+  w_scale:        4       # downscale strip width by 4 (memory efficiency)
+  fps:            20      # their fps
+  gt_width:       10      # GT rectangle width (their value)
+
+optim:
+  lr:           1.0e-4    # network's LR; MERT's own layers share this same
+                          # optimizer/LR for now -- may need its own (lower)
+                          # LR group if fine-tuning proves unstable
+  weight_decay: 1.0e-5
+  patience:     5
+
+train:
+  max_epochs:  100
+  seq_len:     64         # 3.2s BPTT chunks (vs v11's 16/0.8s) -- amortizes
+                          # MERT's much higher per-call cost over more frames
+  window_sec:  8.0        # raw-audio context MERT sees per chunk (left-context
+                          # beyond the chunk itself, for self-attention)
+  out_dir:     results/v11_mert_finetune
