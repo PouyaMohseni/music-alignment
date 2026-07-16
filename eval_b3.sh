@@ -50,7 +50,12 @@ REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 cd "$REPO/audio_conditioned_unet"
 
 echo "=== Native eval_model.py: B3_inr_subpixel on msmd_test ==="
-python eval_model.py \
+# B3 attaches an extension-only aux module (_ext_b3_inr_refiner) to the
+# checkpoint's state_dict; eval_model.py's own strict load call has no way
+# to ignore it, so run through the lenient_load wrapper (see
+# extensions/hooks/lenient_load.py -- same patch already used for B2/B3/B5
+# training warm-starts).
+python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_eval_native.py \
     --param_path  "$CKPT" \
     --test_dir    ../data/msmd/msmd_test \
     --config      configs/msmd.yaml \
