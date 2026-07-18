@@ -23,8 +23,12 @@ SETUP_LOCK=/project/def-ichiro/pmohseni/music-alignment/.cpjku_submodule_setup.f
     git -C third_party/cpjku_unet checkout ismir-2020
 ) 200>"$SETUP_LOCK"
 
-CKPT_DIR=$(find results/cb_ta_ext/MERT_B2_pitch_aux/params -maxdepth 1 -name "*_MERT_B2_pitch_aux" -type d | sort | tail -1)
+CKPT_DIR=$(find results/cb_ta_ext/MERT_B2_pitch_aux/params -maxdepth 1 -name "*_MERT_B2_pitch_aux" -type d 2>/dev/null | sort | tail -1)
 echo "Using checkpoint dir: $CKPT_DIR"
+if [ -z "$CKPT_DIR" ]; then
+    echo "No checkpoint dir found yet. Exiting."
+    exit 0
+fi
 CKPT="$(readlink -f "$CKPT_DIR/best_model.pt")"
 
 module load gcc opencv
