@@ -20,6 +20,15 @@ echo "Job started on $(hostname) at $(date)"
 cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
 source .venv/bin/activate
+# Compute nodes have no internet access (unlike the login node); without
+# these, AutoImageProcessor.from_pretrained tries a HEAD request to verify
+# freshness and crashes instead of falling back to the local cache, even
+# though preprocessor_config.json IS fully cached (verified directly:
+# ~/.cache/huggingface/hub/models--facebook--dinov2-base/snapshots/*/preprocessor_config.json
+# exists) -- confirmed as the exact failure mode of the first attempt
+# (job 65834417, silently produced zero output despite showing COMPLETED).
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 python scripts/precompute_dinov2_native_pages.py \
     --score_dirs /scratch/pmohseni/msmd_train_full/score \
