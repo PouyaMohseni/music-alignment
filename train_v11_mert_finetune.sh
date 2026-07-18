@@ -38,6 +38,13 @@ module load gcc opencv
 source .venv/bin/activate
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+# job 65737815 OOMed 11 min in ("4.28 GiB reserved by PyTorch but
+# unallocated" -- a fragmentation signature, not a fixed too-large
+# allocation): BPTT with seq_len=64 across pieces of widely varying
+# score-image width creates a very uneven allocation pattern while
+# fine-tuning all 85M MERT params. expandable_segments is PyTorch's own
+# suggested fix for exactly this error; seq_len halved as an added margin.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 
@@ -50,6 +57,7 @@ fi
 python -m mymodel.v11_mert_finetune.train \
     --config configs/v11_mert_finetune.yaml \
     data.processed_root=$PROC \
+    train.seq_len=32 \
     $RESUME_FLAG
 
 echo "Training finished at $(date). Running eval..."
