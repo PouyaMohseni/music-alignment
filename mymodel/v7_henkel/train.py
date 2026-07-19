@@ -72,12 +72,22 @@ def _load_v3_weights(model, ckpt_path, device):
           f"({len(miss)} new keys left random)", flush=True)
 
 
+def _ckpt_dict(model, step, cfg):
+    return {"step": step,
+            "trainable_state": {k: v.cpu() for k, v in model.named_parameters()
+                                 if v.requires_grad},
+            "cfg": OmegaConf.to_container(cfg)}
+
+
 def _save(model, step, cfg, out_dir):
     path = Path(out_dir) / f"checkpoint_{step:06d}.pt"
-    torch.save({"step": step,
-                "trainable_state": {k: v.cpu() for k, v in model.named_parameters()
-                                    if v.requires_grad},
-                "cfg": OmegaConf.to_container(cfg)}, path)
+    torch.save(_ckpt_dict(model, step, cfg), path)
+    return path
+
+
+def _save_best(model, step, cfg, out_dir):
+    path = Path(out_dir) / "best_model.pt"
+    torch.save(_ckpt_dict(model, step, cfg), path)
     return path
 
 
@@ -127,6 +137,21 @@ def main(cfg: DictConfig):
     accum = cfg.train.get("grad_accum_steps", 1)
     it    = iter(tl); t0 = time.time(); optim.zero_grad(set_to_none=True)
 
+    # Best-checkpoint tracking + early stopping on validation CE.
+    # This model overfits fast and hard (confirmed on a prior 12000-step run:
+    # val ce=3.74 @2000 was the best of the entire run, then monotonically
+    # worse every single subsequent eval through ce=5.23 @12000 -- a ~40%
+    # relative blowup with zero fluctuation/noise, not a borderline case).
+    # eval_every=2000 means we can only ever stop in increments of 2000 steps,
+    # so PATIENCE=1 (stop as soon as one eval fails to improve on the best)
+    # is the tightest cadence-aligned choice and is well justified by how
+    # clean the degradation signal is -- it should trigger right after the
+    # first non-improving eval (i.e. around step 4000 given the historical
+    # curve), instead of burning the full 12000-step budget.
+    PATIENCE = 1
+    best_val_ce = float("inf")
+    patience_ct = 0
+
     for step in range(1, cfg.train.steps + 1):
         tot_ce = 0.0; tot_acc = 0.0
         for _ in range(accum):
@@ -147,7 +172,22 @@ def main(cfg: DictConfig):
                   f"frame_acc={tot_acc:.3f}  lr={lr:.2e}  {time.time()-t0:.1f}s",
                   flush=True)
         if vl and step % cfg.train.eval_every == 0:
-            print(f"  [val @ {step}] ce={_validate(model, vl, device):.5f}", flush=True)
+            val_ce = _validate(model, vl, device)
+            print(f"  [val @ {step}] ce={val_ce:.5f}", flush=True)
+            if val_ce < best_val_ce:
+                best_val_ce = val_ce
+                patience_ct = 0
+                print(f"  -> new best val ce={best_val_ce:.5f}, "
+                      f"saved {_save_best(model, step, cfg, out_dir)}", flush=True)
+            else:
+                patience_ct += 1
+                print(f"  no improvement over best={best_val_ce:.5f} "
+                      f"(patience {patience_ct}/{PATIENCE})", flush=True)
+                if patience_ct >= PATIENCE:
+                    print(f"early stopping at step {step}: val ce has not improved "
+                          f"for {patience_ct} consecutive eval(s) "
+                          f"(best={best_val_ce:.5f})", flush=True)
+                    break
         if step % cfg.train.ckpt_every == 0:
             print(f"  -> saved {_save(model, step, cfg, out_dir)}", flush=True)
 
