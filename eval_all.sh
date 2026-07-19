@@ -53,7 +53,7 @@ ck=$(best_or_latest v3_all);     [ -n "$ck" ] && \
 # --- v3 e2e (live encoders) ---
 # Prefer the best-val checkpoint from the current retrain (results/v3_e2e_v2),
 # then fall back to the older, ambiguously-versioned v3_e2e_long/v3_e2e dirs.
-ck=results/v3_e2e_v2/best_model.pt; [ -f "$ck" ] || ck=""
+ck=$(best_or_latest v3_e2e_v2)
 [ -z "$ck" ] && ck=$(latest v3_e2e_long)
 [ -z "$ck" ] && ck=$(latest v3_e2e)
 [ -n "$ck" ] && \
@@ -71,7 +71,7 @@ ck=$(latest v10_mert_unet); [ -n "$ck" ] && \
 
 # --- comparison table ---
 echo; echo "===================== SUMMARY ====================="
-for m in v10_mert_unet v3_all v3_fullseq v1_nce v1_baseline v1_dtw v1_nce2 v2_nce v3_e2e_long v3_e2e; do
+for m in v10_mert_unet v3_all v3_fullseq v1_nce v1_baseline v1_dtw v1_nce2 v2_nce v3_e2e_v2 v3_e2e_long v3_e2e; do
   f="results/$m/eval/test/summary.json"
   [ -f "$f" ] && python -c "
 import json; d=json.load(open('$f'))

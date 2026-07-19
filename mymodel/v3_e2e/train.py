@@ -38,8 +38,8 @@ def _load_init(model, checkpoint, device):
     print(f"init from {checkpoint}  missing={len(miss)} unexpected={len(unexp)}")
 
 
-def _save(model, optim, step, cfg, out_dir):
-    path = Path(out_dir) / f"checkpoint_{step:06d}.pt"
+def _save(model, optim, step, cfg, out_dir, filename=None):
+    path = Path(out_dir) / (filename or f"checkpoint_{step:06d}.pt")
     torch.save({"step": step,
                 "trainable_state": {k: v.cpu() for k, v in model.named_parameters()
                                     if v.requires_grad},
@@ -108,6 +108,16 @@ def main(cfg: DictConfig):
     train_iter = iter(train_loader)
     t0 = time.time()
     optim.zero_grad(set_to_none=True)
+
+    # best-checkpoint tracking + early stopping on val loss. e2e LoRA
+    # fine-tuning converges slowly (very low encoder LR), so patience is
+    # generous by default: cfg.train.eval_every=500 with this patience means
+    # ~5000 steps (10 evals) of no improvement before we give up -- enough
+    # runway to ride out noisy validation, but well short of the full
+    # cfg.train.steps budget on a run that has clearly plateaued/overfit.
+    best_val_loss = float("inf")
+    patience_counter = 0
+    early_stop_patience = cfg.train.get("early_stop_patience", 10)
 
     for step in range(1, cfg.train.steps + 1):
         acc_loss = acc_dist = acc_ent = 0.0
@@ -188,7 +198,23 @@ def main(cfg: DictConfig):
                             power=cfg.loss.power)
                         val_losses.append(vp["exp_dist"].item())
             model.train()
-            print(f"  [val @ {step}] mean exp_dist = {np.mean(val_losses):.5f}", flush=True)
+            mean_val = float(np.mean(val_losses))
+            print(f"  [val @ {step}] mean exp_dist = {mean_val:.5f}", flush=True)
+
+            if mean_val < best_val_loss:
+                best_val_loss = mean_val
+                patience_counter = 0
+                best_path = _save(model, optim, step, cfg, out_dir, filename="best_model.pt")
+                print(f"  -> new best val loss {best_val_loss:.5f}, saved {best_path}", flush=True)
+            else:
+                patience_counter += 1
+                print(f"  -> no val improvement (best={best_val_loss:.5f}), "
+                      f"patience {patience_counter}/{early_stop_patience}", flush=True)
+                if patience_counter >= early_stop_patience:
+                    print(f"early stopping at step {step}: no val improvement for "
+                          f"{early_stop_patience} consecutive evals "
+                          f"(best val loss={best_val_loss:.5f})", flush=True)
+                    break
 
         if step % cfg.train.ckpt_every == 0:
             print(f"  -> saved {_save(model, optim, step, cfg, out_dir)}", flush=True)
