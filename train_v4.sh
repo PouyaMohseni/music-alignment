@@ -25,8 +25,30 @@ echo "Python: $(which python)"
 # auxiliary pitch heads (BCE vs MIDI) fused into the matching space + sharpened
 # localization loss. Trains in ~15-30 min (only a small head). End-to-end at
 # inference (pitch heads are internal features, not a symbolic pivot).
+EMB_ROOT=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora
+
 python -m mymodel.v4_pitch.train \
   --config configs/v4_pitch.yaml \
-  data.emb_root=/lustre07/scratch/pmohseni/music-alignment/data/MSMD/embeddings_lora
+  data.emb_root=$EMB_ROOT
+
+echo "Training finished at $(date). Running eval..."
+
+CKPT=results/v4_pitch/best_model.pt
+if [ ! -f "$CKPT" ]; then
+    echo "WARNING: no best_model.pt found -- falling back to latest checkpoint_*.pt"
+    CKPT=$(ls results/v4_pitch/checkpoint_*.pt 2>/dev/null | sort | tail -1)
+fi
+if [ -z "$CKPT" ]; then
+    echo "ERROR: no checkpoint found after training"; exit 1
+fi
+echo "Evaluating: $CKPT"
+
+echo "=== Eval v4_pitch on test split ==="
+python -m mymodel.v4_pitch.eval \
+    --checkpoint $CKPT \
+    --config     configs/v4_pitch.yaml \
+    --split      test \
+    --emb_root   $EMB_ROOT \
+    --out_dir    results/v4_pitch/eval
 
 echo "Job finished at $(date)"

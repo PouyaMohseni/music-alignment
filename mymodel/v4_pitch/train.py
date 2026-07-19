@@ -64,12 +64,15 @@ def _validate(model, loader, device, cfg):
     return float(np.mean(errs)) if errs else float("nan")
 
 
-def _save(model, step, cfg, out_dir):
-    path = Path(out_dir) / f"checkpoint_{step:06d}.pt"
+def _save_checkpoint(model, step, cfg, path):
     torch.save({"step": step,
                 "trainable_state": {k: v.cpu() for k, v in model.named_parameters() if v.requires_grad},
                 "cfg": OmegaConf.to_container(cfg)}, path)
     return path
+
+
+def _save(model, step, cfg, out_dir):
+    return _save_checkpoint(model, step, cfg, Path(out_dir) / f"checkpoint_{step:06d}.pt")
 
 
 def _load_v3_weights(model, ckpt_path, device):
@@ -116,6 +119,15 @@ def main(cfg: DictConfig):
     accum = cfg.train.get("grad_accum_steps", 1)
     it = iter(tl); t0 = time.time(); optim.zero_grad(set_to_none=True)
 
+    # Best-checkpoint tracking + early stopping on val exp_dist (lower is better).
+    # This model family overfits fast (v4_pitch training log: val exp_dist bottomed
+    # out at step ~2500/10000 then got 16% worse by step 10000), so we use a fairly
+    # tight patience of 4 validation checks (= 4 * eval_every steps) without
+    # improvement before stopping.
+    best_val = float("inf")
+    patience = 0
+    patience_limit = cfg.train.get("early_stop_patience", 4)
+
     for step in range(1, cfg.train.steps + 1):
         agg = {"loc": 0, "exp_dist": 0, "bce_a": 0, "bce_s": 0}; tot = 0.0
         for _ in range(accum):
@@ -136,7 +148,24 @@ def main(cfg: DictConfig):
                   f"bce_a={agg['bce_a']:.3f}  bce_s={agg['bce_s']:.3f}  lr={lr:.2e}  "
                   f"{time.time()-t0:.1f}s", flush=True)
         if vl is not None and step % cfg.train.eval_every == 0:
-            print(f"  [val @ {step}] mean exp_dist = {_validate(model, vl, device, cfg):.5f}", flush=True)
+            val_exp_dist = _validate(model, vl, device, cfg)
+            print(f"  [val @ {step}] mean exp_dist = {val_exp_dist:.5f}", flush=True)
+            if val_exp_dist < best_val:
+                best_val = val_exp_dist
+                patience = 0
+                best_path = _save_checkpoint(model, step, cfg, Path(out_dir) / "best_model.pt")
+                print(f"  -> new best (exp_dist={best_val:.5f}), saved {best_path}", flush=True)
+            else:
+                patience += 1
+                print(f"  -> no improvement ({patience}/{patience_limit}); best exp_dist={best_val:.5f}",
+                      flush=True)
+                if patience >= patience_limit:
+                    print(f"early stopping at step {step}: no val exp_dist improvement in "
+                          f"{patience_limit} checks ({patience_limit * cfg.train.eval_every} steps); "
+                          f"best={best_val:.5f}", flush=True)
+                    if step % cfg.train.ckpt_every != 0:
+                        print(f"  -> saved {_save(model, step, cfg, out_dir)}", flush=True)
+                    break
         if step % cfg.train.ckpt_every == 0:
             print(f"  -> saved {_save(model, step, cfg, out_dir)}", flush=True)
 
