@@ -53,8 +53,8 @@ def _validate(model, loader, device, cfg):
     return float(np.mean(errs)) if errs else float("nan")
 
 
-def _save(model, optim, step, cfg, out_dir):
-    path = Path(out_dir) / f"checkpoint_{step:06d}.pt"
+def _save(model, optim, step, cfg, out_dir, filename=None):
+    path = Path(out_dir) / (filename or f"checkpoint_{step:06d}.pt")
     torch.save({"step": step,
                 "trainable_state": {k: v.cpu() for k, v in model.named_parameters()
                                     if v.requires_grad},
@@ -95,6 +95,15 @@ def main(cfg: DictConfig):
     t0 = time.time()
     optim.zero_grad(set_to_none=True)
 
+    # Best-checkpoint tracking + early stopping on validation exp_dist
+    # (lower is better -- see _validate). A prior audit of this exact model
+    # found it overfits well before the step budget is exhausted (best val
+    # at step ~1500, 11% worse by step 10000), so we checkpoint the best
+    # model seen and stop early once validation stops improving.
+    best_val = float("inf")
+    patience = 0
+    patience_threshold = cfg.train.get("early_stop_patience", 5)
+
     for step in range(1, cfg.train.steps + 1):
         acc_loss = 0.0
         acc_dist = 0.0
@@ -133,6 +142,22 @@ def main(cfg: DictConfig):
         if val_loader is not None and step % cfg.train.eval_every == 0:
             v = _validate(model, val_loader, device, cfg)
             print(f"  [val @ {step}] mean exp_dist = {v:.5f}", flush=True)
+
+            if v < best_val:
+                best_val = v
+                patience = 0
+                best_path = _save(model, optim, step, cfg, out_dir, filename="best_model.pt")
+                print(f"  -> new best (exp_dist={best_val:.5f}), saved {best_path}", flush=True)
+            else:
+                patience += 1
+                print(f"  -> no improvement ({patience}/{patience_threshold}, "
+                      f"best={best_val:.5f})", flush=True)
+                if patience > patience_threshold:
+                    print(f"early stopping at step {step}: validation exp_dist has not "
+                          f"improved for {patience} evals (best={best_val:.5f})", flush=True)
+                    if step % cfg.train.ckpt_every != 0:
+                        print(f"  -> saved {_save(model, optim, step, cfg, out_dir)}", flush=True)
+                    break
 
         if step % cfg.train.ckpt_every == 0:
             print(f"  -> saved {_save(model, optim, step, cfg, out_dir)}", flush=True)

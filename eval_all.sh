@@ -23,6 +23,15 @@ EMB_ALL=$SCRATCH/embeddings_all_tar
 
 latest() { ls "results/$1/"checkpoint_*.pt 2>/dev/null | sort | tail -1; }
 run()    { echo; echo "===== $* ====="; "$@" || echo "!! FAILED: $*"; }
+# Prefer the early-stopped best checkpoint (results/<model>/best_model.pt) over
+# the last periodic checkpoint_NNNNNN.pt -- for models prone to overfitting
+# (v3_fullseq / v3_all), the latest checkpoint is not the best one. Falls back
+# to latest() for older/in-progress runs that predate best_model.pt.
+best_or_latest() {
+  local f="results/$1/best_model.pt"
+  [ -f "$f" ] && { echo "$f"; return; }
+  latest "$1"
+}
 
 # --- v1 family (windowed; v1_baseline=no-LoRA, rest=LoRA) ---
 for m in v1_baseline v1_dtw v1_lora v1_nce v1_nce2; do
@@ -36,13 +45,17 @@ ck=$(latest v2_nce); [ -n "$ck" ] && \
   run python -m mymodel.v2_crossattn.eval --checkpoint "$ck" --config configs/v2_crossattn.yaml --split test
 
 # --- v3 full-seq (cached embeddings) ---
-ck=$(latest v3_fullseq); [ -n "$ck" ] && \
+ck=$(best_or_latest v3_fullseq); [ -n "$ck" ] && \
   run python -m mymodel.v3_fullseq.eval --checkpoint "$ck" --emb_root "$EMB_LORA" --split test
-ck=$(latest v3_all);     [ -n "$ck" ] && \
+ck=$(best_or_latest v3_all);     [ -n "$ck" ] && \
   run python -m mymodel.v3_fullseq.eval --checkpoint "$ck" --emb_root "$EMB_ALL"  --split test
 
 # --- v3 e2e (live encoders) ---
-ck=$(latest v3_e2e_long); [ -z "$ck" ] && ck=$(latest v3_e2e)
+# Prefer the best-val checkpoint from the current retrain (results/v3_e2e_v2),
+# then fall back to the older, ambiguously-versioned v3_e2e_long/v3_e2e dirs.
+ck=results/v3_e2e_v2/best_model.pt; [ -f "$ck" ] || ck=""
+[ -z "$ck" ] && ck=$(latest v3_e2e_long)
+[ -z "$ck" ] && ck=$(latest v3_e2e)
 [ -n "$ck" ] && \
   run python -m mymodel.v3_e2e.eval --checkpoint "$ck" --config configs/v3_e2e.yaml --split test
 
