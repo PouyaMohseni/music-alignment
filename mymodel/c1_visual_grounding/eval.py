@@ -28,13 +28,22 @@ def _build_perf_frame(spec: np.ndarray, t: int, n_frames: int) -> np.ndarray:
     return window[np.newaxis, np.newaxis]
 
 
-def _predict_x_com(seg: torch.Tensor, threshold: float = 0.5) -> float:
+def _predict_x_com(seg: torch.Tensor) -> float:
+    """Weighted center-of-mass over the RAW attention distribution -- no
+    threshold. seg is a softmax over score patches (sums to 1 across the
+    whole strip), so its per-patch max is structurally capped and rarely
+    crosses a sigmoid-style 0.5 threshold (confirmed empirically: only
+    ~17% of frames on a real test piece). The previous `>=0.5` threshold
+    (copied from mymodel/v11_cpjku_fullstrip/eval.py, appropriate THERE
+    because that model's decoder ends in torch.sigmoid, giving independent
+    per-pixel probabilities that legitimately saturate near 1.0) made this
+    function silently fall back to the literal strip midpoint on the large
+    majority of frames, discarding the model's actual prediction. Matches
+    train.py's own frame-accuracy diagnostic, which reads the raw
+    distribution via argmax with no threshold."""
     arr = seg.squeeze(0).cpu().numpy()
-    arr = (arr >= threshold).astype(np.float32)
     col = arr.sum(axis=0)
     total = col.sum()
-    if total < 1e-6:
-        return float(arr.shape[1] // 2)
     xs = np.arange(arr.shape[1], dtype=np.float32)
     return float((xs * col).sum() / total)
 

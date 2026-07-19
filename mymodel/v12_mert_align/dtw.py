@@ -34,7 +34,13 @@ def dtw_decode(sim: torch.Tensor) -> np.ndarray:
             D[i, j] = candidates[best] + cost[i, j]
             bt[i, j] = best
 
-    # Backtrack
+    # Backtrack. Forward-pass candidate order is [diag, up, left] (line 32:
+    # candidates = [D[i-1,j-1], D[i-1,j], D[i,j-1]]) -- so bt==1 means the
+    # predecessor is D[i-1,j] (same column, previous row: "up", i decreases),
+    # and bt==2 means D[i,j-1] (same row, previous column: "left", j
+    # decreases). This was previously swapped, making dtw_decode() return a
+    # near-model-independent degenerate path at realistic T>>N scale
+    # (confirmed empirically -- see mymodel/v12_mert_align audit).
     path = np.zeros(T, dtype=np.int32)
     i, j = T - 1, N - 1
     while i > 0 or j > 0:
@@ -43,8 +49,8 @@ def dtw_decode(sim: torch.Tensor) -> np.ndarray:
         if b == 0:
             i -= 1; j -= 1
         elif b == 1:
-            j -= 1
-        else:
             i -= 1
+        else:
+            j -= 1
     path[0] = j
     return path

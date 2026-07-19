@@ -85,8 +85,11 @@ class PitchFusedModel(nn.Module):
         d = self.cfg.shared_dim
         self.audio_proj = _ProjHead(self.cfg.d_audio, d, self.cfg.dropout)
         self.image_proj = _ProjHead(self.cfg.d_image, d, self.cfg.dropout)
-        self.audio_pitch = _PitchHead(self.cfg.d_audio, self.cfg.pitch_hidden)
-        self.score_pitch = _PitchHead(self.cfg.d_image, self.cfg.pitch_hidden)
+        # Pitch heads read the ALIGNED (post-cross-attention) embeddings, so
+        # they're d-dim (shared_dim), not the raw d_audio/d_image frozen
+        # embeddings -- see forward()'s docstring-matching fusion below.
+        self.audio_pitch = _PitchHead(d, self.cfg.pitch_hidden)
+        self.score_pitch = _PitchHead(d, self.cfg.pitch_hidden)
         self.audio_layers = nn.ModuleList(
             [_CrossAttn(d, self.cfg.n_heads, self.cfg.dropout) for _ in range(self.cfg.n_cross_layers)])
         self.image_layers = nn.ModuleList(
@@ -104,15 +107,28 @@ class PitchFusedModel(nn.Module):
         for la, li in zip(self.audio_layers, self.image_layers):
             a, i = la(a, i), li(i, a)
 
-        a_pitch_logits = self.audio_pitch(audio_emb)     # (B,T,88)
-        i_pitch_logits = self.score_pitch(tile_emb)      # (B,N,88)
+        # Pitch heads read the ALIGNED embeddings (post cross-attention), so
+        # their BCE gradient actually shapes audio_proj/image_proj/the
+        # cross-attention layers -- previously they read the raw frozen
+        # audio_emb/tile_emb directly, so the pitch loss never touched the
+        # matching representation at all (a dead-wiring bug, see the
+        # cross-attention audit).
+        a_pitch_logits = self.audio_pitch(a)     # (B,T,88)
+        i_pitch_logits = self.score_pitch(i)     # (B,N,88)
 
-        a_emb = F.normalize(a, dim=-1)
-        i_emb = F.normalize(i, dim=-1)
-        # Pitch heads train via BCE gradient only — not fused into sim.
-        # This lets pitch supervision shape the proj weights without adding
-        # noisy pitch logits to cosine similarity at inference.
-        sim = torch.einsum("btd,bnd->btn", a_emb, i_emb)
+        # Fuse pitch into the similarity as the module docstring describes:
+        # sim = [L2(proj), alpha*L2(sigmoid(pitch))] . [L2(proj), alpha*L2(sigmoid(pitch))]^T
+        # `pitch_fuse_alpha` was previously threaded through config/CLI but
+        # never referenced in forward() -- dead code, now actually used.
+        a_norm = F.normalize(a, dim=-1)
+        i_norm = F.normalize(i, dim=-1)
+        alpha = self.cfg.pitch_fuse_alpha
+        a_pitch_feat = alpha * F.normalize(torch.sigmoid(a_pitch_logits), dim=-1)
+        i_pitch_feat = alpha * F.normalize(torch.sigmoid(i_pitch_logits), dim=-1)
+
+        a_fused = torch.cat([a_norm, a_pitch_feat], dim=-1)
+        i_fused = torch.cat([i_norm, i_pitch_feat], dim=-1)
+        sim = torch.einsum("btd,bnd->btn", a_fused, i_fused)
 
         return {"sim": sim,
                 "audio_pitch_logits": a_pitch_logits,
