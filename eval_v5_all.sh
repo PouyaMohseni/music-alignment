@@ -64,14 +64,24 @@ printf "%-26s  %8s  %9s\n" "model" "err(s)" "@0.5s(%)"
 echo "----------------------------------------"
 
 for MODEL in "${MODELS[@]}"; do
-  CKPT=$(ls results/$MODEL/checkpoint_*.pt 2>/dev/null | sort | tail -1)
+  # Prefer the validation-selected best checkpoint; fall back to the latest
+  # numbered checkpoint only for older runs (or in-progress runs) that predate
+  # the best_model.pt convention.
+  if [ -f "results/$MODEL/best_model.pt" ]; then
+    CKPT=results/$MODEL/best_model.pt
+  else
+    CKPT=$(ls results/$MODEL/checkpoint_*.pt 2>/dev/null | sort | tail -1)
+  fi
   if [ -z "$CKPT" ]; then
     printf "%-26s  %8s  %9s\n" "$MODEL" "no_ckpt" "-"
     continue
   fi
   CFG=${CONFIGS[$MODEL]}
   SUMM=results/$MODEL/eval/test/summary.json
-  if [ ! -f "$SUMM" ]; then
+  # Re-evaluate whenever summary.json is missing, or is older than the
+  # checkpoint being graded (i.e. training produced a new/better checkpoint
+  # since the last eval) -- not just "skip forever once summary.json exists".
+  if [ ! -f "$SUMM" ] || [ "$CKPT" -nt "$SUMM" ]; then
     echo "  evaluating $MODEL ($CKPT)..."
     MOD=${EVAL_MOD[$MODEL]:-mymodel.v5_recurrent.eval}
     python -m $MOD \

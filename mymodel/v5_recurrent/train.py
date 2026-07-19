@@ -84,8 +84,8 @@ def _load_v3_weights(model, ckpt_path, device):
           f"({len(miss)} new keys left random)", flush=True)
 
 
-def _save(model, step, cfg, out_dir):
-    path = Path(out_dir) / f"checkpoint_{step:06d}.pt"
+def _save(model, step, cfg, out_dir, name=None):
+    path = Path(out_dir) / (name or f"checkpoint_{step:06d}.pt")
     torch.save({"step": step,
                 "trainable_state": {k: v.cpu() for k, v in model.named_parameters()
                                     if v.requires_grad},
@@ -143,6 +143,19 @@ def main(cfg: DictConfig):
     pitch_weight = cfg.loss.get("pitch_weight", 0.0) if hasattr(cfg, "loss") else 0.0
     it = iter(tl); t0 = time.time(); optim.zero_grad(set_to_none=True)
 
+    # Best-checkpoint tracking + early stopping.
+    # Calibrated against results/v5_recurrent/slurm-63319023.log and
+    # results/v5c_noxattn/slurm-63344156.log: both models' val ce bottoms out
+    # early (step 2500 and 2000 respectively) then drifts up slowly (~0.5-2%
+    # over the remaining budget) rather than collapsing catastrophically, so
+    # patience=5 non-improving evals (5 * eval_every=500 = 2500 steps of
+    # patience) stops shortly after the true best point on both runs without
+    # bailing out on ordinary noise between evals.
+    best_ce = float("inf")
+    patience = cfg.train.get("early_stop_patience", 5)
+    bad_evals = 0
+    stopped_early = False
+
     for step in range(1, cfg.train.steps + 1):
         tot_ce = 0.0; tot_acc = 0.0
         for _ in range(accum):
@@ -163,9 +176,27 @@ def main(cfg: DictConfig):
                   f"frame_acc={tot_acc:.3f}  lr={lr:.2e}  {time.time()-t0:.1f}s",
                   flush=True)
         if vl and step % cfg.train.eval_every == 0:
-            print(f"  [val @ {step}] ce={_validate(model, vl, device):.5f}", flush=True)
+            ce_val = _validate(model, vl, device)
+            print(f"  [val @ {step}] ce={ce_val:.5f}", flush=True)
+            if ce_val < best_ce:
+                best_ce = ce_val
+                bad_evals = 0
+                print(f"  -> new best val ce={best_ce:.5f}, saved "
+                      f"{_save(model, step, cfg, out_dir, name='best_model.pt')}",
+                      flush=True)
+            else:
+                bad_evals += 1
+                print(f"  -> val ce did not improve (best={best_ce:.5f}, "
+                      f"bad_evals={bad_evals}/{patience})", flush=True)
+                if bad_evals >= patience:
+                    print(f"early stopping at step {step}: val ce has not "
+                          f"improved for {patience} consecutive evals "
+                          f"(best={best_ce:.5f})", flush=True)
+                    stopped_early = True
         if step % cfg.train.ckpt_every == 0:
             print(f"  -> saved {_save(model, step, cfg, out_dir)}", flush=True)
+        if stopped_early:
+            break
 
     print(f"done in {time.time()-t0:.1f}s", flush=True)
 
