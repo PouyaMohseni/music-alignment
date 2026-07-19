@@ -44,6 +44,10 @@ done
 ck=$(latest v2_nce); [ -n "$ck" ] && \
   run python -m mymodel.v2_crossattn.eval --checkpoint "$ck" --config configs/v2_crossattn.yaml --split test
 
+# --- v2 DTW phase (the real cross-attention+DTW training, warm-started from v2_nce) ---
+ck=$(best_or_latest v2_crossattn_dtw); [ -n "$ck" ] && \
+  run python -m mymodel.v2_crossattn.eval --checkpoint "$ck" --config configs/v2_crossattn_dtw.yaml --split test
+
 # --- v3 full-seq (cached embeddings) ---
 ck=$(best_or_latest v3_fullseq); [ -n "$ck" ] && \
   run python -m mymodel.v3_fullseq.eval --checkpoint "$ck" --emb_root "$EMB_LORA" --split test
@@ -71,7 +75,7 @@ ck=$(latest v10_mert_unet); [ -n "$ck" ] && \
 
 # --- comparison table ---
 echo; echo "===================== SUMMARY ====================="
-for m in v10_mert_unet v3_all v3_fullseq v1_nce v1_baseline v1_dtw v1_nce2 v2_nce v3_e2e_v2 v3_e2e_long v3_e2e; do
+for m in v10_mert_unet v3_all v3_fullseq v1_nce v1_baseline v1_dtw v1_nce2 v2_nce v2_crossattn_dtw v3_e2e_v2 v3_e2e_long v3_e2e; do
   f="results/$m/eval/test/summary.json"
   [ -f "$f" ] && python -c "
 import json; d=json.load(open('$f'))
