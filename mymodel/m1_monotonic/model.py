@@ -29,10 +29,16 @@ from mymodel.d1_align_matrix.model import AudioTower, ScoreTower
 
 class M1Model(nn.Module):
     def __init__(self, d_mert: int = 768, d_model: int = 128, w_downsample: int = 4,
-                 n_ctx_layers: int = 2, n_heads: int = 4, temperature: float = 0.07):
+                 n_ctx_layers: int = 2, n_heads: int = 4, temperature: float = 0.07,
+                 score_tower: str = 'cnn'):
         super().__init__()
         self.audio_tower = AudioTower(d_mert, d_model)
-        self.score_tower = ScoreTower(d_model, w_downsample, n_ctx_layers, n_heads)
+        self.score_tower_kind = score_tower
+        if score_tower == 'musvit':
+            from mymodel.m1_monotonic.musvit_tower import MuSViTScoreTower
+            self.score_tower = MuSViTScoreTower(d_model, n_ctx_layers, n_heads)
+        else:
+            self.score_tower = ScoreTower(d_model, w_downsample, n_ctx_layers, n_heads)
         self.temperature = temperature
         self.w_downsample = w_downsample
 
