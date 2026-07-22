@@ -1,0 +1,46 @@
+seed: 42
+
+# M1 -- monotonic cross-modal alignment. Two-tower (MERT audio + CNN/transformer
+# score, reused from D1) -> frame x onset-column alignment matrix, trained with
+# the forward-sum monotonic objective + annealed beta-binomial prior, decoded by
+# monotonic Viterbi. See M1.md. Model block matches D1 exactly (same towers).
+
+model:
+  d_mert:       768
+  d_model:      128
+  w_downsample: 4
+  n_ctx_layers: 2
+  n_heads:      4
+  temperature:  0.07
+
+data:
+  processed_root: data/MSMD/processed
+  cpjku_data:     data/MSMD/cpjku_fmt
+  mert_roots:
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_wholepiece   # train+val
+    - /scratch/pmohseni/mert_emb_zenodo/cpjku_fmt_test_eval    # test
+  scale_factor:   3
+
+loss:
+  # M1 objective = CE content/timing anchor + forward-sum monotonic-path
+  # regularizer + annealed beta-binomial prior. Forward-sum ALONE was shown
+  # (Phase-1 overfit) to be underdetermined -- loss->0 on a valid-but-wrong
+  # monotone path -- so CE anchors each frame to its GT column, matching how
+  # TTS uses forward-sum (alongside a content loss) and how D1 pairs CE with a
+  # path regularizer.
+  ce_weight:           1.0
+  ce_sigma_cols:       1.0   # Gaussian target width in ONSET-column units
+  fs_weight:           1.0   # forward-sum monotonic-path regularizer
+  prior_anneal_epochs: 15    # beta-binomial diagonal prior weight 1 -> 0 over these epochs, then off
+  prior_scale:         1.0
+
+optim:
+  lr:            3.0e-4
+  weight_decay:  1.0e-5
+  patience:      5
+  accum_pieces:  8
+
+train:
+  max_epochs:       100
+  max_train_frames: 2500     # truncate very long pieces during TRAIN only (forward-sum is O(T)); eval uses full length
+  out_dir:          results/m1_monotonic
