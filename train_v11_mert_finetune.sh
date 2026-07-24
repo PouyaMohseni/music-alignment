@@ -45,6 +45,13 @@ export TRANSFORMERS_OFFLINE=1
 # fine-tuning all 85M MERT params. expandable_segments is PyTorch's own
 # suggested fix for exactly this error; seq_len halved as an added margin.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# job 65852778 (seq_len=32 + expandable_segments) OOMed again anyway --
+# "38.42 GiB memory in use" of a 39.49 GiB A100, a genuine too-large
+# allocation this time (not fragmentation): fully fine-tuning all 85M MERT
+# encoder params retains activations through the whole stack for BPTT
+# backward. Applying the config's own documented fallback: freeze all but
+# the top 4 MERT layers (frozen layers with frozen upstream input need no
+# saved activations at all, a real memory saving, not just fewer FLOPs).
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 
@@ -58,6 +65,7 @@ python -m mymodel.v11_mert_finetune.train \
     --config configs/v11_mert_finetune.yaml \
     data.processed_root=$PROC \
     train.seq_len=32 \
+    mert.unfreeze_last_n=4 \
     $RESUME_FLAG
 
 echo "Training finished at $(date). Running eval..."
