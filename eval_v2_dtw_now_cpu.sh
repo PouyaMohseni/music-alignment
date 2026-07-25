@@ -2,7 +2,7 @@
 #SBATCH --job-name=eval-v2-dtw-now-cpu
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=96G
 #SBATCH --time=6:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/eval_v2_dtw_now_cpu-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/eval_v2_dtw_now_cpu-%j.log
