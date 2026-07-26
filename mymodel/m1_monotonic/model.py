@@ -37,6 +37,9 @@ class M1Model(nn.Module):
         if score_tower == 'musvit':
             from mymodel.m1_monotonic.musvit_tower import MuSViTScoreTower
             self.score_tower = MuSViTScoreTower(d_model, n_ctx_layers, n_heads)
+        elif score_tower == 'dinov2':
+            from mymodel.m1_monotonic.dinov2_tower import Dinov2ScoreTower
+            self.score_tower = Dinov2ScoreTower(d_model, n_ctx_layers, n_heads)
         else:
             self.score_tower = ScoreTower(d_model, w_downsample, n_ctx_layers, n_heads)
         self.temperature = temperature
