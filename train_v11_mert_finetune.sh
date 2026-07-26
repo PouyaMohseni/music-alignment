@@ -49,9 +49,17 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # "38.42 GiB memory in use" of a 39.49 GiB A100, a genuine too-large
 # allocation this time (not fragmentation): fully fine-tuning all 85M MERT
 # encoder params retains activations through the whole stack for BPTT
-# backward. Applying the config's own documented fallback: freeze all but
-# the top 4 MERT layers (frozen layers with frozen upstream input need no
-# saved activations at all, a real memory saving, not just fewer FLOPs).
+# backward. Applied the config's own documented fallback: freeze all but
+# the top 4 MERT layers.
+#
+# job 66338467 (seq_len=32 + unfreeze_last_n=4) OOMed AGAIN anyway --
+# 39.18/39.49 GiB, barely different from before. The traceback this time
+# points INTO the U-Net DECODER's conv2d (mymodel/v9_cpjku/cpjku_network.py
+# forward), not into MERT -- freezing 8/12 MERT layers was a real but
+# insufficient fix, because the DOMINANT memory cost is actually the U-Net's
+# own activations retained across all 32 BPTT timesteps simultaneously for
+# backward, not MERT's transformer stack. Halving seq_len again (32->16)
+# directly cuts that dominant cost, unlike freezing MERT layers further.
 
 PROC=/project/def-ichiro/pmohseni/music-alignment/data/MSMD/processed
 
@@ -64,7 +72,7 @@ fi
 python -m mymodel.v11_mert_finetune.train \
     --config configs/v11_mert_finetune.yaml \
     data.processed_root=$PROC \
-    train.seq_len=32 \
+    train.seq_len=16 \
     mert.unfreeze_last_n=4 \
     $RESUME_FLAG
 
