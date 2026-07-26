@@ -37,7 +37,13 @@ loss:
 optim:
   lr:            3.0e-4
   weight_decay:  1.0e-5
-  patience:      5
+  # First real run (job 66103830) early-stopped at epoch 25 with best
+  # val_frame_acc only 0.359 -- patience=5 (early_stop=10) triggered well
+  # before convergence, given each epoch is only ~119s (this model is tiny
+  # vs B1a's full U-Net) -- affordable to be much more patient. Bumped 5->15
+  # (early_stop=30) to let it actually explore its convergence curve; a
+  # worst-case extra ~40min of wall-clock for a model this cheap per epoch.
+  patience:      15
   accum_pieces:  8
 
 train:
