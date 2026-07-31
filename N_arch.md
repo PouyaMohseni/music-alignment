@@ -82,11 +82,34 @@ warm-start loader with scoped allowlist `extensions/hooks/warm_start_load.py`.
 
 | exp | train job | eval |
 |---|---|---|
-| N1 long-context | 66850373 | `eval_n1_long_context_cpu.sh` |
-| N2 memory retrieval | 66850394 | `eval_n2_memory_retrieval_cpu.sh` |
-| N3 belief propagation | 66850395 | `eval_n3_belief_propagation_cpu.sh` |
+| N1 long-context | 66850715 (3h, chains via auto-resume) | `eval_n1_long_context_cpu.sh` |
+| N2 memory retrieval | 66850716 (3h, chains via auto-resume) | `eval_n2_memory_retrieval_cpu.sh` |
+| N3 belief propagation | 66850717 (3h, chains via auto-resume) | `eval_n3_belief_propagation_cpu.sh` |
 
 All warm-start from B1a's `best_model.pt` on their first run and resume from
 their own `latest_model.pt` afterwards. Eval runs on the CPU queue: unlike
 MERT+DINOv2-crossattn (killed at 11/125 pieces), these modules sit in the
 per-frame conditioning path, not inside the per-decoder-block loop.
+
+## Scheduling note (2026-07-31)
+
+Nothing GPU-side was starting, and the `ReqNodeNotAvail: ng[11105,...]`
+reason is a **red herring** -- those nodes were permanently decommissioned in
+May ("Decommissioned", "Not present"). The real constraints:
+
+- account GPU fairshare is exhausted (`EffectvUsage 0.997`, `FairShare 0.31`)
+  while 160 other GPU jobs run fine;
+- 36 of our own pending GPU jobs compete with each other, and within equal
+  priority SLURM serves oldest JobID first -- so the N-track sat at #34-36.
+
+Actions: N-track resubmitted with `--time=3:00:00` (eligible for the short
+partitions and far more backfillable; the scripts already auto-resume from
+`latest_model.pt`, so short runs chain). All pending GPU **eval** jobs were
+cancelled -- costless, because the three that mattered (mert-b3 89.8%,
+mert-b2 86.7%, mert-noisy 87.7%) had already been re-run on the CPU queue the
+same day, and CPU eval is both fast and uncontended. `dinov2-full-encoder`
+(9.2%) cancelled as a confirmed dead end.
+
+**Evaluate on CPU, train on GPU** is the durable lesson: the CPU partitions
+are uncontended and 13 evals completed there in ~2.5h while the GPU queue was
+frozen.

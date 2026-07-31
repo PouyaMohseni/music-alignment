@@ -5,7 +5,7 @@
 #SBATCH --constraint=a100
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=3:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/n3_belief_propagation-%j.log
 #SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/n3_belief_propagation-%j.log
 
