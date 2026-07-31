@@ -113,3 +113,23 @@ same day, and CPU eval is both fast and uncontended. `dinov2-full-encoder`
 **Evaluate on CPU, train on GPU** is the durable lesson: the CPU partitions
 are uncontended and 13 evals completed there in ~2.5h while the GPU queue was
 frozen.
+
+## Queue prune, 2026-07-31 (30 -> 20 pending)
+
+Dropped 10: five superseded lineages (`v3e2e-v2`, `v13-midi-privileged`,
+`v13-f1-combined`, `v11-mert-finetune`, `v11-madmom`) and five whose question
+is already answered (`b1a-cross-attention` 71.1% -- superseded by
+`b1a-gated-cross-attn`, which isolates the stabilisation confound;
+`b1a-spatial-film` 44.3%; `b1a-gated-spatial-film`, the gated version of that
+same weakest mechanism; and both MuSViT jobs, whose backbone already failed
+its overfit bar at 0.65 vs a 0.90 requirement).
+
+`MERT_dinov2_cross_attention` (66496560) is **kept** by explicit request, with
+its evaluation pre-wired: job **66851424** = `eval_mert_dinov2_crossattn_gpu.sh`
+submitted with `--dependency=afterany:66496560`. `afterany` is required, not
+`afterok`: these 24h training jobs always end in TIMEOUT, so an afterok
+dependency would never fire. This experiment must be evaluated on GPU -- the
+CPU attempt was killed at 11/125 pieces (~30h projected) because its
+TokenCrossAttentionFiLM cross-attends over the full raw DINOv2 token grid at
+every decoder block for every frame, and eval_model.py runs whole pieces
+rather than short BPTT chunks.
