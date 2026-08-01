@@ -44,7 +44,10 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tier_dir', required=True, help='acoustic tier root (has performance/*.wav)')
     p.add_argument('--out_dir', required=True)
-    p.add_argument('--tempo', type=int, default=1000)
+    # str, not int: MSMD-Rec reuses this slot for RECORDING CONDITION
+    # ('room' / 'di-left'), because CPJKU's load_performance builds the audio
+    # path as {piece}_{tempo_factor}.wav regardless of what that field means.
+    p.add_argument('--tempo', default='1000')
     p.add_argument('--fps', type=int, default=20)
     p.add_argument('--mert_id', default='m-a-p/MERT-v1-95M')
     p.add_argument('--limit', type=int, default=None)

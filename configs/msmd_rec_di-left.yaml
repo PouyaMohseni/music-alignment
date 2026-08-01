@@ -1,0 +1,20 @@
+# MSMD-Rec (Tier 2): REAL piano performances recorded on a Yamaha hybrid piano,
+# paired with the SAME typeset MSMD scores -- so the sheet images, notehead
+# coords and coord2onset are the standard MSMD ones and nothing needs
+# rendering or re-alignment. This is the tier CPJKU's real_perf=True branch
+# was written for, and the data already ships in
+# third_party/cpjku_unet/data/msmd/msmd_real_performances (25 pages, 172MB).
+#
+# CPJKU parameterises RECORDING CONDITION through the tempo_factors slot,
+# because load_performance builds the audio path as {piece}_{tempo_factor}.wav:
+#   room     room microphone -- true acoustic recording (hardest, most realistic)
+#   di-left  direct pickup from the instrument (clean, no room)
+# Onsets still come from {piece}.mid, which is the real performance's timing.
+
+spectrogram_params: {'sample_rate': 22050, 'frame_size': 2048, 'fps': 20, 'pad': 40}
+gt_width: 10
+
+real_perf: True
+tempo_factors: ['di-left']
+
+sf_path: 'sound_fonts/grand-piano-YDP-20160804.sf2'
