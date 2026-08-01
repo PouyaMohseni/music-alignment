@@ -28,7 +28,7 @@
 
 set -uo pipefail
 echo "Job started on $(hostname) at $(date)"
-module load gcc python/3.10 opencv
+module load gcc python/3.10 opencv/4.10.0
 
 SRC=/scratch/pmohseni/venv_cpjku310
 DST=/scratch/pmohseni/venv_cyolo
@@ -37,24 +37,50 @@ rm -rf "$DST"
 # subsequent `pip install` was a no-op against the module-level pip and the
 # venv ended up empty. virtualenv --no-download is the Alliance-supported way
 # and seeds pip/setuptools/wheel from the local wheelhouse.
-virtualenv --no-download "$DST"
+# Pin the EXACT 3.10 interpreter venv_cpjku310 was built from. `module load
+# python/3.10` silently resolves to 3.11 in batch context here, which is how
+# the first build produced a py3.11 venv -- and madmom is a COMPILED package
+# built for cp310, so its ABI does not transfer and the copy target
+# lib/python3.10/site-packages did not even exist.
+PY310=$(grep -E "^home" /scratch/pmohseni/venv_cpjku310/pyvenv.cfg | awk '{print $3}')/python3.10
+echo "base interpreter: $PY310 -> $($PY310 --version 2>&1)"
+"$PY310" --version | grep -q "3\.10" || { echo "FATAL: base interpreter is not 3.10"; exit 1; }
+"$PY310" -m venv "$DST"
 source "$DST/bin/activate"
 python -m pip --version || { echo "FATAL: venv has no pip"; exit 1; }
-pip install --no-index --upgrade pip setuptools wheel 2>&1 | tail -1
+# madmom 0.16.1 does `import pkg_resources`, which setuptools REMOVED in 81.
+# Upgrading setuptools unpinned is what broke the previous build.
+pip install --no-index --upgrade pip wheel 2>&1 | tail -1
+pip install --no-index "setuptools<81" 2>&1 | tail -1
+python -c "import pkg_resources; print('pkg_resources OK')" || { echo "FATAL: no pkg_resources"; exit 1; }
 
 echo "=== installing wheelhouse deps ==="
 # madmom 0.16.1 uses the np.float/np.int aliases removed in numpy 1.24, so the
 # ceiling is load-bearing; the exact 1.22.4 build is not in the py3.10
 # wheelhouse, so pin the constraint rather than the version.
-pip install --no-index "numpy<1.24" 2>&1 | tail -1
-pip install --no-index torch==2.6.0 torchvision torchaudio 2>&1 | tail -1
-pip install --no-index librosa scipy pyyaml tqdm soundfile matplotlib 2>&1 | tail -1
+# A pinned first install is NOT enough: every later pip call is free to
+# resolve numpy upward again, and that is what re-broke madmom
+# ("numpy has no attribute 'float'" -- the aliases removed in 1.24). Use a
+# CONSTRAINTS file honoured by all subsequent installs.
+CONSTRAINTS=$DST/constraints.txt
+echo "numpy<1.24" > "$CONSTRAINTS"
+pip install --no-index -c "$CONSTRAINTS" "numpy<1.24" 2>&1 | tail -1
+pip install --no-index -c "$CONSTRAINTS" torch==2.6.0 torchvision torchaudio 2>&1 | tail -1
+pip install --no-index -c "$CONSTRAINTS" librosa scipy pyyaml tqdm soundfile matplotlib 2>&1 | tail -1
+# madmom 0.16.1 Requires-Dist: numpy>=1.13.4, scipy>=0.16, cython>=0.25, mido>=1.2.8
+pip install --no-index -c "$CONSTRAINTS" mido cython 2>&1 | tail -1
 
 echo "=== copying source-built madmom 0.16.1 from venv_cpjku310 ==="
 SP_SRC=$(ls -d $SRC/lib/python3.10/site-packages)
 SP_DST=$(ls -d $DST/lib/python3.10/site-packages)
-cp -r "$SP_SRC"/madmom "$SP_DST"/ 2>/dev/null
-cp -r "$SP_SRC"/madmom-0.16.1.dist-info "$SP_DST"/ 2>/dev/null
+echo "  src=$SP_SRC"; echo "  dst=$SP_DST"
+[ -d "$SP_DST" ] || { echo "FATAL: no site-packages at $SP_DST"; exit 1; }
+cp -r "$SP_SRC"/madmom "$SP_DST"/            # no 2>/dev/null: a silent cp
+cp -r "$SP_SRC"/madmom-0.16.1.dist-info "$SP_DST"/   # failure hid the last bug
+
+echo "=== numpy must still be <1.24 after ALL installs ==="
+python -c "import numpy,sys; print('numpy',numpy.__version__); sys.exit(0 if tuple(map(int,numpy.__version__.split('.')[:2]))<(1,24) else 1)" \
+  || { echo "FATAL: numpy drifted >=1.24; madmom will break"; exit 1; }
 
 echo "=== verify ==="
 export PYTHONPATH=/scratch/pmohseni/datasets/cyolo_score_following:${PYTHONPATH:-}

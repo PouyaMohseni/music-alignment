@@ -1,5 +1,31 @@
 # Real-audio (MSMD-Rec) results — 2026-08-01
 
+## HEADLINE: both baselines reproduce EXACTLY, and CYOLO is 45 points ahead
+
+Measured under our own harness, one pipeline, pct@0.5s:
+
+| architecture              | synthetic | real (room) | drop  |
+|---------------------------|-----------|-------------|-------|
+| **CYOLO-SB+A** (SOTA)     | **90.8**  | **86.5**    | -4.3  |
+| our best (MERT+B3)        | 89.8      | 41.8        | -48.0 |
+| CB_TA (paper's own ckpt)  | 85.1      | 21.5        | -63.6 |
+
+Our reproductions land on the published values to the decimal -- CB_TA 85.1 vs
+published 85.1, CYOLO 90.8 / 86.5 vs published 0.908 / 0.865 -- so the harness
+is validated on BOTH architectures and none of these numbers are artefacts.
+
+Consequences:
+1. MERT nearly DOUBLES the conditional U-Net's real-audio score (21.5 -> 41.8).
+   That is a real contribution and it is ours.
+2. It is nowhere near enough. CYOLO is 44.7 points better on real room audio
+   and barely degrades at all (-4.3 vs our -48.0). The bottleneck is the
+   ARCHITECTURE, not the audio encoder.
+3. Any paper claiming real-world score following has to beat 86.5, not 41.8.
+   The obvious experiment is MERT inside the CYOLO backbone: CYOLO supplies the
+   robust architecture, MERT supplies the audio representation that doubled
+   ours. Nobody has combined them.
+
+
 Tier: `third_party/cpjku_unet/data/msmd/msmd_real_performances` — 25 score
 pages, real piano recorded on a Yamaha hybrid, **same typeset MSMD scores**
 (so sheet/coords/coord2onset are the standard ones; no rendering needed).

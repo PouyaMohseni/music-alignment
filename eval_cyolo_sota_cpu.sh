@@ -25,7 +25,7 @@
 
 set -uo pipefail
 echo "Job started on $(hostname) at $(date)"
-module load gcc opencv
+module load gcc python/3.10 opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 python -c "import torch,madmom,librosa" || { echo "FATAL: venv_cyolo incomplete"; exit 1; }
 
