@@ -56,10 +56,21 @@ SETUP_LOCK=/project/def-ichiro/pmohseni/music-alignment/.cpjku_submodule_setup.f
     git -C third_party/cpjku_unet checkout ismir-2020
 ) 200>"$SETUP_LOCK"
 
-CKPT_DIR=$(find results/cb_ta_ext/$EXP/params -maxdepth 1 -name "*_$EXP" -type d 2>/dev/null | sort | tail -1)
-[ -n "$CKPT_DIR" ] || { echo "FATAL: no checkpoint dir for $EXP"; exit 1; }
-CKPT="$(readlink -f "$CKPT_DIR/best_model.pt")"
+# $EXP may be an experiment dir under results/cb_ta_ext, OR a direct path to a
+# .pt -- the latter so the PAPER'S OWN released checkpoint
+# (third_party/cpjku_unet/models/CB_TA/best_model.pt) can be run on this tier.
+# That baseline is the control for the whole real-audio result: if Henkel's
+# released model also collapses on `room`, the collapse is a property of the
+# tier and our numbers are trustworthy; if it does not, the fault is ours.
+if [ -f "$EXP" ]; then
+    CKPT="$(readlink -f "$EXP")"
+else
+    CKPT_DIR=$(find results/cb_ta_ext/$EXP/params -maxdepth 1 -name "*_$EXP" -type d 2>/dev/null | sort | tail -1)
+    [ -n "$CKPT_DIR" ] || { echo "FATAL: no checkpoint dir for $EXP"; exit 1; }
+    CKPT="$(readlink -f "$CKPT_DIR/best_model.pt")"
+fi
 echo "checkpoint: $CKPT"
+[ -f "$(dirname "$CKPT")/net_config.json" ] || { echo "FATAL: no net_config.json beside checkpoint"; exit 1; }
 
 module load gcc opencv
 source /scratch/pmohseni/venv_cpjku310/bin/activate
