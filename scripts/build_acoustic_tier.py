@@ -127,9 +127,20 @@ def main():
     for i, piece in enumerate(pieces, 1):
         src_mid = os.path.join(a.src, 'performance', f'{piece}_tempo_{a.tempo}.mid')
         if not os.path.exists(src_mid):
-            print(f'  [skip] no tempo-{a.tempo} MIDI for {piece}', flush=True)
-            skipped += 1
-            continue
+            # msmd_real_performances stores its timing as plain '{piece}.mid'
+            # (no tempo suffix). Falling back to it lets this script build the
+            # matched SYNTHETIC control for the real-recording pieces --
+            # CPJKU's own 'rp_synth' condition -- so a real-vs-synthetic
+            # comparison is made over the SAME 25 pages instead of against the
+            # 125-page msmd_test, which would confound domain shift with piece
+            # difficulty.
+            alt = os.path.join(a.src, 'performance', f'{piece}.mid')
+            if os.path.exists(alt):
+                src_mid = alt
+            else:
+                print(f'  [skip] no MIDI for {piece}', flush=True)
+                skipped += 1
+                continue
 
         # real_perf reads onsets from '{piece}.mid' and audio from
         # '{piece}_{tempo}.wav'; both must describe the SAME timeline.
