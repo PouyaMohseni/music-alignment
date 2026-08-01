@@ -26,7 +26,15 @@ echo "Job started on $(hostname) at $(date)"
 cd /project/def-ichiro/pmohseni/music-alignment
 
 module load gcc opencv
-source /scratch/pmohseni/venv_cpjku310/bin/activate
+# .venv (py3.11), NOT venv_cpjku310 (py3.10). venv_cpjku310 exists for the
+# CPJKU eval path because it has REAL madmom, but it has no librosa and no
+# transformers, so the first attempt (job 66882934) died in 2 minutes on
+# `import librosa`. .venv has librosa 0.11 + transformers 5.9 + torch 2.11 and
+# is what precompute_mert_zenodo.py needs -- which also means it is what
+# produced the TRAINING embeddings, so encoding the real recordings here keeps
+# them consistent with the features the checkpoints were trained on. Nothing
+# in this script touches madmom.
+source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1

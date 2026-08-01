@@ -72,9 +72,25 @@ export MKL_NUM_THREADS=1
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 cd "$REPO/audio_conditioned_unet"
 
+# B2/B3/B5 save their auxiliary head into the checkpoint (_ext_*), which stock
+# eval_model.py rejects under strict loading ("Unexpected key(s) in
+# state_dict: _ext_b5_audio_proj.*"). extensions/hooks/run_eval_native.py is
+# the same wrapper eval_b5.sh uses: it applies lenient_load, then runs the
+# unmodified eval_model.py. Pick it automatically rather than per-experiment,
+# so this cannot be forgotten for a future aux-loss model.
+ENTRY=eval_model.py
+if python -c "
+import sys, torch
+sd = torch.load('$CKPT', map_location='cpu')
+sys.exit(0 if any(k.startswith('_ext_') for k in sd) else 1)
+" 2>/dev/null; then
+    ENTRY=/project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_eval_native.py
+    echo "checkpoint carries _ext_* keys -> using lenient_load wrapper"
+fi
+
 echo ""
-echo "=== eval_model.py: $EXP on MSMD-Rec REAL audio ($COND) ==="
-python eval_model.py \
+echo "=== $(basename $ENTRY): $EXP on MSMD-Rec REAL audio ($COND) ==="
+python "$ENTRY" \
     --param_path  "$CKPT" \
     --test_dir    "$REC_DIR" \
     --config      "$CONFIG" \
