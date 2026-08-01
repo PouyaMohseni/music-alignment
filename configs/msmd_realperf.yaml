@@ -1,0 +1,17 @@
+# Identical to third_party/cpjku_unet/audio_conditioned_unet/configs/msmd.yaml
+# EXCEPT real_perf: True, which switches load_performance from
+# "synthesise the MIDI with sf_path" to "read {piece}_{tempo}.wav from disk"
+# while still taking onset times from {piece}.mid.
+#
+# Used for the acoustic-shift tier built by scripts/build_acoustic_tier.py:
+# same MSMD sheet images, same coords, same note timing -- only the audio
+# differs. sf_path is retained solely because load_performance's signature
+# requires it; it is unused on the real_perf path.
+
+spectrogram_params: {'sample_rate': 22050, 'frame_size': 2048, 'fps': 20, 'pad': 40}
+gt_width: 10
+
+real_perf: True
+tempo_factors: [1000]
+
+sf_path: 'sound_fonts/grand-piano-YDP-20160804.sf2'
