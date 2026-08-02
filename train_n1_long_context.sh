@@ -56,8 +56,14 @@ if [ -n "$LATEST_CKPT" ]; then
     echo "Resuming from $LATEST_CKPT"
     PARAM_FLAG="--param_path $LATEST_CKPT"
 else
-    B1A_CKPT=$(find results/cb_ta_ext/B1a_mert_swap/params -name "best_model.pt" -type f -printf '%T@ %p\n' 2>/dev/null \
+    # MUST be absolute: this script cd's to $REPO/audio_conditioned_unet before
+    # invoking python, so a relative path resolves against the wrong directory
+    # and train_model.py dies with FileNotFoundError on a checkpoint that does
+    # exist. (Exactly what killed jobs 66850715/16/17.)
+    B1A_CKPT=$(find /project/def-ichiro/pmohseni/music-alignment/results/cb_ta_ext/B1a_mert_swap/params \
+               -name "best_model.pt" -type f -printf '%T@ %p\n' 2>/dev/null \
                | sort -rn | head -1 | cut -d' ' -f2-)
+    [ -n "$B1A_CKPT" ] && B1A_CKPT=$(readlink -f "$B1A_CKPT")
     if [ -n "$B1A_CKPT" ]; then
         echo "Cold start: warm-starting from B1a best_model.pt -> $B1A_CKPT"
         PARAM_FLAG="--param_path $B1A_CKPT"
