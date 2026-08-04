@@ -40,18 +40,23 @@ cd /project/def-ichiro/pmohseni/music-alignment
 # healthy because the running eval jobs imported torch before the slowdown.
 # The shared filesystem is transiently degraded; a cold torch import just needs
 # longer than the guard allowed. So the guard is widened, not the venv moved.
+#
+# 7200s, not 3600s: shards 17 and 21 of array 65821 both died at exactly
+# 01:00:04 -- the 3600s guard itself -- discarding an 11h allocation over an
+# import that merely needed longer. The guard exists to catch a TRUE hang
+# well before walltime, so it only has to beat 11h, not be tight.
 module load gcc opencv
 source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
 
 echo "python: $(command -v python)"
-timeout 3600 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
+timeout 7200 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 export PYTHONUNBUFFERED=1
 export HF_HOME=/scratch/pmohseni/hf-cache
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 
-time timeout 3600 python -c "import torch, transformers, librosa, soundfile; print('imports ok')" \
-    || { echo "FATAL: venv imports failed or stalled >60min"; exit 1; }
+time timeout 7200 python -c "import torch, transformers, librosa, soundfile; print('imports ok')" \
+    || { echo "FATAL: venv imports failed or stalled >120min"; exit 1; }
 
 MIDI_DIR=/scratch/pmohseni/msmd_train_full/performance
 OUT_DIR=/scratch/pmohseni/mert_emb_aug/train_full

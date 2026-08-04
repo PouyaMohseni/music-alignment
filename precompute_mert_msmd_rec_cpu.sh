@@ -46,11 +46,16 @@ module load gcc opencv
 # healthy because the running eval jobs imported torch before the slowdown.
 # The shared filesystem is transiently degraded; a cold torch import just needs
 # longer than the guard allowed. So the guard is widened, not the venv moved.
+#
+# 7200s, not 3600s: shards 17 and 21 of array 65821 both died at exactly
+# 01:00:04 -- the 3600s guard itself -- discarding an 11h allocation over an
+# import that merely needed longer. The guard exists to catch a TRUE hang
+# well before walltime, so it only has to beat 11h, not be tight.
 module load gcc opencv
 source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
 
 echo "python: $(command -v python)"
-timeout 3600 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
+timeout 7200 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
