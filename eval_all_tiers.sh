@@ -31,8 +31,14 @@ EXP="${1:?usage: bash eval_all_tiers.sh <EXPERIMENT> [WRAPPER|plain] [--after JO
 WRAPPER="${2:-plain}"
 DEP=""
 if [ "${3:-}" = "--after" ] && [ -n "${4:-}" ]; then
-    DEP="--dependency=afterok:${4}"
-    echo "chaining after job ${4}"
+    # afterANY, not afterok. The training jobs are 3h allocations that are
+    # DESIGNED to hit their walltime and be resubmitted (they auto-resume from
+    # latest_model.pt), so they terminate as TIMEOUT, not COMPLETED. With
+    # afterok SLURM treats that as failure and CANCELS the dependent evals --
+    # which is exactly what happened to 64849-64854: all six cancelled, zero
+    # logs, while both checkpoints existed and were perfectly evaluable.
+    DEP="--dependency=afterany:${4}"
+    echo "chaining after job ${4} (afterany: TIMEOUT is the expected end state)"
 fi
 
 cd "$(dirname "$0")"
