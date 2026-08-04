@@ -28,20 +28,34 @@ set -uo pipefail
 echo "Job started on $(hostname) at $(date)  shard=${SLURM_ARRAY_TASK_ID}"
 cd /project/def-ichiro/pmohseni/music-alignment
 
-# /scratch, NOT /project. The identical env exists at
-# /project/.../.venv but reading it wedges: torch+transformers is ~50k small
-# files and /project is at ~96% of its 500k INODE quota, so metadata-heavy
-# many-small-file reads stall there. Pilot shard 50660 sat in Lustre
-# cl_sync_io_wait for 10+ minutes with TotalCPU=00:00:00 -- blocked on I/O,
-# never executing -- and an earlier interactive run of the same env hung the
-# same way. Package versions are identical (torch 2.11.0, transformers 5.9.0,
-# librosa 0.11.0, soundfile 0.13.1, scipy 1.17.0), so this is a pure relocation.
-source /scratch/pmohseni/music-alignment-venv/bin/activate
-echo "python: $(command -v python)"   # canary: instant unless the venv is stalled
+# Do NOT `source .../activate`. /scratch/pmohseni/music-alignment-venv/bin/activate
+# HARDCODES VIRTUAL_ENV=/lustre06/project/.../.venv (pyvenv.cfg shows it was
+# created from there), so sourcing it silently puts the /project venv back on
+# PATH -- exactly the thing being avoided. Job 51150 proved this: the script
+# said /scratch and the canary still printed a /project interpreter.
+#
+# Why /project must be avoided: torch+transformers is ~50k small files and
+# /project is at ~96% of its 500k INODE quota, so metadata-heavy reads stall.
+# Pilot 50660 sat 10+ min in Lustre cl_sync_io_wait at 0 CPU seconds, never
+# executing. /scratch is the same Lustre but not inode-starved.
+#
+# Setting VIRTUAL_ENV/PATH by hand is all activate does; python then resolves
+# its own prefix from the executable location + pyvenv.cfg (verified: prefix
+# and site-packages both land under /scratch).
+VENV=/scratch/pmohseni/music-alignment-venv
+export VIRTUAL_ENV="$VENV"
+export PATH="$VENV/bin:$PATH"
+unset PYTHONHOME
+
+echo "python: $(command -v python)"
+timeout 900 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 export PYTHONUNBUFFERED=1
 export HF_HOME=/scratch/pmohseni/hf-cache
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+
+timeout 900 python -c "import torch, transformers, librosa, soundfile; print('imports ok')" \
+    || { echo "FATAL: venv imports failed or stalled >15min"; exit 1; }
 
 MIDI_DIR=/scratch/pmohseni/msmd_train_full/performance
 OUT_DIR=/scratch/pmohseni/mert_emb_aug/train_full

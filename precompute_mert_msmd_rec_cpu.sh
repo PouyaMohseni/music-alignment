@@ -34,11 +34,27 @@ module load gcc opencv
 # produced the TRAINING embeddings, so encoding the real recordings here keeps
 # them consistent with the features the checkpoints were trained on. Nothing
 # in this script touches madmom.
-# NOTE: this used to source .venv on /project. Same packages, but reading a
-# ~50k-small-file env off /project (at ~96% of its 500k inode quota) stalls
-# in Lustre cl_sync_io_wait and the job burns its walltime at 0% CPU --
-# observed on pilot 50660. music-alignment-venv is the identical env on /scratch.
-source /scratch/pmohseni/music-alignment-venv/bin/activate
+# Do NOT `source .../activate`. /scratch/pmohseni/music-alignment-venv/bin/activate
+# HARDCODES VIRTUAL_ENV=/lustre06/project/.../.venv (pyvenv.cfg shows it was
+# created from there), so sourcing it silently puts the /project venv back on
+# PATH -- exactly the thing being avoided. Job 51150 proved this: the script
+# said /scratch and the canary still printed a /project interpreter.
+#
+# Why /project must be avoided: torch+transformers is ~50k small files and
+# /project is at ~96% of its 500k INODE quota, so metadata-heavy reads stall.
+# Pilot 50660 sat 10+ min in Lustre cl_sync_io_wait at 0 CPU seconds, never
+# executing. /scratch is the same Lustre but not inode-starved.
+#
+# Setting VIRTUAL_ENV/PATH by hand is all activate does; python then resolves
+# its own prefix from the executable location + pyvenv.cfg (verified: prefix
+# and site-packages both land under /scratch).
+VENV=/scratch/pmohseni/music-alignment-venv
+export VIRTUAL_ENV="$VENV"
+export PATH="$VENV/bin:$PATH"
+unset PYTHONHOME
+
+echo "python: $(command -v python)"
+timeout 900 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
