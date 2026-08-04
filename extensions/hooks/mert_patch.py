@@ -24,6 +24,7 @@ Usage (before calling anything from audio_conditioned_unet):
 """
 from __future__ import annotations
 import copy
+import hashlib
 import os
 from pathlib import Path
 
@@ -44,11 +45,51 @@ import numpy as np
 # i.e. empty, in the fresh import). So _load_mert_spec reads the MERT_PATH_MAP
 # env var instead, which IS inherited by spawned children.
 _PATH_TO_EMB_ROOT: dict[str, str] = {}
+_WARNED_MISSING_AUG = False
 
 
 def _get_path_to_emb_root() -> dict[str, str]:
     path_map_str = os.environ.get('MERT_PATH_MAP', '')
     return dict(pair.split('=', 1) for pair in path_map_str.split(';') if pair)
+
+
+def _get_aug_emb_root_map() -> dict[str, str]:
+    """R2 multi-condition training: optional second embedding bank, encoded from
+    ACOUSTICALLY DEGRADED audio (scripts/precompute_mert_augmented.py)."""
+    return dict(pair.split('=', 1)
+                for pair in os.environ.get('MERT_AUG_PATH_MAP', '').split(';') if pair)
+
+
+def _use_augmented(key: str) -> bool:
+    """Decide DETERMINISTICALLY, from the (piece, tempo) key, whether this
+    performance is served from the degraded bank.
+
+    Why deterministic rather than random:
+
+      * load_piece runs ONCE per performance at dataset-construction time, not
+        per training step, so a coin flip here would not resample during
+        training anyway -- it would just fix an arbitrary split. Making it a
+        hash of the key means the split is reproducible across runs, across
+        resumes, and across spawned workers (which re-import this module and
+        would otherwise each draw their own).
+      * Serving BOTH versions of every performance would double resident memory
+        (the specs are held in RAM; the clean bank alone is 9.4 GB on disk as
+        fp16), which does not fit alongside training.
+
+    Granularity is (piece, tempo_factor), NOT piece: with ~7 tempo variants per
+    piece and p=0.5, nearly every piece is seen in both the clean and the
+    degraded domain, which is what multi-condition training needs. Splitting by
+    piece instead would partition the repertoire and teach the model that
+    certain music is always degraded.
+    """
+    p = float(os.environ.get('MERT_AUG_PROB', '0'))
+    if p <= 0.0:
+        return False
+    if p >= 1.0:
+        return True
+    # stable across processes and Python runs, unlike hash()
+    h = hashlib.sha1(key.encode()).digest()
+    return (int.from_bytes(h[:4], 'big') / 0xFFFFFFFF) < p
 
 
 def _load_mert_spec(dataset_path: str, piece: str, tempo_factor) -> np.ndarray:
@@ -61,6 +102,25 @@ def _load_mert_spec(dataset_path: str, piece: str, tempo_factor) -> np.ndarray:
                         f'-- known paths: {list(path_to_emb_root)} '
                         f'(MERT_PATH_MAP={os.environ.get("MERT_PATH_MAP")!r})')
     key = f'{piece}_tempo_{tempo_factor}' if tempo_factor != -1 else piece
+
+    # R2: swap in the degraded bank for a deterministic subset. Absent
+    # MERT_AUG_PATH_MAP/MERT_AUG_PROB this branch never fires and behaviour is
+    # byte-identical to before, so every existing experiment is unaffected.
+    aug_root = _get_aug_emb_root_map().get(dataset_path)
+    if aug_root is not None and _use_augmented(key):
+        cand = Path(aug_root) / f'{key}.npy'
+        if cand.exists():
+            emb = np.load(cand).astype(np.float32)
+            return emb.T
+        # Fall through to clean rather than crash: a missing augmented key means
+        # an incomplete bank, and silently training on 95% coverage beats dying
+        # at epoch 3. Announced once per worker so it cannot pass unnoticed.
+        global _WARNED_MISSING_AUG
+        if not _WARNED_MISSING_AUG:
+            print(f'[mert_patch] WARNING: augmented embedding missing ({cand.name}); '
+                  f'falling back to the clean bank for it', flush=True)
+            _WARNED_MISSING_AUG = True
+
     path = Path(emb_root) / f'{key}.npy'
     emb = np.load(path).astype(np.float32)   # (T, 768)
     return emb.T                              # (768, T)
