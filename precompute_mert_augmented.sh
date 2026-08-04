@@ -28,24 +28,23 @@ set -uo pipefail
 echo "Job started on $(hostname) at $(date)  shard=${SLURM_ARRAY_TASK_ID}"
 cd /project/def-ichiro/pmohseni/music-alignment
 
-# Do NOT `source .../activate`. /scratch/pmohseni/music-alignment-venv/bin/activate
-# HARDCODES VIRTUAL_ENV=/lustre06/project/.../.venv (pyvenv.cfg shows it was
-# created from there), so sourcing it silently puts the /project venv back on
-# PATH -- exactly the thing being avoided. Job 51150 proved this: the script
-# said /scratch and the canary still printed a /project interpreter.
+# module load FIRST, then the venv. This is not optional and its absence does
+# not fail loudly: Compute Canada's `+computecanada` wheels link against
+# libraries supplied by loaded modules, and without them the dynamic loader
+# stalls resolving against CVMFS -- the process sits in cl_sync_io_wait at
+# 00:00:00 CPU forever rather than raising ImportError.
 #
-# Why /project must be avoided: torch+transformers is ~50k small files and
-# /project is at ~96% of its 500k INODE quota, so metadata-heavy reads stall.
-# Pilot 50660 sat 10+ min in Lustre cl_sync_io_wait at 0 CPU seconds, never
-# executing. /scratch is the same Lustre but not inode-starved.
+# Pilots 50660 and 52401 both hung exactly that way. I first blamed /project's
+# inode quota and moved the venv to /scratch; 52401 proves that was wrong --
+# it hung identically on /scratch. The real difference is that
+# precompute_mert_zenodo.sh, which successfully built the CLEAN 6615-piece
+# bank, does `module load gcc opencv` and my script did not.
 #
-# Setting VIRTUAL_ENV/PATH by hand is all activate does; python then resolves
-# its own prefix from the executable location + pyvenv.cfg (verified: prefix
-# and site-packages both land under /scratch).
-VENV=/scratch/pmohseni/music-alignment-venv
-export VIRTUAL_ENV="$VENV"
-export PATH="$VENV/bin:$PATH"
-unset PYTHONHOME
+# .venv is also deliberate, not incidental: the clean bank was encoded with it,
+# and the augmented bank must come from the SAME MERT stack or a clean-vs-
+# augmented comparison is confounded by library versions.
+module load gcc opencv
+source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
 
 echo "python: $(command -v python)"
 timeout 900 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
