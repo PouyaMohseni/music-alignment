@@ -75,6 +75,25 @@ LAST=$(find "$OUT/params" -name "*.pt" -type f -printf '%T@ %p\n' 2>/dev/null | 
 # carry it into this one.
 unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 
+# OpenMP is NOT fork-safe, and cyolo_score_following/dataset.py:301 loads the
+# training set through get_context("fork").Pool(8). If the OpenMP runtime has
+# already spawned its thread pool in the parent (which it does lazily on the
+# first numpy/torch call), the forked children inherit locks held by threads
+# that do not exist in the child and block forever on a futex.
+#
+# That is exactly how job 88219 died: it printed "Loading 353 file(s)...",
+# then sat at 0/353 for 50 minutes with FOUR python processes in
+# futex_wait_queue, 8 SECONDS of CPU between them, and the GPU at 0%.
+# It was deadlocked, not slow.
+#
+# The two smoke-test scripts that DO work (smoke_train_cyolo_cpu.sh:44,
+# smoke_train_cyolo_noaug_cpu.sh:44) both set OMP_NUM_THREADS explicitly and
+# pass --num_workers 2; this script set neither. 1 thread x Pool(8) also
+# matches --cpus-per-task=8 exactly instead of oversubscribing it.
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+
 echo "=== training CYOLO config=$CFG (full msmd_train, --augment) ==="
 python train.py \
     --train_sets "$DATA/msmd_train" \
@@ -84,6 +103,7 @@ python train.py \
     --dump_root "$OUT/params" \
     --log_root  "$OUT/runs" \
     --tag ${CFG}_repro \
+    --num_workers 2 \
     $PARAM_FLAG
 STATUS=$?
 
