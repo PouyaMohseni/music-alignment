@@ -34,7 +34,11 @@ module load gcc opencv
 # produced the TRAINING embeddings, so encoding the real recordings here keeps
 # them consistent with the features the checkpoints were trained on. Nothing
 # in this script touches madmom.
-source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
+# NOTE: this used to source .venv on /project. Same packages, but reading a
+# ~50k-small-file env off /project (at ~96% of its 500k inode quota) stalls
+# in Lustre cl_sync_io_wait and the job burns its walltime at 0% CPU --
+# observed on pilot 50660. music-alignment-venv is the identical env on /scratch.
+source /scratch/pmohseni/music-alignment-venv/bin/activate
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1

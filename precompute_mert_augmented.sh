@@ -28,9 +28,16 @@ set -uo pipefail
 echo "Job started on $(hostname) at $(date)  shard=${SLURM_ARRAY_TASK_ID}"
 cd /project/def-ichiro/pmohseni/music-alignment
 
-# .venv (py3.11) -- has librosa + transformers + torch, and is the env that
-# produced the CLEAN bank. venv_cpjku310 has real madmom but no librosa.
-source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
+# /scratch, NOT /project. The identical env exists at
+# /project/.../.venv but reading it wedges: torch+transformers is ~50k small
+# files and /project is at ~96% of its 500k INODE quota, so metadata-heavy
+# many-small-file reads stall there. Pilot shard 50660 sat in Lustre
+# cl_sync_io_wait for 10+ minutes with TotalCPU=00:00:00 -- blocked on I/O,
+# never executing -- and an earlier interactive run of the same env hung the
+# same way. Package versions are identical (torch 2.11.0, transformers 5.9.0,
+# librosa 0.11.0, soundfile 0.13.1, scipy 1.17.0), so this is a pure relocation.
+source /scratch/pmohseni/music-alignment-venv/bin/activate
+echo "python: $(command -v python)"   # canary: instant unless the venv is stalled
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 export PYTHONUNBUFFERED=1
 export HF_HOME=/scratch/pmohseni/hf-cache
