@@ -28,33 +28,30 @@ set -uo pipefail
 echo "Job started on $(hostname) at $(date)  shard=${SLURM_ARRAY_TASK_ID}"
 cd /project/def-ichiro/pmohseni/music-alignment
 
-# module load FIRST, then the venv. This is not optional and its absence does
-# not fail loudly: Compute Canada's `+computecanada` wheels link against
-# libraries supplied by loaded modules, and without them the dynamic loader
-# stalls resolving against CVMFS -- the process sits in cl_sync_io_wait at
-# 00:00:00 CPU forever rather than raising ImportError.
+# Keep `module load` (correct practice) and .venv (the clean 6615-piece bank was
+# encoded with it -- the augmented bank must come from the SAME MERT stack or a
+# clean-vs-augmented comparison is confounded by library versions).
 #
-# Pilots 50660 and 52401 both hung exactly that way. I first blamed /project's
-# inode quota and moved the venv to /scratch; 52401 proves that was wrong --
-# it hung identically on /scratch. The real difference is that
-# precompute_mert_zenodo.sh, which successfully built the CLEAN 6615-piece
-# bank, does `module load gcc opencv` and my script did not.
-#
-# .venv is also deliberate, not incidental: the clean bank was encoded with it,
-# and the augmented bank must come from the SAME MERT stack or a clean-vs-
-# augmented comparison is confounded by library versions.
+# The repeated "hangs" here were NEITHER /project's inode quota NOR a missing
+# module load -- I asserted both and pilots 52401/58499 falsified both. Job
+# 60948 measured the actual cause: `import numpy` alone takes 25-51s in THREE
+# independent venvs across two filesystems (normally ~0.2s), and torch times
+# out at 90s in all of them -- including venv_cpjku310, which only looks
+# healthy because the running eval jobs imported torch before the slowdown.
+# The shared filesystem is transiently degraded; a cold torch import just needs
+# longer than the guard allowed. So the guard is widened, not the venv moved.
 module load gcc opencv
 source /project/def-ichiro/pmohseni/music-alignment/.venv/bin/activate
 
 echo "python: $(command -v python)"
-timeout 900 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
+timeout 3600 python -c "import sys; print('prefix:', sys.prefix)" || { echo "FATAL: venv unusable/stalled"; exit 1; }
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 export PYTHONUNBUFFERED=1
 export HF_HOME=/scratch/pmohseni/hf-cache
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 
-timeout 900 python -c "import torch, transformers, librosa, soundfile; print('imports ok')" \
-    || { echo "FATAL: venv imports failed or stalled >15min"; exit 1; }
+time timeout 3600 python -c "import torch, transformers, librosa, soundfile; print('imports ok')" \
+    || { echo "FATAL: venv imports failed or stalled >60min"; exit 1; }
 
 MIDI_DIR=/scratch/pmohseni/msmd_train_full/performance
 OUT_DIR=/scratch/pmohseni/mert_emb_aug/train_full
