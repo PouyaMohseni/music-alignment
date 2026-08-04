@@ -56,6 +56,25 @@ PARAM_FLAG=""
 LAST=$(find "$OUT/params" -name "*.pt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 [ -n "$LAST" ] && { LAST=$(readlink -f "$LAST"); echo "Resuming from $LAST"; PARAM_FLAG="--param_path $LAST"; }
 
+# CYOLO's init_distributed_mode (utils/dist_utils.py:11) branches on env vars:
+#   'RANK'+'WORLD_SIZE' present -> reads all three, fine
+#   'SLURM_PROCID' present      -> sets args.rank and args.gpu but NOT
+#                                  args.world_size, then line 37 passes
+#                                  world_size=args.world_size to
+#                                  init_process_group -> AttributeError
+#   neither                     -> "Not using distributed mode", rank=0, returns
+#
+# SLURM sets SLURM_PROCID in EVERY job, so the middle branch always fires and
+# always crashes for a single-process run. That killed job 66979946 after 8min
+# with AttributeError: 'Namespace' object has no attribute 'world_size', and on
+# CPU the same branch dies as ZeroDivisionError instead (args.rank %
+# torch.cuda.device_count() with 0 GPUs). Unsetting these forces the clean
+# non-distributed path. No code change to their repo needed.
+#
+# This fix was already applied to the CPU smoke-test script and I failed to
+# carry it into this one.
+unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
+
 echo "=== training CYOLO config=$CFG (full msmd_train, --augment) ==="
 python train.py \
     --train_sets "$DATA/msmd_train" \
