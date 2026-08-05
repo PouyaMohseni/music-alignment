@@ -1,3 +1,9 @@
+> **SUPERSEDED NUMBERS — see BASELINE_CORRECTION.md (2026-08-04).**
+> Every `cyolo*` figure below is the **0.1 s** column, not 0.5 s. At pct@0.5s the
+> reproducible bar is **cyolo_sb = 79.9** (not 63.0), cyolo = 71.2, cyolo_sb_a = 86.5.
+> Published CUNet — our own architecture family — is **22.4**, so R3's 45.6 already
+> doubles it. The real gap is 34 points, not 17.
+
 # Hybrid models: combining what CB_TA-Ext and CYOLO each demonstrably do well
 
 Target: beat `cyolo_sb` = **63.0** pct@0.5s on MSMD-Rec `room`. Our best is 44.7.
