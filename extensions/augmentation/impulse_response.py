@@ -82,7 +82,20 @@ def apply_random_ir_augmentation(waveform: np.ndarray, ir_bank: list, sr: int, r
         return waveform
     from scipy.signal import fftconvolve
     ir = ir_bank[rng.integers(0, len(ir_bank))]
-    convolved = fftconvolve(waveform, ir, mode='same').astype(np.float32)
+    # mode='full' truncated to len(waveform), NOT mode='same'.
+    #
+    # mode='same' returns full[(len(ir)-1)//2 : ...], i.e. it ADVANCES the audio
+    # by half the IR length relative to its own onset labels. Measured on B6's
+    # own bank that is a 4.1-20.0 FRAME desync at 20fps (204-1000 ms), drawn
+    # randomly per sample, on 50% of training samples -- against a tolerance of
+    # 10 frames. 10 of B6's 16 IRs hit the 2.0s cap and produce the full
+    # 20-frame advance.
+    #
+    # This is why B6 scored 15.6 on room, WORSE than no augmentation at all.
+    # B6 measured a broken pipeline, not impulse-response augmentation. CYOLO's
+    # own loader uses convolve(x, ir, 'full')[:-(len(ir)-1)], which is the same
+    # convention as the line below and leaves the direct path at t=0.
+    convolved = fftconvolve(waveform, ir, mode='full')[:len(waveform)].astype(np.float32)
     convolved = normalize_to_original_rms(convolved, waveform)
     noise = generate_pink_noise(len(waveform), seed=int(rng.integers(0, 2**31)))
     snr_db = rng.uniform(*snr_range_db)
