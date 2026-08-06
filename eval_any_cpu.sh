@@ -32,7 +32,7 @@
 # ##########################################################################
 
 set -uo pipefail
-EXP="${1:?usage: sbatch eval_any_cpu.sh <EXPERIMENT> <synth|room|di-left> <WRAPPER|plain>}"
+EXP="${1:?usage: sbatch eval_any_cpu.sh <EXPERIMENT> <synth|rp_synth|room|di-left> <WRAPPER|plain>}"
 TIER="${2:?}"
 WRAPPER="${3:-plain}"
 
@@ -51,6 +51,15 @@ case "$TIER" in
            TEST_DIR="$REC"
            CONFIG="$REPO_ROOT/configs/msmd_rec_${TIER}.yaml"
            SPLIT="--split_file $REC/rp_split.yaml"; EMB=/scratch/pmohseni/mert_emb_msmd_rec/$TIER ;;
+  rp_synth)
+           # The matched synthetic control: SAME 25 pages, SAME score/ (symlink)
+           # and SAME GT as room/di-left, but training-soundfont audio. The
+           # rp_synth->room delta is pure acoustics, with page difficulty and
+           # repeat structure held fixed. Uses the SAME rp_split.yaml because it
+           # is literally the same page list.
+           TEST_DIR=/scratch/pmohseni/acoustic_tiers/rp_synth
+           CONFIG="$REPO_ROOT/configs/msmd_rp_synth.yaml"
+           SPLIT="--split_file $REC/rp_split.yaml"; EMB=/scratch/pmohseni/mert_emb_rp_synth ;;
   *) echo "FATAL: unknown tier '$TIER'"; exit 1 ;;
 esac
 [ -f "$CONFIG" ] || { echo "FATAL: no config $CONFIG"; exit 1; }

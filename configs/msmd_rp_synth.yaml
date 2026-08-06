@@ -1,0 +1,30 @@
+# rp_synth -- CPJKU's own MATCHED SYNTHETIC CONTROL for MSMD-Rec.
+#
+# The SAME 25 pages as the room/di-left tiers, with the SAME score images and
+# the SAME ground-truth coords (score/ is a symlink to
+# msmd_real_performances/score), but the audio is re-rendered from the real
+# performance MIDI with the TRAINING soundfont.
+#
+# WHY THIS TIER IS THE DECISIVE CONTROL. Our room deficit could be either
+#   (a) acoustic domain shift -- real piano + room mic vs fluidsynth, or
+#   (b) these 25 pages are simply harder than msmd_test (repeats, layout,
+#       page length, the Chopin nocturne that is 29.8% of all room onsets).
+# Every room number we have confounds the two, because our only synthetic
+# reference is msmd_test -- 125 DIFFERENT pages. rp_synth removes the
+# confound completely: identical pages, identical GT, training-domain audio.
+# The rp_synth -> room delta is then PURE acoustics.
+#
+# Calibration from CYOLO's own run (results/eval_cyolo_sota-66914671.log):
+# cyolo_sb_a scores 88.6 on rp_synth and 86.5 on room -- only -2.1 on
+# identical pages. A robust model barely notices the channel.
+#
+# Audio is {piece}_1000.wav and onsets come from {piece}.mid, so the recording
+# condition slot carries the literal tempo 1000 here.
+
+spectrogram_params: {'sample_rate': 22050, 'frame_size': 2048, 'fps': 20, 'pad': 40}
+gt_width: 10
+
+real_perf: True
+tempo_factors: ['1000']
+
+sf_path: 'sound_fonts/grand-piano-YDP-20160804.sf2'
