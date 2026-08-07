@@ -46,6 +46,7 @@ RUN
 import argparse
 import json
 import os
+import torch
 import sys
 import time
 
@@ -109,11 +110,29 @@ def main():
             return 2e8 if os.path.abspath(p) == _c else _r(p)
 
         _inf.os.path.getsize = _guarded_getsize
+
+        # torch 2.6 flipped torch.load's `weights_only` default to True, and the
+        # Kong/Edwards checkpoints pickle numpy.core.multiarray._reconstruct, so
+        # the load raises UnpicklingError inside the library (which we cannot
+        # pass an argument to). These are checkpoints WE downloaded ourselves
+        # from Zenodo, so allowlisting that one global is safe here.
+        # This is the only thing that failed on job 401353.
+        try:
+            import numpy.core.multiarray as _nma
+            torch.serialization.add_safe_globals([_nma._reconstruct])
+        except Exception:
+            pass
+        _real_torch_load = torch.load
+        def _compat_load(*a, **kw):
+            kw.setdefault('weights_only', False)
+            return _real_torch_load(*a, **kw)
+        torch.load = _compat_load
         try:
             tr = PianoTranscription(model_type=model_type, checkpoint_path=ckpt,
                                     device=device)
         finally:
             _inf.os.path.getsize = _real_getsize
+            torch.load = _real_torch_load
         assert _real_getsize(ckpt) == size, 'checkpoint was overwritten by autodownload!'
         # Sanity: their load_state_dict uses strict=False, so a wholesale key
         # mismatch would silently leave a RANDOMLY INITIALISED net and we would
