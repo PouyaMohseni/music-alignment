@@ -1,0 +1,1102 @@
+{
+  "meta": {
+    "tier": "room",
+    "metric": "pct@0.5s",
+    "B": 20000,
+    "seed": 20260807,
+    "n_pages": 25,
+    "n_pieces": 16,
+    "n_onsets": 4415,
+    "cluster": "piece (page name with trailing _page_N stripped)",
+    "mdd_constant": 2.8015852189999997,
+    "systems": [
+      "B1a_mert_swap",
+      "B3_inr_subpixel",
+      "B4_temporal_consistency",
+      "CUNet_CB_TA",
+      "MERT_B2_pitch_aux",
+      "N3_belief_propagation",
+      "R3",
+      "cyolo",
+      "cyolo_sb",
+      "cyolo_sb_a"
+    ]
+  },
+  "verify_weighting": {
+    "cyolo": 71.15,
+    "cyolo_sb": 79.95,
+    "cyolo_sb_a": 86.46,
+    "R3": 45.38,
+    "N3_belief_propagation": 44.56,
+    "MERT_B2_pitch_aux": 43.51,
+    "B1a_mert_swap": 38.39,
+    "B3_inr_subpixel": 27.97,
+    "B4_temporal_consistency": 16.45,
+    "CUNet_CB_TA": 21.57
+  },
+  "cluster_structure": {
+    "onsets_per_piece": {
+      "BachJS__BWV117a__BWV-117a": 166,
+      "BachJS__BWV797__bwv797": 408,
+      "BachJS__BWV817__bach-french-suite-6-menuet": 153,
+      "BachJS__BWV830__BWV-830-2": 501,
+      "BachJS__BWV924a__bach-prelude-bwv924a": 213,
+      "BachJS__BWVAnh113__anna-magdalena-03": 209,
+      "BachJS__BWVAnh116__anna-magdalena-07": 235,
+      "BachJS__BWVAnh120__BWV-120": 118,
+      "ChopinFF__O9__nocturne_in_b-flat_minor": 1315,
+      "MozartWA__KV331__KV331_1_2_var1": 229,
+      "MussorgskyM__pictures-at-an-exhibition__promenade-3": 62,
+      "SchumannR__O68__schumann-op68-01-melodie": 192,
+      "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 119,
+      "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 164,
+      "SchumannR__O68__schumann-op68-16-premier-chagrin": 137,
+      "SchumannR__O68__schumann-op68-26-sans-titre": 194
+    },
+    "pages_per_piece": {
+      "BachJS__BWV117a__BWV-117a": 1,
+      "BachJS__BWV797__bwv797": 2,
+      "BachJS__BWV817__bach-french-suite-6-menuet": 1,
+      "BachJS__BWV830__BWV-830-2": 3,
+      "BachJS__BWV924a__bach-prelude-bwv924a": 1,
+      "BachJS__BWVAnh113__anna-magdalena-03": 1,
+      "BachJS__BWVAnh116__anna-magdalena-07": 1,
+      "BachJS__BWVAnh120__BWV-120": 1,
+      "ChopinFF__O9__nocturne_in_b-flat_minor": 6,
+      "MozartWA__KV331__KV331_1_2_var1": 1,
+      "MussorgskyM__pictures-at-an-exhibition__promenade-3": 1,
+      "SchumannR__O68__schumann-op68-01-melodie": 1,
+      "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 1,
+      "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 1,
+      "SchumannR__O68__schumann-op68-16-premier-chagrin": 1,
+      "SchumannR__O68__schumann-op68-26-sans-titre": 2
+    },
+    "largest_piece_share_pct": 29.8,
+    "largest_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+    "composer_share_pct": {
+      "BachJS": 45.4,
+      "ChopinFF": 29.8,
+      "SchumannR": 18.3,
+      "MozartWA": 5.2,
+      "MussorgskyM": 1.4
+    }
+  },
+  "absolute": {
+    "cyolo": {
+      "pct_at_0.5s": 71.15,
+      "se_cluster": 8.39,
+      "ci95": [
+        57.7,
+        86.2
+      ],
+      "ci_width": 28.6,
+      "se_naive_onset_binomial": 0.682,
+      "design_effect": 151.5,
+      "effective_n_onsets": 29.1,
+      "boot_skew": -0.01
+    },
+    "cyolo_sb": {
+      "pct_at_0.5s": 79.95,
+      "se_cluster": 5.06,
+      "ci95": [
+        71.8,
+        89.2
+      ],
+      "ci_width": 17.3,
+      "se_naive_onset_binomial": 0.603,
+      "design_effect": 70.6,
+      "effective_n_onsets": 62.5,
+      "boot_skew": -0.02
+    },
+    "cyolo_sb_a": {
+      "pct_at_0.5s": 86.46,
+      "se_cluster": 3.89,
+      "ci95": [
+        80.3,
+        93.3
+      ],
+      "ci_width": 13.0,
+      "se_naive_onset_binomial": 0.515,
+      "design_effect": 57.1,
+      "effective_n_onsets": 77.4,
+      "boot_skew": -0.03
+    },
+    "R3": {
+      "pct_at_0.5s": 45.38,
+      "se_cluster": 10.07,
+      "ci95": [
+        29.3,
+        64.8
+      ],
+      "ci_width": 35.5,
+      "se_naive_onset_binomial": 0.749,
+      "design_effect": 180.7,
+      "effective_n_onsets": 24.4,
+      "boot_skew": 0.03
+    },
+    "N3_belief_propagation": {
+      "pct_at_0.5s": 44.56,
+      "se_cluster": 7.88,
+      "ci95": [
+        32.0,
+        59.7
+      ],
+      "ci_width": 27.6,
+      "se_naive_onset_binomial": 0.748,
+      "design_effect": 110.8,
+      "effective_n_onsets": 39.8,
+      "boot_skew": 0.04
+    },
+    "MERT_B2_pitch_aux": {
+      "pct_at_0.5s": 43.51,
+      "se_cluster": 9.08,
+      "ci95": [
+        28.9,
+        61.0
+      ],
+      "ci_width": 32.0,
+      "se_naive_onset_binomial": 0.746,
+      "design_effect": 148.2,
+      "effective_n_onsets": 29.8,
+      "boot_skew": 0.05
+    },
+    "B1a_mert_swap": {
+      "pct_at_0.5s": 38.39,
+      "se_cluster": 7.39,
+      "ci95": [
+        26.8,
+        53.7
+      ],
+      "ci_width": 26.8,
+      "se_naive_onset_binomial": 0.732,
+      "design_effect": 102.0,
+      "effective_n_onsets": 43.3,
+      "boot_skew": 0.15
+    },
+    "B3_inr_subpixel": {
+      "pct_at_0.5s": 27.97,
+      "se_cluster": 3.08,
+      "ci95": [
+        22.8,
+        34.8
+      ],
+      "ci_width": 12.0,
+      "se_naive_onset_binomial": 0.676,
+      "design_effect": 20.8,
+      "effective_n_onsets": 212.2,
+      "boot_skew": 0.41
+    },
+    "B4_temporal_consistency": {
+      "pct_at_0.5s": 16.45,
+      "se_cluster": 3.08,
+      "ci95": [
+        11.7,
+        23.5
+      ],
+      "ci_width": 11.8,
+      "se_naive_onset_binomial": 0.558,
+      "design_effect": 30.6,
+      "effective_n_onsets": 144.5,
+      "boot_skew": 0.59
+    },
+    "CUNet_CB_TA": {
+      "pct_at_0.5s": 21.57,
+      "se_cluster": 4.11,
+      "ci95": [
+        15.1,
+        30.8
+      ],
+      "ci_width": 15.7,
+      "se_naive_onset_binomial": 0.619,
+      "design_effect": 44.2,
+      "effective_n_onsets": 100.0,
+      "boot_skew": 0.55
+    }
+  },
+  "paired": {
+    "cyolo__vs__cyolo_sb": {
+      "note": "Henkel&Widmer 2021: +bar/system aux supervision",
+      "delta_pct_points": 8.79,
+      "se_paired": 3.55,
+      "ci95_paired": [
+        1.87,
+        14.3
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0017,
+      "mdd80_paired": 9.96,
+      "se_if_unpaired": 9.8,
+      "ci95_if_unpaired": [
+        -10.42,
+        28.01
+      ],
+      "significant_unpaired_a05": false,
+      "mdd80_unpaired": 27.46,
+      "per_piece_delta": {
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -16.1,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": -3.8,
+        "BachJS__BWV924a__bach-prelude-bwv924a": -2.4,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": -1.3,
+        "BachJS__BWVAnh113__anna-magdalena-03": -0.5,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 0.8,
+        "MozartWA__KV331__KV331_1_2_var1": 1.9,
+        "BachJS__BWV830__BWV-830-2": 2.0,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 2.2,
+        "BachJS__BWVAnh120__BWV-120": 4.4,
+        "BachJS__BWV797__bwv797": 5.7,
+        "BachJS__BWVAnh116__anna-magdalena-07": 7.7,
+        "BachJS__BWV117a__BWV-117a": 11.4,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 19.7,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 19.9,
+        "SchumannR__O68__schumann-op68-01-melodie": 21.2
+      },
+      "n_pieces_favouring_b": 11,
+      "per_piece_delta_sd": 9.79,
+      "piece_score_correlation": 0.836
+    },
+    "cyolo_sb__vs__cyolo_sb_a": {
+      "note": "Henkel&Widmer 2021: +audio augmentation",
+      "delta_pct_points": 6.51,
+      "se_paired": 1.37,
+      "ci95_paired": [
+        3.44,
+        8.59
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0,
+      "mdd80_paired": 3.83,
+      "se_if_unpaired": 6.39,
+      "ci95_if_unpaired": [
+        -6.0,
+        19.03
+      ],
+      "significant_unpaired_a05": false,
+      "mdd80_unpaired": 17.89,
+      "per_piece_delta": {
+        "BachJS__BWVAnh116__anna-magdalena-07": -3.6,
+        "BachJS__BWVAnh120__BWV-120": -2.7,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 2.1,
+        "BachJS__BWV830__BWV-830-2": 2.1,
+        "BachJS__BWVAnh113__anna-magdalena-03": 3.6,
+        "MozartWA__KV331__KV331_1_2_var1": 3.8,
+        "SchumannR__O68__schumann-op68-01-melodie": 5.1,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 6.7,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 7.1,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 7.2,
+        "BachJS__BWV797__bwv797": 8.3,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 8.4,
+        "BachJS__BWV117a__BWV-117a": 9.6,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 10.1,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": 12.5,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 14.9
+      },
+      "n_pieces_favouring_b": 14,
+      "per_piece_delta_sd": 5.0,
+      "piece_score_correlation": 0.923
+    },
+    "cyolo__vs__cyolo_sb_a": {
+      "note": "Henkel&Widmer 2021: full ablation span",
+      "delta_pct_points": 15.31,
+      "se_paired": 4.65,
+      "ci95_paired": [
+        6.23,
+        22.61
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0,
+      "mdd80_paired": 13.03,
+      "se_if_unpaired": 9.25,
+      "ci95_if_unpaired": [
+        -2.83,
+        33.44
+      ],
+      "significant_unpaired_a05": false,
+      "mdd80_unpaired": 25.92,
+      "per_piece_delta": {
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -3.6,
+        "BachJS__BWVAnh120__BWV-120": 1.7,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 2.9,
+        "BachJS__BWVAnh113__anna-magdalena-03": 3.1,
+        "BachJS__BWVAnh116__anna-magdalena-07": 4.1,
+        "BachJS__BWV830__BWV-830-2": 4.2,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 4.6,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 4.7,
+        "MozartWA__KV331__KV331_1_2_var1": 5.7,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 5.9,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 9.0,
+        "BachJS__BWV797__bwv797": 14.0,
+        "BachJS__BWV117a__BWV-117a": 21.0,
+        "SchumannR__O68__schumann-op68-01-melodie": 26.3,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 30.0,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 34.6
+      },
+      "n_pieces_favouring_b": 15,
+      "per_piece_delta_sd": 11.31,
+      "piece_score_correlation": 0.797
+    },
+    "CUNet_CB_TA__vs__R3": {
+      "note": "ours: MERT + belief propagation vs CPJKU CUNet",
+      "delta_pct_points": 23.81,
+      "se_paired": 8.21,
+      "ci95_paired": [
+        11.39,
+        39.47
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0,
+      "mdd80_paired": 23.0,
+      "se_if_unpaired": 10.88,
+      "ci95_if_unpaired": [
+        2.48,
+        45.13
+      ],
+      "significant_unpaired_a05": true,
+      "mdd80_unpaired": 30.48,
+      "per_piece_delta": {
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -2.7,
+        "SchumannR__O68__schumann-op68-01-melodie": 14.8,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 15.1,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 21.1,
+        "BachJS__BWV830__BWV-830-2": 23.1,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 35.3,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 36.3,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 38.9,
+        "BachJS__BWV797__bwv797": 39.5,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": 41.7,
+        "BachJS__BWVAnh113__anna-magdalena-03": 42.6,
+        "MozartWA__KV331__KV331_1_2_var1": 44.1,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 44.7,
+        "BachJS__BWVAnh116__anna-magdalena-07": 44.8,
+        "BachJS__BWV117a__BWV-117a": 47.3,
+        "BachJS__BWVAnh120__BWV-120": 50.8
+      },
+      "n_pieces_favouring_b": 15,
+      "per_piece_delta_sd": 14.93,
+      "piece_score_correlation": 0.613
+    },
+    "R3__vs__cyolo_sb": {
+      "note": "ours vs released SOTA-1",
+      "delta_pct_points": 34.57,
+      "se_paired": 5.5,
+      "ci95_paired": [
+        22.89,
+        43.31
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0,
+      "mdd80_paired": 15.4,
+      "se_if_unpaired": 11.27,
+      "ci95_if_unpaired": [
+        12.47,
+        56.66
+      ],
+      "significant_unpaired_a05": true,
+      "mdd80_unpaired": 31.58,
+      "per_piece_delta": {
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -5.3,
+        "BachJS__BWVAnh113__anna-magdalena-03": 9.1,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 14.5,
+        "BachJS__BWV117a__BWV-117a": 15.1,
+        "BachJS__BWV830__BWV-830-2": 16.8,
+        "BachJS__BWV797__bwv797": 22.7,
+        "BachJS__BWVAnh120__BWV-120": 24.9,
+        "BachJS__BWVAnh116__anna-magdalena-07": 27.9,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 31.2,
+        "MozartWA__KV331__KV331_1_2_var1": 32.7,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 40.2,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 43.7,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 43.9,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 49.7,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 58.5,
+        "SchumannR__O68__schumann-op68-01-melodie": 63.0
+      },
+      "n_pieces_favouring_b": 15,
+      "per_piece_delta_sd": 18.59,
+      "piece_score_correlation": 0.64
+    },
+    "cyolo_sb_a__vs__R3": {
+      "note": "released SOTA vs ours",
+      "delta_pct_points": -41.08,
+      "se_paired": 6.59,
+      "ci95_paired": [
+        -51.51,
+        -27.44
+      ],
+      "significant_paired_a05": true,
+      "boot_p_two_sided": 0.0,
+      "mdd80_paired": 18.46,
+      "se_if_unpaired": 10.8,
+      "ci95_if_unpaired": [
+        -62.24,
+        -19.92
+      ],
+      "significant_unpaired_a05": true,
+      "mdd80_unpaired": 30.25,
+      "per_piece_delta": {
+        "SchumannR__O68__schumann-op68-01-melodie": -68.1,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": -65.7,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -59.8,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": -58.6,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": -52.3,
+        "SchumannR__O68__schumann-op68-26-sans-titre": -46.9,
+        "MozartWA__KV331__KV331_1_2_var1": -36.5,
+        "BachJS__BWV817__bach-french-suite-6-menuet": -33.3,
+        "BachJS__BWV797__bwv797": -30.9,
+        "BachJS__BWV117a__BWV-117a": -24.7,
+        "BachJS__BWVAnh116__anna-magdalena-07": -24.3,
+        "BachJS__BWVAnh120__BWV-120": -22.2,
+        "BachJS__BWV924a__bach-prelude-bwv924a": -21.6,
+        "BachJS__BWV830__BWV-830-2": -18.9,
+        "BachJS__BWVAnh113__anna-magdalena-03": -12.7,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -7.2
+      },
+      "n_pieces_favouring_b": 0,
+      "per_piece_delta_sd": 19.54,
+      "piece_score_correlation": 0.499
+    }
+  },
+  "aggregation_convention": {
+    "cyolo": {
+      "onset_pooled": 71.15,
+      "page_mean": 73.34,
+      "piece_mean": 78.66,
+      "pooled_minus_piece_mean": -7.51
+    },
+    "cyolo_sb": {
+      "onset_pooled": 79.95,
+      "page_mean": 80.35,
+      "piece_mean": 83.22,
+      "pooled_minus_piece_mean": -3.28
+    },
+    "cyolo_sb_a": {
+      "onset_pooled": 86.46,
+      "page_mean": 87.2,
+      "piece_mean": 89.17,
+      "pooled_minus_piece_mean": -2.72
+    },
+    "R3": {
+      "onset_pooled": 45.38,
+      "page_mean": 46.83,
+      "piece_mean": 52.69,
+      "pooled_minus_piece_mean": -7.31
+    },
+    "N3_belief_propagation": {
+      "onset_pooled": 44.56,
+      "page_mean": 46.09,
+      "piece_mean": 50.91,
+      "pooled_minus_piece_mean": -6.34
+    },
+    "MERT_B2_pitch_aux": {
+      "onset_pooled": 43.51,
+      "page_mean": 44.76,
+      "piece_mean": 50.1,
+      "pooled_minus_piece_mean": -6.59
+    },
+    "B1a_mert_swap": {
+      "onset_pooled": 38.39,
+      "page_mean": 39.14,
+      "piece_mean": 44.22,
+      "pooled_minus_piece_mean": -5.83
+    },
+    "B3_inr_subpixel": {
+      "onset_pooled": 27.97,
+      "page_mean": 27.6,
+      "piece_mean": 26.42,
+      "pooled_minus_piece_mean": 1.56
+    },
+    "B4_temporal_consistency": {
+      "onset_pooled": 16.45,
+      "page_mean": 16.38,
+      "piece_mean": 15.39,
+      "pooled_minus_piece_mean": 1.06
+    },
+    "CUNet_CB_TA": {
+      "onset_pooled": 21.57,
+      "page_mean": 20.86,
+      "piece_mean": 19.11,
+      "pooled_minus_piece_mean": 2.46
+    },
+    "DELTA cyolo->cyolo_sb": {
+      "onset_pooled": 8.8,
+      "piece_mean": 4.56
+    },
+    "DELTA cyolo_sb->cyolo_sb_a": {
+      "onset_pooled": 6.51,
+      "piece_mean": 5.95
+    },
+    "DELTA cyolo->cyolo_sb_a": {
+      "onset_pooled": 15.31,
+      "piece_mean": 10.51
+    }
+  },
+  "power_curve": [
+    {
+      "n_pieces": 8,
+      "n_pages": 12,
+      "n_onsets": 2208,
+      "se_absolute": 6.5,
+      "mdd80_absolute_single_system": 18.2,
+      "mdd80_unpaired_two_systems": 25.8,
+      "se_paired": 5.8,
+      "mdd80_paired": 16.24
+    },
+    {
+      "n_pieces": 12,
+      "n_pages": 19,
+      "n_onsets": 3311,
+      "se_absolute": 5.67,
+      "mdd80_absolute_single_system": 15.9,
+      "mdd80_unpaired_two_systems": 22.5,
+      "se_paired": 4.73,
+      "mdd80_paired": 13.26
+    },
+    {
+      "n_pieces": 16,
+      "n_pages": 25,
+      "n_onsets": 4415,
+      "se_absolute": 5.08,
+      "mdd80_absolute_single_system": 14.2,
+      "mdd80_unpaired_two_systems": 20.1,
+      "se_paired": 4.1,
+      "mdd80_paired": 11.49
+    },
+    {
+      "n_pieces": 24,
+      "n_pages": 38,
+      "n_onsets": 6622,
+      "se_absolute": 4.2,
+      "mdd80_absolute_single_system": 11.8,
+      "mdd80_unpaired_two_systems": 16.6,
+      "se_paired": 3.35,
+      "mdd80_paired": 9.38
+    },
+    {
+      "n_pieces": 32,
+      "n_pages": 50,
+      "n_onsets": 8830,
+      "se_absolute": 3.61,
+      "mdd80_absolute_single_system": 10.1,
+      "mdd80_unpaired_two_systems": 14.3,
+      "se_paired": 2.9,
+      "mdd80_paired": 8.12
+    },
+    {
+      "n_pieces": 48,
+      "n_pages": 75,
+      "n_onsets": 13245,
+      "se_absolute": 3.07,
+      "mdd80_absolute_single_system": 8.6,
+      "mdd80_unpaired_two_systems": 12.1,
+      "se_paired": 2.37,
+      "mdd80_paired": 6.63
+    },
+    {
+      "n_pieces": 64,
+      "n_pages": 100,
+      "n_onsets": 17660,
+      "se_absolute": 2.63,
+      "mdd80_absolute_single_system": 7.4,
+      "mdd80_unpaired_two_systems": 10.4,
+      "se_paired": 2.05,
+      "mdd80_paired": 5.74
+    },
+    {
+      "n_pieces": 96,
+      "n_pages": 150,
+      "n_onsets": 26490,
+      "se_absolute": 2.16,
+      "mdd80_absolute_single_system": 6.0,
+      "mdd80_unpaired_two_systems": 8.5,
+      "se_paired": 1.67,
+      "mdd80_paired": 4.69
+    },
+    {
+      "n_pieces": 128,
+      "n_pages": 200,
+      "n_onsets": 35320,
+      "se_absolute": 1.86,
+      "mdd80_absolute_single_system": 5.2,
+      "mdd80_unpaired_two_systems": 7.4,
+      "se_paired": 1.45,
+      "mdd80_paired": 4.06
+    },
+    {
+      "n_pieces": 192,
+      "n_pages": 300,
+      "n_onsets": 52980,
+      "se_absolute": 1.51,
+      "mdd80_absolute_single_system": 4.2,
+      "mdd80_unpaired_two_systems": 6.0,
+      "se_paired": 1.18,
+      "mdd80_paired": 3.32
+    },
+    {
+      "n_pieces": 256,
+      "n_pages": 400,
+      "n_onsets": 70640,
+      "se_absolute": 1.31,
+      "mdd80_absolute_single_system": 3.7,
+      "mdd80_unpaired_two_systems": 5.2,
+      "se_paired": 1.02,
+      "mdd80_paired": 2.87
+    },
+    {
+      "n_pieces": 384,
+      "n_pages": 600,
+      "n_onsets": 105960,
+      "se_absolute": 1.07,
+      "mdd80_absolute_single_system": 3.0,
+      "mdd80_unpaired_two_systems": 4.2,
+      "se_paired": 0.84,
+      "mdd80_paired": 2.34
+    },
+    {
+      "n_pieces": 512,
+      "n_pages": 800,
+      "n_onsets": 141280,
+      "se_absolute": 0.92,
+      "mdd80_absolute_single_system": 2.6,
+      "mdd80_unpaired_two_systems": 3.7,
+      "se_paired": 0.72,
+      "mdd80_paired": 2.03
+    }
+  ],
+  "requirements": {
+    "2pt": {
+      "paired": {
+        "n_pieces": 528,
+        "n_pages": 825,
+        "n_onsets": 145629
+      },
+      "unpaired": {
+        "n_pieces": 1611,
+        "n_pages": 2516,
+        "n_onsets": 444270
+      },
+      "absolute": {
+        "n_pieces": 806,
+        "n_pages": 1258,
+        "n_onsets": 222135
+      }
+    },
+    "5pt": {
+      "paired": {
+        "n_pieces": 85,
+        "n_pages": 132,
+        "n_onsets": 23301
+      },
+      "unpaired": {
+        "n_pieces": 258,
+        "n_pages": 403,
+        "n_onsets": 71084
+      },
+      "absolute": {
+        "n_pieces": 129,
+        "n_pages": 202,
+        "n_onsets": 35542
+      }
+    },
+    "10pt": {
+      "paired": {
+        "n_pieces": 22,
+        "n_pages": 33,
+        "n_onsets": 5826
+      },
+      "unpaired": {
+        "n_pieces": 65,
+        "n_pages": 101,
+        "n_onsets": 17771
+      },
+      "absolute": {
+        "n_pieces": 33,
+        "n_pages": 51,
+        "n_onsets": 8886
+      }
+    }
+  },
+  "current_mdd80": {
+    "paired": 11.49,
+    "paired_range_over_testable_pairs": [
+      3.84,
+      18.46
+    ],
+    "unpaired": 20.1,
+    "absolute_single_system": 14.2,
+    "se_paired_reference": 4.1,
+    "se_absolute_reference": 5.06,
+    "reference_system": "cyolo_sb"
+  },
+  "requirements_by_pair_se": {
+    "se_paired_at_n16=1.37": {
+      "2pt": {
+        "n_pieces": 59,
+        "n_pages": 93
+      },
+      "5pt": {
+        "n_pieces": 10,
+        "n_pages": 15
+      },
+      "10pt": {
+        "n_pieces": 3,
+        "n_pages": 4
+      }
+    },
+    "se_paired_at_n16=3.55": {
+      "2pt": {
+        "n_pieces": 396,
+        "n_pages": 619
+      },
+      "5pt": {
+        "n_pieces": 64,
+        "n_pages": 99
+      },
+      "10pt": {
+        "n_pieces": 16,
+        "n_pages": 25
+      }
+    },
+    "se_paired_at_n16=4.65": {
+      "2pt": {
+        "n_pieces": 679,
+        "n_pages": 1061
+      },
+      "5pt": {
+        "n_pieces": 109,
+        "n_pages": 170
+      },
+      "10pt": {
+        "n_pieces": 28,
+        "n_pages": 43
+      }
+    },
+    "se_paired_at_n16=6.59": {
+      "2pt": {
+        "n_pieces": 1364,
+        "n_pages": 2131
+      },
+      "5pt": {
+        "n_pieces": 219,
+        "n_pages": 341
+      },
+      "10pt": {
+        "n_pieces": 55,
+        "n_pages": 86
+      }
+    }
+  },
+  "seed_inclusive": {
+    "seed_sd_measured": 3.5,
+    "seed_sd_measured_at_score": 30.0,
+    "provenance": "9 recipes trained twice, this project",
+    "pairs": {
+      "cyolo__vs__cyolo_sb": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 6.09,
+          "ci95": [
+            -3.15,
+            20.73
+          ],
+          "significant": false,
+          "mdd80": 17.06
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 3.28,
+          "se_total": 5.84,
+          "ci95": [
+            -2.66,
+            20.24
+          ],
+          "significant": false,
+          "mdd80": 16.37
+        }
+      },
+      "cyolo_sb__vs__cyolo_sb_a": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 5.14,
+          "ci95": [
+            -3.56,
+            16.58
+          ],
+          "significant": false,
+          "mdd80": 14.39
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 2.86,
+          "se_total": 4.26,
+          "ci95": [
+            -1.85,
+            14.87
+          ],
+          "significant": false,
+          "mdd80": 11.95
+        }
+      },
+      "cyolo__vs__cyolo_sb_a": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 6.79,
+          "ci95": [
+            2.0,
+            28.62
+          ],
+          "significant": true,
+          "mdd80": 19.03
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 3.12,
+          "se_total": 6.41,
+          "ci95": [
+            2.74,
+            27.88
+          ],
+          "significant": true,
+          "mdd80": 17.96
+        }
+      },
+      "CUNet_CB_TA__vs__R3": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 9.59,
+          "ci95": [
+            5.02,
+            42.6
+          ],
+          "significant": true,
+          "mdd80": 26.86
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 3.6,
+          "se_total": 9.66,
+          "ci95": [
+            4.87,
+            42.75
+          ],
+          "significant": true,
+          "mdd80": 27.07
+        }
+      },
+      "R3__vs__cyolo_sb": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 7.4,
+          "ci95": [
+            20.07,
+            49.07
+          ],
+          "significant": true,
+          "mdd80": 20.73
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 3.69,
+          "se_total": 7.59,
+          "ci95": [
+            19.7,
+            49.44
+          ],
+          "significant": true,
+          "mdd80": 21.25
+        }
+      },
+      "cyolo_sb_a__vs__R3": {
+        "raw": {
+          "seed_sd_per_arm": 3.5,
+          "se_total": 8.24,
+          "ci95": [
+            -57.23,
+            -24.93
+          ],
+          "significant": true,
+          "mdd80": 23.09
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 3.62,
+          "se_total": 8.34,
+          "ci95": [
+            -57.44,
+            -24.72
+          ],
+          "significant": true,
+          "mdd80": 23.38
+        }
+      }
+    }
+  },
+  "rank_stability": {
+    "order": [
+      "cyolo_sb_a",
+      "cyolo_sb",
+      "cyolo",
+      "R3",
+      "CUNet_CB_TA"
+    ],
+    "p_full_order_preserved": 0.9988,
+    "adjacent": {
+      "cyolo_sb_a>cyolo_sb": 1.0,
+      "cyolo_sb>cyolo": 0.9988,
+      "cyolo>R3": 1.0,
+      "R3>CUNet_CB_TA": 1.0
+    }
+  },
+  "leave_one_piece_out": {
+    "cyolo__vs__cyolo_sb": {
+      "delta_full": 8.79,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": -4.72,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": -0.1,
+        "BachJS__BWV797__bwv797": 0.31,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 0.29,
+        "BachJS__BWV830__BWV-830-2": 0.87,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 0.57,
+        "BachJS__BWVAnh113__anna-magdalena-03": 0.46,
+        "BachJS__BWVAnh116__anna-magdalena-07": 0.06,
+        "BachJS__BWVAnh120__BWV-120": 0.12,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -4.72,
+        "MozartWA__KV331__KV331_1_2_var1": 0.38,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": 0.35,
+        "SchumannR__O68__schumann-op68-01-melodie": -0.56,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": -0.3,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 0.39,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 0.4,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 0.3
+      }
+    },
+    "cyolo_sb__vs__cyolo_sb_a": {
+      "delta_full": 6.51,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": -1.51,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": -0.12,
+        "BachJS__BWV797__bwv797": -0.18,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 0.16,
+        "BachJS__BWV830__BWV-830-2": 0.56,
+        "BachJS__BWV924a__bach-prelude-bwv924a": -0.03,
+        "BachJS__BWVAnh113__anna-magdalena-03": 0.14,
+        "BachJS__BWVAnh116__anna-magdalena-07": 0.57,
+        "BachJS__BWVAnh120__BWV-120": 0.25,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -1.51,
+        "MozartWA__KV331__KV331_1_2_var1": 0.15,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -0.09,
+        "SchumannR__O68__schumann-op68-01-melodie": 0.06,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": -0.23,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": -0.03,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": -0.06,
+        "SchumannR__O68__schumann-op68-26-sans-titre": -0.01
+      }
+    },
+    "cyolo__vs__cyolo_sb_a": {
+      "delta_full": 15.31,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": -6.23,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": -0.22,
+        "BachJS__BWV797__bwv797": 0.13,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 0.45,
+        "BachJS__BWV830__BWV-830-2": 1.42,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 0.54,
+        "BachJS__BWVAnh113__anna-magdalena-03": 0.61,
+        "BachJS__BWVAnh116__anna-magdalena-07": 0.63,
+        "BachJS__BWVAnh120__BWV-120": 0.37,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -6.23,
+        "MozartWA__KV331__KV331_1_2_var1": 0.53,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": 0.27,
+        "SchumannR__O68__schumann-op68-01-melodie": -0.5,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": -0.53,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 0.36,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 0.34,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 0.29
+      }
+    },
+    "CUNet_CB_TA__vs__R3": {
+      "delta_full": 23.81,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": 11.25,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": -0.92,
+        "BachJS__BWV797__bwv797": -1.6,
+        "BachJS__BWV817__bach-french-suite-6-menuet": -0.75,
+        "BachJS__BWV830__BWV-830-2": 0.1,
+        "BachJS__BWV924a__bach-prelude-bwv924a": -0.77,
+        "BachJS__BWVAnh113__anna-magdalena-03": -0.93,
+        "BachJS__BWVAnh116__anna-magdalena-07": -1.18,
+        "BachJS__BWVAnh120__BWV-120": -0.74,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 11.25,
+        "MozartWA__KV331__KV331_1_2_var1": -1.11,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -0.25,
+        "SchumannR__O68__schumann-op68-01-melodie": 0.41,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 0.24,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 0.1,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": -0.4,
+        "SchumannR__O68__schumann-op68-26-sans-titre": -0.53
+      }
+    },
+    "R3__vs__cyolo_sb": {
+      "delta_full": 34.57,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": -6.41,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": 0.76,
+        "BachJS__BWV797__bwv797": 1.21,
+        "BachJS__BWV817__bach-french-suite-6-menuet": 0.12,
+        "BachJS__BWV830__BWV-830-2": 2.28,
+        "BachJS__BWV924a__bach-prelude-bwv924a": 1.02,
+        "BachJS__BWVAnh113__anna-magdalena-03": 1.27,
+        "BachJS__BWVAnh116__anna-magdalena-07": 0.37,
+        "BachJS__BWVAnh120__BWV-120": 0.27,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": -6.41,
+        "MozartWA__KV331__KV331_1_2_var1": 0.1,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": 0.57,
+        "SchumannR__O68__schumann-op68-01-melodie": -1.29,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": -0.25,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": -0.92,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": -0.3,
+        "SchumannR__O68__schumann-op68-26-sans-titre": -0.26
+      }
+    },
+    "cyolo_sb_a__vs__R3": {
+      "delta_full": -41.08,
+      "max_abs_swing_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "max_abs_swing": 7.93,
+      "all": {
+        "BachJS__BWV117a__BWV-117a": -0.64,
+        "BachJS__BWV797__bwv797": -1.03,
+        "BachJS__BWV817__bach-french-suite-6-menuet": -0.28,
+        "BachJS__BWV830__BWV-830-2": -2.84,
+        "BachJS__BWV924a__bach-prelude-bwv924a": -0.99,
+        "BachJS__BWVAnh113__anna-magdalena-03": -1.41,
+        "BachJS__BWVAnh116__anna-magdalena-07": -0.94,
+        "BachJS__BWVAnh120__BWV-120": -0.52,
+        "ChopinFF__O9__nocturne_in_b-flat_minor": 7.93,
+        "MozartWA__KV331__KV331_1_2_var1": -0.25,
+        "MussorgskyM__pictures-at-an-exhibition__promenade-3": -0.48,
+        "SchumannR__O68__schumann-op68-01-melodie": 1.23,
+        "SchumannR__O68__schumann-op68-06-pauvre-orpheline": 0.49,
+        "SchumannR__O68__schumann-op68-08-cavalier-sauvage": 0.95,
+        "SchumannR__O68__schumann-op68-16-premier-chagrin": 0.36,
+        "SchumannR__O68__schumann-op68-26-sans-titre": 0.27
+      }
+    }
+  },
+  "coda": {
+    "claim": "CODA (ISMIR 2026) 88.3 vs cyolo_sb 79.9 on room, +8.4 points",
+    "testable": false,
+    "reason": "CODA per-piece scores are not released and we have no CODA checkpoint, so no paired test is possible.  Only the two pooled numbers exist.",
+    "unpaired_bound": {
+      "delta": 8.399999999999991,
+      "se_unpaired": 7.16,
+      "ci95": [
+        -5.6,
+        22.4
+      ],
+      "significant": false,
+      "interpretation": "Treating the two published numbers as independent draws over pieces -- the only inference available without CODA per-piece scores -- the gap is NOT resolvable."
+    },
+    "paired_counterfactual": {
+      "assumed_se_paired": 1.37,
+      "note": "If CODA per-piece scores behaved like the cyolo_sb -> cyolo_sb_a pair (the closest available analogue: same benchmark, same family, similar gap), a +8.4 paired difference WOULD clear alpha=0.05.  We state this as a counterfactual, not a result: it cannot be checked.",
+      "would_be_significant": true
+    }
+  }
+}
