@@ -909,6 +909,421 @@
       }
     }
   },
+  "sweep_resolvability": {
+    "n_systems": 10,
+    "n_pairs": 45,
+    "n_resolvable_paired_a05": 43,
+    "frac_resolvable": 0.956,
+    "largest_unresolvable_gap": 1.05,
+    "smallest_resolvable_gap": 1.87,
+    "pairs": [
+      {
+        "pair": "B1a_mert_swap__vs__B3_inr_subpixel",
+        "delta": -10.42,
+        "ci95": [
+          -23.57,
+          -1.38
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__B4_temporal_consistency",
+        "delta": -21.94,
+        "ci95": [
+          -35.67,
+          -13.17
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__CUNet_CB_TA",
+        "delta": -16.82,
+        "ci95": [
+          -31.43,
+          -7.77
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__MERT_B2_pitch_aux",
+        "delta": 5.12,
+        "ci95": [
+          0.6,
+          11.01
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__N3_belief_propagation",
+        "delta": 6.17,
+        "ci95": [
+          3.83,
+          9.24
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__R3",
+        "delta": 6.99,
+        "ci95": [
+          1.45,
+          14.47
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__cyolo",
+        "delta": 32.76,
+        "ci95": [
+          28.74,
+          39.64
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__cyolo_sb",
+        "delta": 41.56,
+        "ci95": [
+          33.61,
+          47.03
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B1a_mert_swap__vs__cyolo_sb_a",
+        "delta": 48.07,
+        "ci95": [
+          38.57,
+          55.01
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__B4_temporal_consistency",
+        "delta": -11.52,
+        "ci95": [
+          -13.75,
+          -9.11
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__CUNet_CB_TA",
+        "delta": -6.4,
+        "ci95": [
+          -9.02,
+          -3.04
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__MERT_B2_pitch_aux",
+        "delta": 15.54,
+        "ci95": [
+          3.75,
+          29.91
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__N3_belief_propagation",
+        "delta": 16.59,
+        "ci95": [
+          7.07,
+          29.25
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__R3",
+        "delta": 17.41,
+        "ci95": [
+          3.81,
+          32.67
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__cyolo",
+        "delta": 43.18,
+        "ci95": [
+          32.18,
+          58.07
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__cyolo_sb",
+        "delta": 51.97,
+        "ci95": [
+          45.58,
+          61.73
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B3_inr_subpixel__vs__cyolo_sb_a",
+        "delta": 58.48,
+        "ci95": [
+          53.36,
+          67.42
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__CUNet_CB_TA",
+        "delta": 5.12,
+        "ci95": [
+          2.25,
+          8.04
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__MERT_B2_pitch_aux",
+        "delta": 27.06,
+        "ci95": [
+          15.59,
+          41.62
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__N3_belief_propagation",
+        "delta": 28.11,
+        "ci95": [
+          18.36,
+          41.77
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__R3",
+        "delta": 28.93,
+        "ci95": [
+          15.42,
+          44.73
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__cyolo",
+        "delta": 54.7,
+        "ci95": [
+          44.0,
+          69.29
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__cyolo_sb",
+        "delta": 63.5,
+        "ci95": [
+          57.07,
+          73.58
+        ],
+        "significant": true
+      },
+      {
+        "pair": "B4_temporal_consistency__vs__cyolo_sb_a",
+        "delta": 70.01,
+        "ci95": [
+          65.03,
+          78.75
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__MERT_B2_pitch_aux",
+        "delta": 21.94,
+        "ci95": [
+          10.46,
+          36.72
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__N3_belief_propagation",
+        "delta": 22.99,
+        "ci95": [
+          13.22,
+          37.02
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__R3",
+        "delta": 23.81,
+        "ci95": [
+          11.58,
+          39.73
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__cyolo",
+        "delta": 49.58,
+        "ci95": [
+          38.75,
+          65.27
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__cyolo_sb",
+        "delta": 58.37,
+        "ci95": [
+          51.59,
+          69.45
+        ],
+        "significant": true
+      },
+      {
+        "pair": "CUNet_CB_TA__vs__cyolo_sb_a",
+        "delta": 64.88,
+        "ci95": [
+          58.47,
+          74.93
+        ],
+        "significant": true
+      },
+      {
+        "pair": "MERT_B2_pitch_aux__vs__N3_belief_propagation",
+        "delta": 1.05,
+        "ci95": [
+          -3.67,
+          4.23
+        ],
+        "significant": false
+      },
+      {
+        "pair": "MERT_B2_pitch_aux__vs__R3",
+        "delta": 1.87,
+        "ci95": [
+          0.02,
+          4.43
+        ],
+        "significant": true
+      },
+      {
+        "pair": "MERT_B2_pitch_aux__vs__cyolo",
+        "delta": 27.64,
+        "ci95": [
+          22.97,
+          32.92
+        ],
+        "significant": true
+      },
+      {
+        "pair": "MERT_B2_pitch_aux__vs__cyolo_sb",
+        "delta": 36.44,
+        "ci95": [
+          26.54,
+          43.79
+        ],
+        "significant": true
+      },
+      {
+        "pair": "MERT_B2_pitch_aux__vs__cyolo_sb_a",
+        "delta": 42.95,
+        "ci95": [
+          30.94,
+          51.84
+        ],
+        "significant": true
+      },
+      {
+        "pair": "N3_belief_propagation__vs__R3",
+        "delta": 0.82,
+        "ci95": [
+          -3.35,
+          6.66
+        ],
+        "significant": false
+      },
+      {
+        "pair": "N3_belief_propagation__vs__cyolo",
+        "delta": 26.59,
+        "ci95": [
+          23.25,
+          32.23
+        ],
+        "significant": true
+      },
+      {
+        "pair": "N3_belief_propagation__vs__cyolo_sb",
+        "delta": 35.38,
+        "ci95": [
+          27.04,
+          41.07
+        ],
+        "significant": true
+      },
+      {
+        "pair": "N3_belief_propagation__vs__cyolo_sb_a",
+        "delta": 41.9,
+        "ci95": [
+          31.9,
+          48.55
+        ],
+        "significant": true
+      },
+      {
+        "pair": "R3__vs__cyolo",
+        "delta": 25.77,
+        "ci95": [
+          19.48,
+          31.25
+        ],
+        "significant": true
+      },
+      {
+        "pair": "R3__vs__cyolo_sb",
+        "delta": 34.57,
+        "ci95": [
+          22.86,
+          43.17
+        ],
+        "significant": true
+      },
+      {
+        "pair": "R3__vs__cyolo_sb_a",
+        "delta": 41.08,
+        "ci95": [
+          27.37,
+          51.3
+        ],
+        "significant": true
+      },
+      {
+        "pair": "cyolo__vs__cyolo_sb",
+        "delta": 8.79,
+        "ci95": [
+          1.86,
+          14.34
+        ],
+        "significant": true
+      },
+      {
+        "pair": "cyolo__vs__cyolo_sb_a",
+        "delta": 15.31,
+        "ci95": [
+          6.17,
+          22.83
+        ],
+        "significant": true
+      },
+      {
+        "pair": "cyolo_sb__vs__cyolo_sb_a",
+        "delta": 6.51,
+        "ci95": [
+          3.45,
+          8.57
+        ],
+        "significant": true
+      }
+    ]
+  },
   "rank_stability": {
     "order": [
       "cyolo_sb_a",
@@ -917,10 +1332,10 @@
       "R3",
       "CUNet_CB_TA"
     ],
-    "p_full_order_preserved": 0.9988,
+    "p_full_order_preserved": 0.999,
     "adjacent": {
       "cyolo_sb_a>cyolo_sb": 1.0,
-      "cyolo_sb>cyolo": 0.9988,
+      "cyolo_sb>cyolo": 0.999,
       "cyolo>R3": 1.0,
       "R3>CUNet_CB_TA": 1.0
     }

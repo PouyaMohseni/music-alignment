@@ -428,6 +428,34 @@ def main():
                 'significant': bool(abs(d) > Z_ALPHA * se_tot),
                 'mdd80': round(MDD_K * se_tot, 2)}
 
+    # ---------------- how much of a real sweep is resolvable at all? ---------
+    # Every pair of systems we have per-piece scores for, tested paired.  This
+    # answers the practical question a sweep actually poses: of the comparisons
+    # a researcher makes on this benchmark, what fraction can the benchmark
+    # decide?  Uses a smaller B because it is O(n^2) pairs.
+    names = sorted(vecs)
+    allp, resolvable = [], 0
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a, b_ = names[i], names[j]
+            d = bm.boot_stat(lambda rows: bm.pooled(vecs[b_], rows) - bm.pooled(vecs[a], rows),
+                             rng, B=2000)
+            lo, hi = ci(d)
+            sig = lo > 0 or hi < 0
+            resolvable += sig
+            allp.append({'pair': f'{a}__vs__{b_}',
+                         'delta': round(bm.pooled(vecs[b_]) - bm.pooled(vecs[a]), 2),
+                         'ci95': [round(lo, 2), round(hi, 2)], 'significant': bool(sig)})
+    gaps_sig = [abs(p['delta']) for p in allp if p['significant']]
+    gaps_ns = [abs(p['delta']) for p in allp if not p['significant']]
+    R['sweep_resolvability'] = {
+        'n_systems': len(names), 'n_pairs': len(allp),
+        'n_resolvable_paired_a05': int(resolvable),
+        'frac_resolvable': round(resolvable / max(len(allp), 1), 3),
+        'largest_unresolvable_gap': round(max(gaps_ns), 2) if gaps_ns else None,
+        'smallest_resolvable_gap': round(min(gaps_sig), 2) if gaps_sig else None,
+        'pairs': allp}
+
     # ---------------- rank stability of the published leaderboard ------------
     board = [k for k in ('cyolo_sb_a', 'cyolo_sb', 'cyolo', 'R3', 'CUNet_CB_TA') if k in vecs]
     if len(board) >= 2:
