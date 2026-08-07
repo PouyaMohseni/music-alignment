@@ -1636,6 +1636,62 @@
       }
     }
   },
+  "easy_hard_split": {
+    "definition": "the 9 pages with the lowest R3 pct@0.5s; circular for R3 itself",
+    "hard_pages": [
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_3",
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_1",
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_0",
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_2",
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_4",
+      "ChopinFF__O9__nocturne_in_b-flat_minor_page_5",
+      "SchumannR__O68__schumann-op68-06-pauvre-orpheline_page_0",
+      "SchumannR__O68__schumann-op68-01-melodie_page_0",
+      "SchumannR__O68__schumann-op68-08-cavalier-sauvage_page_0"
+    ],
+    "scores": {
+      "cyolo": {
+        "easy16": 85.3,
+        "hard9": 50.4
+      },
+      "cyolo_sb": {
+        "easy16": 87.7,
+        "hard9": 68.5
+      },
+      "cyolo_sb_a": {
+        "easy16": 92.1,
+        "hard9": 78.1
+      },
+      "R3": {
+        "easy16": 64.7,
+        "hard9": 17.0
+      },
+      "N3_belief_propagation": {
+        "easy16": 60.5,
+        "hard9": 21.2
+      },
+      "MERT_B2_pitch_aux": {
+        "easy16": 61.1,
+        "hard9": 17.7
+      },
+      "B1a_mert_swap": {
+        "easy16": 54.2,
+        "hard9": 15.3
+      },
+      "B3_inr_subpixel": {
+        "easy16": 31.9,
+        "hard9": 22.3
+      },
+      "B4_temporal_consistency": {
+        "easy16": 20.1,
+        "hard9": 11.2
+      },
+      "CUNet_CB_TA": {
+        "easy16": 26.4,
+        "hard9": 14.5
+      }
+    }
+  },
   "coda": {
     "claim": "CODA (ISMIR 2026) 88.3 vs cyolo_sb 79.9 on room, +8.4 points",
     "testable": false,

@@ -557,6 +557,24 @@ def main():
             'delta_full': round(full, 2), 'max_abs_swing_piece': worst,
             'max_abs_swing': swing[worst], 'all': swing}
 
+    # ---------------- EASY-16 / HARD-9 split: provenance + a warning ---------
+    # This project's EASY-16 / HARD-9 numbers (cyolo_sb 87.7/68.5, cyolo
+    # 85.3/50.4, R3 64.7/17.0) are recovered exactly by ranking the 25 pages by
+    # R3's own per-page pct@0.5s and cutting at the 9 worst.  Recording that
+    # here because the split is therefore defined BY THE MODEL UNDER TEST: R3's
+    # own 64.7/17.0 is circular and must not be reported as a difficulty
+    # finding, though the cross-model columns are fine.  Difficulty
+    # stratification itself is prior art (Matchmaker, ISMIR 2025, stratifies by
+    # Henle grade) and is not claimed here.
+    if 'R3' in vecs:
+        order = np.argsort(vecs['R3'])
+        hard, easy = order[:9], order[9:]
+        R['easy_hard_split'] = {
+            'definition': 'the 9 pages with the lowest R3 pct@0.5s; circular for R3 itself',
+            'hard_pages': [bm.pages[i] for i in hard],
+            'scores': {k: {'easy16': round(bm.pooled(s, easy), 1),
+                           'hard9': round(bm.pooled(s, hard), 1)} for k, s in vecs.items()}}
+
     # ---------------- what we can and cannot say about CODA ------------------
     coda_delta = 88.3 - 79.9
     if 'cyolo_sb' in vecs and 'cyolo_sb_a' in vecs:
