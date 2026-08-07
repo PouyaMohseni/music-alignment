@@ -152,15 +152,24 @@ exactly the regime where we lose ~34 points.
 
 | dataset | contents | granularity | license/access |
 |---|---|---|---|
-| **MeSA-13** (ISMIR 2024) | 13 scans + **real performance audio**, expert measure bboxes + per-measure audio timestamps | measure | MIT code (`irmakbky/jltr-alignment`), data via CMU Box |
-| **SMR v1.0** (Tsai group) | 200 solo piano IMSLP scans, one **real YouTube recording each**, manual per-line timestamps; 100-piece subset has measure timestamps | line / measure | MIT (`HMC-MIR/YoutubeScoreFollowing`) |
-| **CollabScore** | score images + MusicXML/MEI with a "pivot score" linking every element to fragments of each source incl. audio | element-level | `collabscore/dataset` |
+| **MeSA-13** (ISMIR 2024) | 13 scans + **real performance audio**, semi-automated measure bboxes + per-measure audio timestamps | measure | code MIT (`irmakbky/jltr-alignment`); data via `mfeffer/mesa-13`, **no LICENSE file** |
+| ~~**SMR v1.0**~~ | ~~real YouTube recordings~~ — **WRONG, see below** | — | — |
+| **CollabScore** | ~~links elements to audio fragments~~ — **contains no audio at all**; it is an OMR ground-truth set | — | `collabscore/dataset` |
 
-They would change our output granularity from note to measure/line, so this is
-not a free substitution. But **MeSA-13 and SMR let us make a real-audio claim
-with no oracle anywhere**, against published baselines (MAcc 0.82 / 79.0%).
-Worth weighing against the benchmark-power finding: 25 pages powers a 10-point
-claim, 99 powers 5.
+> **Corrections (verified 2026-08-07) — see `EXTERNAL_BENCHMARKS.md`.**
+> **SMR's released audio is synthetic**, not real: the public release ships only
+> `data/midi/` and `data/pdf/`, and `01_prepData.ipynb` cell 3 renders it with
+> `fluidsynth -F p{i}.wav default.sf2 .../midi/p{i}.mid`. The real-audio version
+> (200 YouTube recordings + manual line timestamps) is unreleased. **Drop SMR.**
+> **MAcc is not our metric**: `mus_align/eval.py` compares fractional **measure
+> indices** with `error_boundary=0.5`, on a 100 Hz uniform *time* grid — ≈ ±1.10 s
+> at MeSA-13's 2.20 s median measure, so ~2× looser than pct@0.5s, and
+> time-weighted rather than onset-weighted. The fully **automatic** JLTR baseline
+> is **0.72**, not 0.82 (0.82 is human-in-the-loop with repeat labels).
+
+These change our output granularity from note to measure, so this is not a free
+substitution. And MeSA-13's 13 pieces power only a ~14-point claim — **worse
+than our current 25**. It is a validation set, not a benchmark.
 
 ---
 
