@@ -102,6 +102,7 @@ def main():
         # Guard by asserting the file we intend to use is the one that gets loaded.
         import piano_transcription_inference.inference as _inf
         _real_getsize = _inf.os.path.getsize
+        size = _real_getsize(ckpt)
 
         def _guarded_getsize(p, _c=os.path.abspath(ckpt), _r=_real_getsize):
             # Only lie about OUR checkpoint, and only to clear their size gate.
@@ -114,18 +115,22 @@ def main():
         finally:
             _inf.os.path.getsize = _real_getsize
         assert _real_getsize(ckpt) == size, 'checkpoint was overwritten by autodownload!'
-        # sanity: confirm the weights actually landed (load_state_dict is strict=False
-        # in their code, so a total mismatch would silently give a random net)
-        ck = torch.load(ckpt, map_location='cpu', weights_only=False)
-        sd = ck['model']
+        # Sanity: their load_state_dict uses strict=False, so a wholesale key
+        # mismatch would silently leave a RANDOMLY INITIALISED net and we would
+        # report its garbage transcriptions as a measurement. Verify every model
+        # tensor was actually populated from the checkpoint.
+        ck = torch.load(ckpt, map_location='cpu', weights_only=False)['model']
         if model_type == 'Note_pedal':
-            n_ckpt = len(sd['note_model']) + len(sd['pedal_model'])
-        else:
-            n_ckpt = len(sd)
+            ck = {f'{pre}.{k}': v for pre in ('note_model', 'pedal_model')
+                  for k, v in ck[pre].items()}
         model = tr.model.module if hasattr(tr.model, 'module') else tr.model
-        n_model = len(model.state_dict())
-        print(f'checkpoint tensors={n_ckpt}  model tensors={n_model}', flush=True)
-        del ck, sd
+        msd = model.state_dict()
+        matched = [k for k in msd if k in ck and msd[k].shape == ck[k].shape]
+        print(f'weights: model={len(msd)} ckpt={len(ck)} matched={len(matched)}',
+              flush=True)
+        assert len(matched) == len(msd), (
+            f'{len(msd) - len(matched)} model tensors NOT loaded from {ckpt}')
+        del ck, msd
 
         for tier in args.tiers.split(','):
             outdir = os.path.join(args.out_root, model_key, tier)
