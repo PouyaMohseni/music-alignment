@@ -44,9 +44,14 @@ for c in unet_big seg_net; do
     echo "checkpoint ok: $f ($(stat -c%s "$f") bytes)"
 done
 
-# onnxruntime + BLAS threads: keep each worker narrow so NPROC workers fit.
+# Keep each worker narrow so NPROC workers fit.  OEMER_THREADS is the one that
+# actually matters: onnxruntime sizes its thread pool to the machine's core
+# count, not to our cgroup, and ignores OMP_NUM_THREADS.  omr_run_oemer.py
+# reads OEMER_THREADS and pins SessionOptions.intra_op_num_threads.  Without
+# it, workers spawn 64 threads each and get OOM-killed with rc=137.
 THREADS=$(( ${SLURM_CPUS_PER_TASK:-24} / NPROC ))
 [ "$THREADS" -lt 1 ] && THREADS=1
+export OEMER_THREADS=$THREADS
 export OMP_NUM_THREADS=$THREADS
 export OPENBLAS_NUM_THREADS=$THREADS
 export MKL_NUM_THREADS=$THREADS

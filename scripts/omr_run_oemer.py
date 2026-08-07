@@ -44,6 +44,26 @@ def main():
     ap.add_argument("--musicxml", default=None, help="also try to build MusicXML here")
     args = ap.parse_args()
 
+    # onnxruntime builds its own thread pool sized to the machine's core count,
+    # NOT to the cgroup SLURM gives us: on a 64-core node each worker spawned 64
+    # intra-op threads plus their arenas, and N concurrent workers were OOM-killed
+    # (rc=137) before finishing a page.  OMP_NUM_THREADS does not control this;
+    # only SessionOptions does, and oemer constructs its sessions internally, so
+    # patch the constructor.
+    import onnxruntime as rt
+
+    _orig_session = rt.InferenceSession
+
+    def _pinned_session(path, *a, **kw):
+        so = rt.SessionOptions()
+        so.intra_op_num_threads = int(os.environ.get("OEMER_THREADS", "4"))
+        so.inter_op_num_threads = 1
+        so.enable_cpu_mem_arena = False
+        kw.setdefault("sess_options", so)
+        return _orig_session(path, *a, **kw)
+
+    rt.InferenceSession = _pinned_session
+
     import cv2
     from oemer import layers
     from oemer.ete import generate_pred, register_note_id
