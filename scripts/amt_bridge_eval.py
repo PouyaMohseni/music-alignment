@@ -294,6 +294,15 @@ def onset_f1(P, det_time, det_pitch, tol):
     if len(det_time) == 0:
         return 0.0, 0.0, 0.0
     det_time = np.asarray(det_time, dtype=float)
+    # mir_eval rejects negative interval times, which best_shift() produces as
+    # soon as it tries a negative offset.  Translate BOTH sides by the same
+    # constant instead: onset matching is translation-invariant, so F1 is
+    # bit-for-bit unchanged, whereas dropping the negative detections would
+    # quietly shrink the denominator and bias best_shift toward large negative
+    # shifts (fewer detections -> easier precision).
+    pad = max(0.0, -float(det_time.min())) if len(det_time) else 0.0
+    ref_int = ref_int + pad
+    det_time = det_time + pad
     est_int = np.stack([det_time, det_time + 0.1], 1)
     est_pit = mir_eval.util.midi_to_hz(np.asarray(det_pitch, dtype=float))
     p, r, f, _ = mir_eval.transcription.precision_recall_f1_overlap(
@@ -397,11 +406,18 @@ def main():
                       flush=True)
 
             if args.shift_diag:
-                sh = {p: best_shift(P[p], det[p][0], det[p][1]) for p in pieces}
-                run['best_constant_shift_s'] = sh
-                arr = np.array([v[0] for v in sh.values()])
-                print(f'  best constant wav-vs-MIDI shift: median={np.median(arr):+.3f}s '
-                      f'min={arr.min():+.3f} max={arr.max():+.3f}', flush=True)
+                # Never let an OPTIONAL diagnostic take down the primary
+                # measurement.  Run 425142 died here after printing exactly one
+                # system's F1, losing the end-to-end numbers for all five.
+                try:
+                    sh = {p: best_shift(P[p], det[p][0], det[p][1]) for p in pieces}
+                    run['best_constant_shift_s'] = sh
+                    arr = np.array([v[0] for v in sh.values()])
+                    print(f'  best constant wav-vs-MIDI shift: median={np.median(arr):+.3f}s '
+                          f'min={arr.min():+.3f} max={arr.max():+.3f}', flush=True)
+                except Exception as e:
+                    print(f'  shift_diag FAILED ({type(e).__name__}: {e}) -- '
+                          f'continuing; primary metrics are unaffected', flush=True)
 
         # ---- (2) end-to-end pct@0.5s --------------------------------------
         for matcher in ('greedy', 'dtw'):
