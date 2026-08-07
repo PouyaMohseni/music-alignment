@@ -51,8 +51,8 @@ import time
 
 import numpy as np
 
-REC = ('/lustre06/project/6002780/pmohseni/music-alignment/third_party/cpjku_unet'
-       '/data/msmd/msmd_real_performances')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REC = os.path.join(REPO, 'third_party/cpjku_unet/data/msmd/msmd_real_performances')
 CKPTS = {
     # model_key: (checkpoint path, piano_transcription_inference model_type)
     'kong_stock': ('/scratch/pmohseni/amt_ckpts/kong_stock.pth', 'Note_pedal'),
