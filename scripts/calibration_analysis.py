@@ -218,6 +218,7 @@ def brazier_reliability(c2o_frames, window=30, lo=0.5, hi=1.5):
     """
     n = len(c2o_frames)
     rf = np.ones(n, dtype=bool)
+    slopes = np.ones(n, dtype=float)
     t = np.arange(window, dtype=float)
     t -= t.mean()
     denom = float((t * t).sum())
@@ -225,11 +226,12 @@ def brazier_reliability(c2o_frames, window=30, lo=0.5, hi=1.5):
         if i + 1 < window:
             continue
         seg = np.asarray(c2o_frames[i + 1 - window:i + 1], float)
-        slope = float((t * (seg - seg.mean())).sum() / denom)
-        rf[i] = (lo <= slope <= hi)
+        slopes[i] = float((t * (seg - seg.mean())).sum() / denom)
+        rf[i] = (lo <= slopes[i] <= hi)
     if n >= window:
         rf[:window - 1] = rf[window - 1]
-    return rf
+        slopes[:window - 1] = slopes[window - 1]
+    return rf, slopes
 
 
 def frame_rms_db(wav_path, n_frames, hop, frame_size, sr):
@@ -256,26 +258,49 @@ def frame_rms_db(wav_path, n_frames, hop, frame_size, sr):
 
 
 # --------------------------------------------------------------------------- #
-def logistic_loo(X, y, groups, l2=1.0, iters=300, lr=0.5):
-    """Leave-one-piece-out logistic regression; returns out-of-fold P(lost)."""
+def _irls(X, y, l2=1.0, iters=50):
+    """Ridge-penalised logistic regression by IRLS (Newton).  Converges in a few
+    steps at this size, so the combiner is not handicapped by underfitting."""
+    w = np.zeros(X.shape[1])
+    I = np.eye(X.shape[1])
+    I[-1, -1] = 0.0                       # do not penalise the intercept
+    for _ in range(iters):
+        eta = np.clip(X @ w, -30, 30)
+        p = 1 / (1 + np.exp(-eta))
+        s = np.clip(p * (1 - p), 1e-6, None)
+        H = X.T @ (X * s[:, None]) + l2 * I
+        g = X.T @ (p - y) + l2 * (I @ w)
+        try:
+            step = np.linalg.solve(H, g)
+        except np.linalg.LinAlgError:
+            break
+        w -= step
+        if np.max(np.abs(step)) < 1e-8:
+            break
+    return w
+
+
+def logistic_loo(X, y, groups, l2=1.0):
+    """Leave-one-piece-out logistic regression; returns out-of-fold P(lost).
+
+    Standardisation statistics are computed on the TRAINING folds only, so no
+    information from the held-out piece reaches the model.
+    """
     X = np.asarray(X, float)
-    mu, sd = X.mean(0), X.std(0) + 1e-9
-    Xs = (X - mu) / sd
-    Xs = np.hstack([Xs, np.ones((len(Xs), 1))])
     y = np.asarray(y, float)
+    groups = np.asarray(groups)
     oof = np.zeros(len(y))
-    for g in sorted(set(groups)):
-        te = np.array([gg == g for gg in groups])
+    for g in sorted(set(groups.tolist())):
+        te = groups == g
         tr = ~te
-        if y[tr].sum() in (0, tr.sum()):
-            oof[te] = y[tr].mean()
+        if tr.sum() == 0 or y[tr].sum() in (0, tr.sum()):
+            oof[te] = y[tr].mean() if tr.sum() else y.mean()
             continue
-        w = np.zeros(Xs.shape[1])
-        for _ in range(iters):
-            p = 1 / (1 + np.exp(-Xs[tr] @ w))
-            grad = Xs[tr].T @ (p - y[tr]) / tr.sum() + l2 * np.r_[w[:-1], 0] / tr.sum()
-            w -= lr * grad
-        oof[te] = 1 / (1 + np.exp(-Xs[te] @ w))
+        mu, sd = X[tr].mean(0), X[tr].std(0) + 1e-9
+        Xtr = np.hstack([(X[tr] - mu) / sd, np.ones((int(tr.sum()), 1))])
+        Xte = np.hstack([(X[te] - mu) / sd, np.ones((int(te.sum()), 1))])
+        w = _irls(Xtr, y[tr], l2=l2)
+        oof[te] = 1 / (1 + np.exp(-np.clip(Xte @ w, -30, 30)))
     return oof
 
 
@@ -328,10 +353,14 @@ def main():
         c2o_gt = np.interp(xg, xg[o], fr[o])
         # sanity: the reconstructed map must reproduce the harness's own error
         c2o_check.append(np.abs(np.abs(c2o_pred - c2o_gt) - np.asarray(d['err_frames'], float)))
-        rf = brazier_reliability(c2o_pred)
+        rf, slopes = brazier_reliability(c2o_pred)
 
         d = dict(d)
         d['brazier_unreliable'] = (~rf).astype(float)
+        # Continuous generalisation of their rule, so the binary version is not
+        # handicapped by its thresholds: distance of the fitted slope from the
+        # real-time value 1.0.  Larger = further from "advancing normally".
+        d['brazier_slope_dev'] = np.abs(slopes - 1.0)
 
         # silence trigger
         wav = find_wav(args.audio_root, page, args.audio_suffix)
@@ -367,16 +396,25 @@ def main():
     # ---- signal registry: name -> (array, polarity) where +1 means higher=lost
     reg = {}
     for name, pol in [('conf1', -1), ('conf_max', -1), ('conf_mass', -1),
-                      ('margin', -1), ('ent_x', +1), ('silence_db', +1)]:
+                      ('margin', -1), ('ent_x', +1), ('silence_db', +1),
+                      ('brazier_slope_dev', +1)]:
         if name in T:
             reg[name] = pol * T[name]
     if 'conf1' in T and 'conf2' in T:
-        reg['top2_margin'] = -(T['conf1'] - T['conf2'])
+        T['top2_margin_raw'] = T['conf1'] - T['conf2']
+        reg['top2_margin'] = -T['top2_margin_raw']
     reg['brazier_rf_binary'] = T['brazier_unreliable']
 
-    model_feats = [k for k in ('conf1', 'conf2', 'conf_max', 'conf_mass', 'margin', 'ent_x')
-                   if k in T]
+    # Two combiners, so the comparison is apples to apples:
+    #   combo_model      -- only signals the model itself emits
+    #   combo_all        -- those plus the two published heuristics' own features,
+    #                       which is the honest "can we do better than either
+    #                       alone" question
+    model_feats = [k for k in ('conf1', 'conf2', 'conf_max', 'conf_mass', 'margin',
+                               'ent_x', 'top2_margin_raw') if k in T]
+    all_feats = model_feats + [k for k in ('brazier_slope_dev', 'silence_db') if k in T]
 
+    onset_oof = {}          # combiner out-of-fold scores on the onset subset only
     for subset, mask in (('onsets', onset_mask), ('all_frames', np.ones(len(err_s), bool))):
         y = y_all[mask]
         pg = pieces[mask]
@@ -392,13 +430,17 @@ def main():
         if 'silence_db' in T:
             res['silence_-40dB'] = binary_stats(-T['silence_db'][mask] < -40, y)
 
-        # trained combination, leave-one-piece-out
-        if model_feats:
-            X = np.stack([T[f][mask] for f in model_feats], 1)
+        # trained combinations, leave-one-piece-out
+        for tag, feats in (('combo_model', model_feats), ('combo_all', all_feats)):
+            if not feats:
+                continue
+            X = np.stack([T[f][mask] for f in feats], 1)
             oof = logistic_loo(X, y.astype(float), pg)
+            if subset == 'onsets':
+                onset_oof[tag] = oof
             e, diag = ece(oof, y)
-            res['combo_loo_logreg'] = {
-                'features': model_feats,
+            res[tag] = {
+                'features': feats,
                 'auroc': round(auroc(oof, y), 4),
                 'auroc_ci95': cluster_ci(auroc, oof, y, pg, B=args.B),
                 'average_precision': round(average_precision(oof, y), 4),
@@ -407,23 +449,41 @@ def main():
         R[subset] = res
 
     # ---- head-to-head vs the published heuristics, paired over pieces -------
-    best = max((k for k in R['onsets'] if 'auroc' in R['onsets'][k] and k != 'brazier_rf_binary'),
-               key=lambda k: R['onsets'][k]['auroc'])
+    # BASELINES  = the two published mechanisms, plus the continuous
+    #              generalisation of Brazier & Widmer's rule so that it is not
+    #              handicapped by its own hand-set thresholds.
+    # CANDIDATES = signals the model itself emits, and the LOO-trained combiners.
+    BASELINES = {'brazier_rf_binary', 'brazier_slope_dev', 'silence_db', 'silence_-40dB'}
+    for tag, oof in onset_oof.items():
+        reg[tag] = np.full(len(err_s), np.nan)
+        reg[tag][onset_mask] = oof
+    cands = [k for k in R['onsets']
+             if 'auroc' in R['onsets'][k] and k not in BASELINES and k in reg]
+    best_single = max([k for k in cands if not k.startswith('combo')],
+                      key=lambda k: R['onsets'][k]['auroc'])
+    best = max(cands, key=lambda k: R['onsets'][k]['auroc'])
     R['headline'] = {
-        'best_continuous_signal': best,
+        'best_model_signal': best_single,
+        'best_model_signal_auroc': R['onsets'][best_single]['auroc'],
+        'best_model_signal_ci95': R['onsets'][best_single]['auroc_ci95'],
+        'best_overall': best,
         'best_auroc': R['onsets'][best]['auroc'],
         'best_auroc_ci95': R['onsets'][best]['auroc_ci95'],
-        'brazier_rf_auroc': R['onsets']['brazier_rf_binary']['auroc'],
-        'brazier_rf_balanced_accuracy': R['onsets']['brazier_rf_binary'].get('balanced_accuracy'),
-        'silence_auroc': R['onsets'].get('silence_db', {}).get('auroc'),
+        'baseline_brazier_rf_binary_auroc': R['onsets']['brazier_rf_binary']['auroc'],
+        'baseline_brazier_rf_balanced_accuracy':
+            R['onsets']['brazier_rf_binary'].get('balanced_accuracy'),
+        'baseline_brazier_slope_continuous_auroc':
+            R['onsets'].get('brazier_slope_dev', {}).get('auroc'),
+        'baseline_silence_auroc': R['onsets'].get('silence_db', {}).get('auroc'),
     }
-    if 'combo_loo_logreg' in R['onsets']:
-        R['headline']['combo_auroc'] = R['onsets']['combo_loo_logreg']['auroc']
-        R['headline']['combo_auroc_ci95'] = R['onsets']['combo_loo_logreg']['auroc_ci95']
+    for tag in ('combo_model', 'combo_all'):
+        if tag in R['onsets']:
+            R['headline'][f'{tag}_auroc'] = R['onsets'][tag]['auroc']
+            R['headline'][f'{tag}_ece'] = R['onsets'][tag]['ece_10bin']
 
     # paired bootstrap on the AUROC gap vs each published heuristic
-    for rival in ('brazier_rf_binary', 'silence_db'):
-        if rival not in R['onsets']:
+    for rival in ('brazier_rf_binary', 'brazier_slope_dev', 'silence_db'):
+        if rival not in R['onsets'] or rival not in reg:
             continue
         a = reg[best][onset_mask]
         b = reg[rival][onset_mask]
@@ -450,15 +510,25 @@ def main():
     print(f"\npages={R['meta']['n_pages']}  frames={R['meta']['n_frames_total']} "
           f"onsets={R['meta']['n_frames_onset']}  pct@0.5s={R['meta']['pct_at_0.5s_onsets']} "
           f"lost_rate={R['meta']['lost_rate_onsets']}")
-    print('\nAUROC of "this frame is lost (err>0.5s)", onset frames:')
+    print('\nAUROC of "this frame is lost (err>0.5s)", onset frames '
+          '([P] = published heuristic / its continuous generalisation):')
     for k, v in sorted(R['onsets'].items(), key=lambda kv: -(kv[1].get('auroc') or 0)):
         if 'auroc' in v:
-            print(f"  {k:22s} AUROC={v['auroc']:.3f}  CI{v['auroc_ci95']}  AP={v['average_precision']:.3f}")
+            tag = '[P]' if k in BASELINES else '   '
+            print(f"  {tag} {k:20s} AUROC={v['auroc']:.3f}  CI{v['auroc_ci95']}  "
+                  f"AP={v['average_precision']:.3f}")
     for k in ('brazier_rf_binary', 'silence_-40dB'):
         if k in R['onsets'] and 'balanced_accuracy' in R['onsets'][k]:
             v = R['onsets'][k]
-            print(f"  [binary] {k:20s} bal.acc={v['balanced_accuracy']:.3f} "
+            print(f"  [P] binary {k:16s} bal.acc={v['balanced_accuracy']:.3f} "
                   f"TPR={v['tpr_recall_of_lost']:.3f} FPR={v['fpr']:.3f} flag_rate={v['flag_rate']:.3f}")
+    if 'combo_all' in R['onsets']:
+        print(f"\nreliability diagram, combo_all (ECE={R['onsets']['combo_all']['ece_10bin']:.4f}):")
+        print(f"  {'bin':>12} {'n':>6} {'mean P(lost)':>13} {'observed':>10}")
+        for d in R['onsets']['combo_all']['reliability_diagram']:
+            if d['n']:
+                print(f"  [{d['bin'][0]:.1f},{d['bin'][1]:.1f}]{'':>4} {d['n']:>6} "
+                      f"{d['mean_pred']:>13.3f} {d['frac_lost']:>10.3f}")
     print('\nheadline:', json.dumps(R['headline'], indent=2))
     return 0
 

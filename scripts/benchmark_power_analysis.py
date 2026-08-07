@@ -316,10 +316,31 @@ def main():
             'piece_score_correlation': round(float(np.corrcoef(sa, sb)[0, 1]), 3),
         }
 
-    # ---------------- aggregation convention: pooled vs piece-wise -----------
+    # ---------------- MICRO vs MACRO aggregation -----------------------------
     # Cont et al. ISMIR 2007 already flags that "overall precision rate" and
-    # "piecewise precision rate" are different metrics.  Here we quantify how
-    # much the CHOICE alone moves a published headline delta.
+    # "piecewise precision rate" are different metrics.  What is new is that the
+    # current leaderboard MIXES them:
+    #
+    #   MICRO (onset-pooled)   sum(err<=th) / total_onsets
+    #                          CPJKU eval_model.py:102; CYOLO eval.py; ours.
+    #   MACRO (mean of ratios) mean over pieces/pages of each one's ratio
+    #                          CODA scripts/evaluate_batch.py:183
+    #                          -> float(np.mean(ratios)).
+    #
+    # CODA (ISMIR 2026) reports a macro number and compares it against CYOLO /
+    # cyolo_sb / cyolo_sb_a / CUNet baselines COPIED from Henkel & Widmer without
+    # re-running them (its own Section 4 states this), and those baselines are
+    # micro.  So the headline comparison is macro-vs-micro.
+    #
+    # This section measures what that convention is worth on a FIXED model, so
+    # the number is not confounded with any modelling difference.  Mechanism:
+    # Chopin Nocturne op. 9 is 1315/4415 = 29.8% of the micro metric but 1/16 =
+    # 6.2% of a piece-macro metric, and every system scores far worse on it.
+    #
+    # CAVEAT, preserved deliberately: CODA's release contains NO Setting II
+    # (real-audio) evaluation code.  That its REAL-AUDIO number used the macro
+    # aggregator is INFERRED from evaluate_batch.py being the only aggregator in
+    # the repository.  It is not proven, and must not be written as if it were.
     R['aggregation_convention'] = {}
     for k, s in vecs.items():
         pw = float(np.mean([bm.wv[bm.rows[c]] @ s[bm.rows[c]] / bm.wv[bm.rows[c]].sum()
@@ -336,6 +357,60 @@ def main():
                                       - R['aggregation_convention'][a]['onset_pooled'], 2),
                 'piece_mean': round(R['aggregation_convention'][b_]['piece_mean']
                                     - R['aggregation_convention'][a]['piece_mean'], 2)}
+
+    ac = R['aggregation_convention']
+    swing = {k: round(v['piece_mean'] - v['onset_pooled'], 2)
+             for k, v in ac.items() if not k.startswith('DELTA')}
+    R['micro_vs_macro'] = {
+        'micro_definition': 'sum(err<=0.5s) / total_onsets  [eval_model.py:102]',
+        'macro_page_definition': 'unweighted mean over the 25 pages of each page ratio',
+        'macro_piece_definition': 'unweighted mean over the 16 pieces of each piece ratio',
+        'coda_aggregator': 'float(np.mean(ratios))  [CODA scripts/evaluate_batch.py:183]',
+        'coda_baselines_are_micro': ('CODA copies CYOLO/cyolo_sb/cyolo_sb_a/CUNet numbers '
+                                     'from Henkel & Widmer without re-running them'),
+        'inference_caveat': ('CODA ships no Setting II (real-audio) evaluation code; that its '
+                             'real-audio number used the macro aggregator is INFERRED from '
+                             'evaluate_batch.py being the only aggregator in the repo'),
+        'free_gain_macro_piece_minus_micro': swing,
+        'max_free_gain': round(max(swing.values()), 2),
+        'max_free_gain_system': max(swing, key=swing.get),
+        'coda_margin_over_cyolo_sb_a': 1.8,
+        'coda_margin_over_cyolo_sb': 8.4,
+        'verdict': ('On an unchanged model the aggregation choice alone is worth up to '
+                    f'{max(swing.values()):+.1f} points -- larger than CODA\'s entire +1.8 '
+                    'margin over cyolo_sb_a and comparable to its +8.4 over cyolo_sb.'),
+    }
+    # Put the published leaderboard on ONE aggregator.  The free gain is not a
+    # constant offset -- it is largest for mid-tier systems and smallest for the
+    # strongest one -- so switching conventions compresses the leaderboard and
+    # changes gaps, not just levels.
+    if 'cyolo_sb_a' in ac:
+        R['micro_vs_macro']['leaderboard_on_common_aggregator'] = {
+            'coda_published': 88.3,
+            'coda_presumed_macro': True,
+            'cyolo_sb_a_macro_page': ac['cyolo_sb_a']['page_mean'],
+            'cyolo_sb_a_macro_piece': ac['cyolo_sb_a']['piece_mean'],
+            'cyolo_sb_a_micro': ac['cyolo_sb_a']['onset_pooled'],
+            'coda_margin_as_published_micro_baseline': round(88.3 - ac['cyolo_sb_a']['onset_pooled'], 1),
+            'coda_margin_vs_macro_page': round(88.3 - ac['cyolo_sb_a']['page_mean'], 1),
+            'coda_margin_vs_macro_piece': round(88.3 - ac['cyolo_sb_a']['piece_mean'], 1),
+            'reading': ('CODA 88.3 is bracketed by cyolo_sb_a own macro range '
+                        f'{ac["cyolo_sb_a"]["page_mean"]} (page) to '
+                        f'{ac["cyolo_sb_a"]["piece_mean"]} (piece).  Matching the aggregator '
+                        'removes most or all of the claimed +1.8 lead over the prior SOTA; '
+                        'against the piece-macro it is negative.  Subject to the inference '
+                        'caveat above, and in any case far inside the +/-20 point unpaired '
+                        'MDD this benchmark supports.')}
+
+    dom = max(bm.piece_ids, key=lambda c: sum(W[p] for p in bm.clusters[c]))
+    drows = bm.rows[dom]
+    orows = np.array([i for i in range(len(bm.pages)) if i not in set(drows)])
+    R['micro_vs_macro']['mechanism'] = {
+        'dominant_piece': dom,
+        'onset_share_micro_pct': round(100 * bm.wv[drows].sum() / N_ONSETS, 1),
+        'weight_under_piece_macro_pct': round(100 / len(bm.piece_ids), 1),
+        'score_on_dominant_piece': {k: round(bm.pooled(s, drows), 1) for k, s in vecs.items()},
+        'score_elsewhere': {k: round(bm.pooled(s, orows), 1) for k, s in vecs.items()}}
 
     # ---------------- MDD and power curve ------------------------------------
     ref = 'cyolo_sb' if 'cyolo_sb' in vecs else sorted(vecs)[0]
@@ -641,10 +716,19 @@ def main():
         w = v['variance_stabilised']
         print(f'  {k:34s} se_tot={w["se_total"]:5.2f} CI [{w["ci95"][0]:+7.2f},{w["ci95"][1]:+7.2f}] '
               f'{"SIG" if w["significant"] else "n.s."}')
-    print('\n=== aggregation convention (Cont 2007 pooled vs piecewise) ===')
+    print('\n=== MICRO vs MACRO aggregation, same model, same data ===')
+    print(f'  {"system":26s} {"micro":>7s} {"macro/page":>11s} {"macro/piece":>12s} {"free gain":>10s}')
+    for k, v in sorted(R['aggregation_convention'].items(),
+                       key=lambda kv: -(kv[1].get('onset_pooled') or 0)):
+        if k.startswith('DELTA'):
+            continue
+        print(f'  {k:26s} {v["onset_pooled"]:7.1f} {v["page_mean"]:11.1f} '
+              f'{v["piece_mean"]:12.1f} {v["piece_mean"] - v["onset_pooled"]:+10.1f}')
+    print(f'  -> {R["micro_vs_macro"]["verdict"]}')
+    print('  ablation deltas under each convention:')
     for k, v in R['aggregation_convention'].items():
         if k.startswith('DELTA'):
-            print(f'  {k:34s} pooled={v["onset_pooled"]:+6.2f}  piece-mean={v["piece_mean"]:+6.2f}')
+            print(f'    {k:34s} micro={v["onset_pooled"]:+6.2f}  macro/piece={v["piece_mean"]:+6.2f}')
     if 'rank_stability' in R:
         print('\n=== rank stability ===')
         print('  order:', ' > '.join(R['rank_stability']['order']))

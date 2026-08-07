@@ -529,6 +529,71 @@
       "piece_mean": 10.51
     }
   },
+  "micro_vs_macro": {
+    "micro_definition": "sum(err<=0.5s) / total_onsets  [eval_model.py:102]",
+    "macro_page_definition": "unweighted mean over the 25 pages of each page ratio",
+    "macro_piece_definition": "unweighted mean over the 16 pieces of each piece ratio",
+    "coda_aggregator": "float(np.mean(ratios))  [CODA scripts/evaluate_batch.py:183]",
+    "coda_baselines_are_micro": "CODA copies CYOLO/cyolo_sb/cyolo_sb_a/CUNet numbers from Henkel & Widmer without re-running them",
+    "inference_caveat": "CODA ships no Setting II (real-audio) evaluation code; that its real-audio number used the macro aggregator is INFERRED from evaluate_batch.py being the only aggregator in the repo",
+    "free_gain_macro_piece_minus_micro": {
+      "cyolo": 7.51,
+      "cyolo_sb": 3.27,
+      "cyolo_sb_a": 2.71,
+      "R3": 7.31,
+      "N3_belief_propagation": 6.35,
+      "MERT_B2_pitch_aux": 6.59,
+      "B1a_mert_swap": 5.83,
+      "B3_inr_subpixel": -1.55,
+      "B4_temporal_consistency": -1.06,
+      "CUNet_CB_TA": -2.46
+    },
+    "max_free_gain": 7.51,
+    "max_free_gain_system": "cyolo",
+    "coda_margin_over_cyolo_sb_a": 1.8,
+    "coda_margin_over_cyolo_sb": 8.4,
+    "verdict": "On an unchanged model the aggregation choice alone is worth up to +7.5 points -- larger than CODA's entire +1.8 margin over cyolo_sb_a and comparable to its +8.4 over cyolo_sb.",
+    "leaderboard_on_common_aggregator": {
+      "coda_published": 88.3,
+      "coda_presumed_macro": true,
+      "cyolo_sb_a_macro_page": 87.2,
+      "cyolo_sb_a_macro_piece": 89.17,
+      "cyolo_sb_a_micro": 86.46,
+      "coda_margin_as_published_micro_baseline": 1.8,
+      "coda_margin_vs_macro_page": 1.1,
+      "coda_margin_vs_macro_piece": -0.9,
+      "reading": "CODA 88.3 is bracketed by cyolo_sb_a own macro range 87.2 (page) to 89.17 (piece).  Matching the aggregator removes most or all of the claimed +1.8 lead over the prior SOTA; against the piece-macro it is negative.  Subject to the inference caveat above, and in any case far inside the +/-20 point unpaired MDD this benchmark supports."
+    },
+    "mechanism": {
+      "dominant_piece": "ChopinFF__O9__nocturne_in_b-flat_minor",
+      "onset_share_micro_pct": 29.8,
+      "weight_under_piece_macro_pct": 6.2,
+      "score_on_dominant_piece": {
+        "cyolo": 43.8,
+        "cyolo_sb": 63.7,
+        "cyolo_sb_a": 73.8,
+        "R3": 14.0,
+        "N3_belief_propagation": 20.1,
+        "MERT_B2_pitch_aux": 15.2,
+        "B1a_mert_swap": 16.4,
+        "B3_inr_subpixel": 24.0,
+        "B4_temporal_consistency": 11.9,
+        "CUNet_CB_TA": 16.7
+      },
+      "score_elsewhere": {
+        "cyolo": 82.8,
+        "cyolo_sb": 86.8,
+        "cyolo_sb_a": 91.8,
+        "R3": 58.7,
+        "N3_belief_propagation": 54.9,
+        "MERT_B2_pitch_aux": 55.5,
+        "B1a_mert_swap": 47.7,
+        "B3_inr_subpixel": 29.7,
+        "B4_temporal_consistency": 18.4,
+        "CUNet_CB_TA": 23.6
+      }
+    }
+  },
   "power_curve": [
     {
       "n_pieces": 8,

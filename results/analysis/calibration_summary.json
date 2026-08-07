@@ -1,0 +1,112 @@
+{
+  "metric": "AUROC of \"this onset frame has tracking error > 0.5 s\"",
+  "clustering": "piece-level cluster bootstrap over the 16 pieces, B=1000",
+  "caveat_c2o": "the Brazier slope feature uses a linear reconstruction of interpol_c2o from the (x_gt, frame) pairs in the dump; median |recon - harness| is 1.6-4.1 onset frames.  This can only HANDICAP the Brazier baseline, so the fact that it still beats every model-internal signal on both CYOLO checkpoints is conservative.",
+  "per_model": {
+    "cyolo": {
+      "n_onset_frames": 4149,
+      "pct_at_0.5s": 71.27,
+      "lost_rate": 0.2873,
+      "PUBLISHED_brazier_rf_binary": 0.7458,
+      "PUBLISHED_brazier_rf_balanced_acc": 0.7458,
+      "PUBLISHED_brazier_rf_flag_rate": 0.3854,
+      "PUBLISHED_silence_continuous": 0.5343,
+      "PUBLISHED_silence_-40dB_balanced_acc": 0.5,
+      "OURS_brazier_slope_continuous": 0.8113,
+      "OURS_best_model_signal": "top2_margin",
+      "OURS_best_model_signal_auroc": 0.7872,
+      "OURS_combo_all_auroc": 0.8202,
+      "OURS_combo_all_ci95": [
+        0.79,
+        0.87
+      ],
+      "OURS_combo_all_ece": 0.0339,
+      "gap_vs_published_binary_rule": {
+        "delta_auroc": 0.0744,
+        "ci95": [
+          0.0506,
+          0.1509
+        ],
+        "significant": true
+      },
+      "gap_vs_continuous_slope_rule": {
+        "delta_auroc": 0.0089,
+        "ci95": [
+          -0.0134,
+          0.0693
+        ],
+        "significant": false
+      }
+    },
+    "cyolo_sb": {
+      "n_onset_frames": 4149,
+      "pct_at_0.5s": 79.97,
+      "lost_rate": 0.2003,
+      "PUBLISHED_brazier_rf_binary": 0.759,
+      "PUBLISHED_brazier_rf_balanced_acc": 0.759,
+      "PUBLISHED_brazier_rf_flag_rate": 0.3235,
+      "PUBLISHED_silence_continuous": 0.5532,
+      "PUBLISHED_silence_-40dB_balanced_acc": 0.5,
+      "OURS_brazier_slope_continuous": 0.8241,
+      "OURS_best_model_signal": "top2_margin",
+      "OURS_best_model_signal_auroc": 0.7883,
+      "OURS_combo_all_auroc": 0.8313,
+      "OURS_combo_all_ci95": [
+        0.797,
+        0.855
+      ],
+      "OURS_combo_all_ece": 0.0255,
+      "gap_vs_published_binary_rule": {
+        "delta_auroc": 0.0724,
+        "ci95": [
+          0.0488,
+          0.1121
+        ],
+        "significant": true
+      },
+      "gap_vs_continuous_slope_rule": {
+        "delta_auroc": 0.0072,
+        "ci95": [
+          -0.0179,
+          0.0356
+        ],
+        "significant": false
+      }
+    },
+    "R3": {
+      "n_onset_frames": 4278,
+      "pct_at_0.5s": 46.77,
+      "lost_rate": 0.5323,
+      "PUBLISHED_brazier_rf_binary": 0.6913,
+      "PUBLISHED_brazier_rf_balanced_acc": 0.6913,
+      "PUBLISHED_brazier_rf_flag_rate": 0.7073,
+      "PUBLISHED_silence_continuous": 0.5964,
+      "PUBLISHED_silence_-40dB_balanced_acc": 0.5,
+      "OURS_brazier_slope_continuous": 0.7733,
+      "OURS_best_model_signal": "conf_max",
+      "OURS_best_model_signal_auroc": 0.8016,
+      "OURS_combo_all_auroc": 0.8114,
+      "OURS_combo_all_ci95": [
+        0.771,
+        0.863
+      ],
+      "OURS_combo_all_ece": 0.0222,
+      "gap_vs_published_binary_rule": {
+        "delta_auroc": 0.1201,
+        "ci95": [
+          0.0997,
+          0.1644
+        ],
+        "significant": true
+      },
+      "gap_vs_continuous_slope_rule": {
+        "delta_auroc": 0.0381,
+        "ci95": [
+          0.0165,
+          0.0965
+        ],
+        "significant": true
+      }
+    }
+  }
+}
