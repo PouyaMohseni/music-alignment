@@ -339,7 +339,12 @@ def main():
     # representative paired SE: the median across the published-ablation pairs we can test.
     # NOTE the paired SE is pair-dependent -- it falls as the two systems' per-piece
     # scores correlate -- so the range across pairs is reported alongside.
-    pk = [k for k in R['paired'] if k.startswith('cyolo')]
+    # only the three CYOLO-family ablation pairs -- these are the actual published
+    # ablations, and they are the right reference for "can a paper's own ablation
+    # be resolved".  Cross-family pairs (ours vs theirs) are far less correlated
+    # per piece and would inflate the reference SE.
+    pk = [k for k in ('cyolo__vs__cyolo_sb', 'cyolo_sb__vs__cyolo_sb_a',
+                      'cyolo__vs__cyolo_sb_a') if k in R['paired']]
     se_list = [R['paired'][k]['se_paired'] for k in pk]
     se_pair16 = float(np.median(se_list)) if se_list else se_abs
 
