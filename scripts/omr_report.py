@@ -50,7 +50,7 @@ def draw(work, variant, key, pagejson, out_png, box=None):
     matched_det = set()
     for r in notes:
         x, y = r["gt_x"], r["gt_y"]
-        if r["matched"]:
+        if r["matched"] and det:
             d.ellipse([x - 7, y - 6, x + 7, y + 6], outline=(0, 160, 0))
             best = min(range(len(det)), key=lambda i: (det[i][0] - x) ** 2
                        + (det[i][1] - y) ** 2)
