@@ -102,23 +102,26 @@ def main():
     st = []
     for tr in np.ndindex(staffs.shape):
         s = staffs[tr]
-        if s is None:
+        if s is None or not getattr(s, "lines", None):
             continue
-        st.append(
-            dict(
-                idx=[int(v) for v in tr],
-                track=None if s.track is None else int(s.track),
-                group=None if s.group is None else int(s.group),
-                y_center=float(s.y_center),
-                y_upper=float(s.y_upper),
-                y_lower=float(s.y_lower),
-                x_left=float(s.x_left),
-                x_right=float(s.x_right),
-                unit_size=float(s.unit_size),
-                is_interp=bool(s.is_interp),
-                line_y=[float(l.y_center) for l in s.lines],
+        try:
+            st.append(
+                dict(
+                    idx=[int(v) for v in tr],
+                    track=None if s.track is None else int(s.track),
+                    group=None if s.group is None else int(s.group),
+                    y_center=float(s.y_center),
+                    y_upper=float(s.y_upper),
+                    y_lower=float(s.y_lower),
+                    x_left=float(s.x_left),
+                    x_right=float(s.x_right),
+                    unit_size=float(s.unit_size),
+                    is_interp=bool(s.is_interp),
+                    line_y=[float(l.y_center) for l in s.lines],
+                )
             )
-        )
+        except Exception:
+            rec["errors"].append("staff dump: " + traceback.format_exc())
     rec["staffs"] = st
 
     # ---- noteheads (the measurement) -----------------------------------

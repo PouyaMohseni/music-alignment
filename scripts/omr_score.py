@@ -35,29 +35,48 @@ NH_H = 1.0 * STAFF_SPACE
 
 
 # ----------------------------------------------------------------- GT staves
-def gt_staves(img_path, systems):
-    """Recover each staff's 5 line y-positions from the page image itself."""
+def gt_staves(img_path, systems, space=STAFF_SPACE, resp_th=3.6):
+    """Recover each staff's 5 line y-positions from the page image itself.
+
+    A comb matched-filter rather than "find rows that are mostly black, then
+    cut on big gaps".  The naive version breaks on real pages two ways: long
+    slurs/beams spanning most of a system look exactly like a staff line, and
+    a line that happens to be heavily occluded by noteheads drops below any
+    coverage threshold.  Sliding a 5-tooth comb of the known staff spacing
+    scores the whole structure at once, so a stray horizontal scores ~1/5 and
+    one weak line still leaves ~4/5.
+    """
     blk = np.array(Image.open(img_path).convert("L")) < 128
     staves = []
     for b in systems:
         y0, y1 = int(b[:, 0].min()), int(b[:, 0].max())
         x0, x1 = int(b[:, 1].min()), int(b[:, 1].max())
-        prof = blk[y0 : y1 + 1, x0 : x1 + 1].mean(1)
-        rows = np.where(prof > 0.7)[0]
-        if len(rows) < 5:
-            continue
-        grp = np.split(rows, np.where(np.diff(rows) > 1)[0] + 1)
-        cy = np.array([g.mean() + y0 for g in grp])
-        # split the run of lines into groups of 5 (one grand staff = 10 lines)
-        gaps = np.diff(cy)
-        med = np.median(gaps[gaps < 3 * STAFF_SPACE]) if len(gaps) else STAFF_SPACE
-        cuts = np.where(gaps > 2.5 * med)[0] + 1
-        for chunk in np.split(cy, cuts):
-            if len(chunk) == 5:
-                staves.append(dict(lines=chunk.tolist(), x0=x0, x1=x1))
-            elif len(chunk) > 5 and len(chunk) % 5 == 0:
-                for k in range(0, len(chunk), 5):
-                    staves.append(dict(lines=chunk[k : k + 5].tolist(), x0=x0, x1=x1))
+        pad = int(round(2 * space))
+        ya, yb = max(0, y0 - pad), min(blk.shape[0], y1 + pad + 1)
+        prof = blk[ya:yb, x0 : x1 + 1].mean(1)
+        # smooth by 1px so half-pixel line centres are not missed
+        prof = np.maximum(prof, np.roll(prof, 1))
+        n = len(prof)
+        offs = [int(round(k * space)) for k in range(5)]
+        resp = np.full(n, -1.0)
+        for y in range(0, n - offs[-1]):
+            resp[y] = sum(prof[y + o] for o in offs)
+        order = np.argsort(-resp)
+        taken = []
+        for y in order:
+            if resp[y] < resp_th:
+                break
+            if any(abs(y - t) < 3 * space for t in taken):
+                continue
+            taken.append(int(y))
+        for y in sorted(taken):
+            # refine each tooth to the local coverage maximum
+            lines = []
+            for o in offs:
+                w = slice(max(0, y + o - 1), min(n, y + o + 2))
+                lines.append(float(ya + w.start + int(np.argmax(prof[w]))))
+            staves.append(dict(lines=lines, x0=x0, x1=x1))
+    staves.sort(key=lambda s: s["lines"][0])
     for s in staves:
         L = np.array(s["lines"])
         s["y_upper"], s["y_lower"] = float(L.min()), float(L.max())
