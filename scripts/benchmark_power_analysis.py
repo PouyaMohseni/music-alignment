@@ -125,6 +125,14 @@ def parse_verify_cyolo(path=None):
     return out
 
 
+def _glob_logs():
+    import glob
+    out = []
+    for pat in ('results/eval_any-*.log', 'results/eval_msmd_rec-*.log'):
+        out += glob.glob(os.path.join(REPO, pat))
+    return out
+
+
 def parse_piecewise_log(path):
     """-> (label, tier, {page: [pct@th ...]}) from an eval_any / eval_msmd_rec log."""
     txt = open(path, errors='ignore').read()
@@ -400,6 +408,52 @@ def main():
                        'n_pages': int(np.ceil((MDD_K * se1 / d) ** 2 * pages_per_piece))}
             for d in (2, 5, 10)}
 
+    # ---------------- SAME-RECIPE RETRAIN CONTROL ----------------------------
+    # The null experiment the literature never runs: train the identical recipe
+    # twice and compare the two runs on the benchmark.  Any difference here is
+    # pure training noise.  We find such pairs automatically: an (experiment,
+    # tier) evaluated in two logs whose `checkpoint:` lines point at different
+    # timestamped param dirs, i.e. two independent training runs of one recipe.
+    retrain = {}
+    for path in sorted(_glob_logs()):
+        try:
+            label, tier, tab = parse_piecewise_log(path)
+        except Exception:
+            continue
+        if tier != args.tier or not set(bm.pages) <= set(tab):
+            continue
+        m = re.search(r'^checkpoint: (\S+)', open(path, errors='ignore').read(), flags=re.M)
+        run = os.path.basename(os.path.dirname(m.group(1))) if m else path
+        retrain.setdefault(label, {})[run] = (path, tab)
+    R['retrain_control'] = {'note': (
+        'Same recipe, two independent training runs, same 25 pages.  A '
+        'difference here is training noise and nothing else.'), 'pairs': {}}
+    rt_deltas = []
+    for label, runs in retrain.items():
+        if len(runs) < 2:
+            continue
+        (r1, (p1, t1)), (r2, (p2, t2)) = sorted(runs.items())[:2]
+        s1, s2 = bm.vec(t1), bm.vec(t2)
+        d = bm.boot_stat(lambda rows: bm.pooled(s2, rows) - bm.pooled(s1, rows), rng, B=args.B)
+        lo, hi = ci(d)
+        delta = bm.pooled(s2) - bm.pooled(s1)
+        rt_deltas.append(delta)
+        R['retrain_control']['pairs'][label] = {
+            'run_a': r1, 'run_b': r2, 'log_a': os.path.relpath(p1, REPO),
+            'log_b': os.path.relpath(p2, REPO),
+            'score_a': round(bm.pooled(s1), 2), 'score_b': round(bm.pooled(s2), 2),
+            'delta': round(delta, 2), 'ci95_paired': [round(lo, 2), round(hi, 2)],
+            'spuriously_significant': bool(lo > 0 or hi < 0)}
+    if rt_deltas:
+        rms = float(np.sqrt(np.mean(np.square(rt_deltas))))
+        R['retrain_control']['summary'] = {
+            'n_recipes_retrained': len(rt_deltas),
+            'max_abs_delta': round(float(np.max(np.abs(rt_deltas))), 2),
+            'rms_delta_between_runs': round(rms, 2),
+            'implied_seed_sd_per_run': round(rms / np.sqrt(2), 2),
+            'n_spuriously_significant': int(sum(
+                v['spuriously_significant'] for v in R['retrain_control']['pairs'].values()))}
+
     # ---------------- benchmark noise vs TRAINING-SEED noise -----------------
     # Published ablations report one training seed per arm.  Sampling noise over
     # pieces is therefore only half the story.  Seed sd = 3.5 pct points was
@@ -410,15 +464,31 @@ def main():
     # operating point via sqrt(p(1-p)).  This section is an EXTRAPOLATION using
     # our own seed measurements, not a measurement of CYOLO's seed variance,
     # which would require retraining their models and is not claimed.
-    SEED_SD_MEASURED, SEED_SD_AT_P = 3.5, 0.30
-    R['seed_inclusive'] = {'seed_sd_measured': SEED_SD_MEASURED,
-                           'seed_sd_measured_at_score': SEED_SD_AT_P * 100,
-                           'provenance': '9 recipes trained twice, this project',
+    SEED_SD_MEASURED = (R.get('retrain_control', {}).get('summary', {})
+                        .get('implied_seed_sd_per_run') or 3.5)
+    SEED_SD_AT_P = float(np.mean([R['absolute'][k]['pct_at_0.5s'] for k in retrain
+                                  if k in R['absolute']]) / 100) if retrain else 0.30
+    SEED_SD_AT_P = SEED_SD_AT_P if 0.05 < SEED_SD_AT_P < 0.95 else 0.20
+    R['seed_inclusive'] = {'seed_sd_measured': round(SEED_SD_MEASURED, 2),
+                           'seed_sd_measured_at_score': round(SEED_SD_AT_P * 100, 1),
+                           'provenance': ('recomputed here from the same-recipe retrain '
+                                          'pairs in retrain_control; cross-checks the '
+                                          'project note of ~3.5 from 9 recipes trained twice'),
                            'pairs': {}}
     for k, v in R['paired'].items():
         p = np.mean([R['absolute'][s]['pct_at_0.5s'] for s in k.split('__vs__')]) / 100
         scale = np.sqrt(p * (1 - p)) / np.sqrt(SEED_SD_AT_P * (1 - SEED_SD_AT_P))
-        for tag, sd in (('raw', SEED_SD_MEASURED), ('variance_stabilised', SEED_SD_MEASURED * scale)):
+        # Three seed-sd assumptions, reported side by side because the answer for
+        # the marginal pairs depends on which you accept and we will not hide that:
+        #   raw                 -- our measured retrain sd, unadjusted
+        #   variance_stabilised -- rescaled to each pair's operating point by
+        #                          sqrt(p(1-p)); CYOLO sits near 0.83 where a
+        #                          proportion is intrinsically less variable
+        #   project_note_3.5    -- the larger estimate recorded in this project
+        #                          from 9 recipes trained twice
+        for tag, sd in (('raw', SEED_SD_MEASURED),
+                        ('variance_stabilised', SEED_SD_MEASURED * scale),
+                        ('project_note_3.5', 3.5)):
             se_tot = float(np.sqrt(v['se_paired'] ** 2 + 2 * sd ** 2))
             d = v['delta_pct_points']
             R['seed_inclusive']['pairs'].setdefault(k, {})[tag] = {

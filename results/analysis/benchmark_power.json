@@ -770,13 +770,129 @@
       }
     }
   },
+  "retrain_control": {
+    "note": "Same recipe, two independent training runs, same 25 pages.  A difference here is training noise and nothing else.",
+    "pairs": {
+      "B2_pitch_aux": {
+        "run_a": "20260730_114330_B2_pitch_aux",
+        "run_b": "20260802_092006_B2_pitch_aux",
+        "log_a": "results/eval_msmd_rec-66884725.log",
+        "log_b": "results/eval_any-67035778.log",
+        "score_a": 19.5,
+        "score_b": 16.0,
+        "delta": -3.5,
+        "ci95_paired": [
+          -4.83,
+          -1.09
+        ],
+        "spuriously_significant": true
+      },
+      "B3_inr_subpixel": {
+        "run_a": "20260730_120959_B3_inr_subpixel",
+        "run_b": "20260802_111656_B3_inr_subpixel",
+        "log_a": "results/eval_msmd_rec-66884729.log",
+        "log_b": "results/eval_any-67035782.log",
+        "score_a": 27.19,
+        "score_b": 27.97,
+        "delta": 0.79,
+        "ci95_paired": [
+          -0.37,
+          2.39
+        ],
+        "spuriously_significant": false
+      },
+      "B4_temporal_consistency": {
+        "run_a": "20260730_114056_B4_temporal_consistency",
+        "run_b": "20260802_092006_B4_temporal_consistency",
+        "log_a": "results/eval_msmd_rec-66882863.log",
+        "log_b": "results/eval_any-67035785.log",
+        "score_a": 22.74,
+        "score_b": 16.45,
+        "delta": -6.29,
+        "ci95_paired": [
+          -8.01,
+          -4.51
+        ],
+        "spuriously_significant": true
+      },
+      "B5_dense_contrastive_aux": {
+        "run_a": "20260730_114330_B5_dense_contrastive_aux",
+        "run_b": "20260802_092404_B5_dense_contrastive_aux",
+        "log_a": "results/eval_msmd_rec-66884719.log",
+        "log_b": "results/eval_any-67035788.log",
+        "score_a": 17.86,
+        "score_b": 17.79,
+        "delta": -0.07,
+        "ci95_paired": [
+          -1.56,
+          2.45
+        ],
+        "spuriously_significant": false
+      },
+      "B6_impulse_response": {
+        "run_a": "20260730_114725_B6_impulse_response",
+        "run_b": "20260802_092404_B6_impulse_response",
+        "log_a": "results/eval_msmd_rec-66882861.log",
+        "log_b": "results/eval_any-67035792.log",
+        "score_a": 16.45,
+        "score_b": 15.67,
+        "delta": -0.78,
+        "ci95_paired": [
+          -1.52,
+          0.45
+        ],
+        "spuriously_significant": false
+      },
+      "C2_soft_dtw": {
+        "run_a": "20260730_114725_C2_soft_dtw",
+        "run_b": "20260802_111656_C2_soft_dtw",
+        "log_a": "results/eval_msmd_rec-66882865.log",
+        "log_b": "results/eval_any-67035795.log",
+        "score_a": 17.65,
+        "score_b": 20.75,
+        "delta": 3.1,
+        "ci95_paired": [
+          1.57,
+          4.46
+        ],
+        "spuriously_significant": true
+      }
+    },
+    "summary": {
+      "n_recipes_retrained": 6,
+      "max_abs_delta": 6.29,
+      "rms_delta_between_runs": 3.23,
+      "implied_seed_sd_per_run": 2.29,
+      "n_spuriously_significant": 3
+    }
+  },
   "seed_inclusive": {
-    "seed_sd_measured": 3.5,
-    "seed_sd_measured_at_score": 30.0,
-    "provenance": "9 recipes trained twice, this project",
+    "seed_sd_measured": 2.29,
+    "seed_sd_measured_at_score": 34.2,
+    "provenance": "recomputed here from the same-recipe retrain pairs in retrain_control; cross-checks the project note of ~3.5 from 9 recipes trained twice",
     "pairs": {
       "cyolo__vs__cyolo_sb": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 4.81,
+          "ci95": [
+            -0.63,
+            18.21
+          ],
+          "significant": false,
+          "mdd80": 13.46
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 2.08,
+          "se_total": 4.61,
+          "ci95": [
+            -0.24,
+            17.82
+          ],
+          "significant": false,
+          "mdd80": 12.9
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 6.09,
           "ci95": [
@@ -785,20 +901,30 @@
           ],
           "significant": false,
           "mdd80": 17.06
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 3.28,
-          "se_total": 5.84,
-          "ci95": [
-            -2.66,
-            20.24
-          ],
-          "significant": false,
-          "mdd80": 16.37
         }
       },
       "cyolo_sb__vs__cyolo_sb_a": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 3.52,
+          "ci95": [
+            -0.38,
+            13.4
+          ],
+          "significant": false,
+          "mdd80": 9.85
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 1.8,
+          "se_total": 2.9,
+          "ci95": [
+            0.83,
+            12.19
+          ],
+          "significant": true,
+          "mdd80": 8.12
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 5.14,
           "ci95": [
@@ -807,20 +933,30 @@
           ],
           "significant": false,
           "mdd80": 14.39
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 2.86,
-          "se_total": 4.26,
-          "ci95": [
-            -1.85,
-            14.87
-          ],
-          "significant": false,
-          "mdd80": 11.95
         }
       },
       "cyolo__vs__cyolo_sb_a": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 5.67,
+          "ci95": [
+            4.2,
+            26.42
+          ],
+          "significant": true,
+          "mdd80": 15.88
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 1.97,
+          "se_total": 5.42,
+          "ci95": [
+            4.68,
+            25.94
+          ],
+          "significant": true,
+          "mdd80": 15.19
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 6.79,
           "ci95": [
@@ -829,20 +965,30 @@
           ],
           "significant": true,
           "mdd80": 19.03
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 3.12,
-          "se_total": 6.41,
-          "ci95": [
-            2.74,
-            27.88
-          ],
-          "significant": true,
-          "mdd80": 17.96
         }
       },
       "CUNet_CB_TA__vs__R3": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 8.83,
+          "ci95": [
+            6.51,
+            41.11
+          ],
+          "significant": true,
+          "mdd80": 24.73
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 2.28,
+          "se_total": 8.82,
+          "ci95": [
+            6.52,
+            41.1
+          ],
+          "significant": true,
+          "mdd80": 24.71
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 9.59,
           "ci95": [
@@ -851,20 +997,30 @@
           ],
           "significant": true,
           "mdd80": 26.86
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 3.6,
-          "se_total": 9.66,
-          "ci95": [
-            4.87,
-            42.75
-          ],
-          "significant": true,
-          "mdd80": 27.07
         }
       },
       "R3__vs__cyolo_sb": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 6.38,
+          "ci95": [
+            22.06,
+            47.08
+          ],
+          "significant": true,
+          "mdd80": 17.88
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 2.34,
+          "se_total": 6.42,
+          "ci95": [
+            22.0,
+            47.14
+          ],
+          "significant": true,
+          "mdd80": 17.97
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 7.4,
           "ci95": [
@@ -873,20 +1029,30 @@
           ],
           "significant": true,
           "mdd80": 20.73
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 3.69,
-          "se_total": 7.59,
-          "ci95": [
-            19.7,
-            49.44
-          ],
-          "significant": true,
-          "mdd80": 21.25
         }
       },
       "cyolo_sb_a__vs__R3": {
         "raw": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 7.34,
+          "ci95": [
+            -55.47,
+            -26.69
+          ],
+          "significant": true,
+          "mdd80": 20.57
+        },
+        "variance_stabilised": {
+          "seed_sd_per_arm": 2.29,
+          "se_total": 7.34,
+          "ci95": [
+            -55.47,
+            -26.69
+          ],
+          "significant": true,
+          "mdd80": 20.57
+        },
+        "project_note_3.5": {
           "seed_sd_per_arm": 3.5,
           "se_total": 8.24,
           "ci95": [
@@ -895,16 +1061,6 @@
           ],
           "significant": true,
           "mdd80": 23.09
-        },
-        "variance_stabilised": {
-          "seed_sd_per_arm": 3.62,
-          "se_total": 8.34,
-          "ci95": [
-            -57.44,
-            -24.72
-          ],
-          "significant": true,
-          "mdd80": 23.38
         }
       }
     }
@@ -921,8 +1077,8 @@
         "pair": "B1a_mert_swap__vs__B3_inr_subpixel",
         "delta": -10.42,
         "ci95": [
-          -23.57,
-          -1.38
+          -23.94,
+          -1.35
         ],
         "significant": true
       },
@@ -931,7 +1087,7 @@
         "delta": -21.94,
         "ci95": [
           -35.67,
-          -13.17
+          -13.27
         ],
         "significant": true
       },
@@ -939,8 +1095,8 @@
         "pair": "B1a_mert_swap__vs__CUNet_CB_TA",
         "delta": -16.82,
         "ci95": [
-          -31.43,
-          -7.77
+          -30.7,
+          -7.74
         ],
         "significant": true
       },
@@ -948,8 +1104,8 @@
         "pair": "B1a_mert_swap__vs__MERT_B2_pitch_aux",
         "delta": 5.12,
         "ci95": [
-          0.6,
-          11.01
+          0.59,
+          11.03
         ],
         "significant": true
       },
@@ -957,8 +1113,8 @@
         "pair": "B1a_mert_swap__vs__N3_belief_propagation",
         "delta": 6.17,
         "ci95": [
-          3.83,
-          9.24
+          3.85,
+          9.28
         ],
         "significant": true
       },
@@ -966,8 +1122,8 @@
         "pair": "B1a_mert_swap__vs__R3",
         "delta": 6.99,
         "ci95": [
-          1.45,
-          14.47
+          1.59,
+          14.21
         ],
         "significant": true
       },
@@ -975,8 +1131,8 @@
         "pair": "B1a_mert_swap__vs__cyolo",
         "delta": 32.76,
         "ci95": [
-          28.74,
-          39.64
+          28.66,
+          39.65
         ],
         "significant": true
       },
@@ -984,8 +1140,8 @@
         "pair": "B1a_mert_swap__vs__cyolo_sb",
         "delta": 41.56,
         "ci95": [
-          33.61,
-          47.03
+          33.92,
+          47.42
         ],
         "significant": true
       },
@@ -993,8 +1149,8 @@
         "pair": "B1a_mert_swap__vs__cyolo_sb_a",
         "delta": 48.07,
         "ci95": [
-          38.57,
-          55.01
+          38.75,
+          54.8
         ],
         "significant": true
       },
@@ -1002,8 +1158,8 @@
         "pair": "B3_inr_subpixel__vs__B4_temporal_consistency",
         "delta": -11.52,
         "ci95": [
-          -13.75,
-          -9.11
+          -13.83,
+          -9.07
         ],
         "significant": true
       },
@@ -1011,8 +1167,8 @@
         "pair": "B3_inr_subpixel__vs__CUNet_CB_TA",
         "delta": -6.4,
         "ci95": [
-          -9.02,
-          -3.04
+          -9.05,
+          -2.98
         ],
         "significant": true
       },
@@ -1020,8 +1176,8 @@
         "pair": "B3_inr_subpixel__vs__MERT_B2_pitch_aux",
         "delta": 15.54,
         "ci95": [
-          3.75,
-          29.91
+          3.95,
+          29.64
         ],
         "significant": true
       },
@@ -1029,8 +1185,8 @@
         "pair": "B3_inr_subpixel__vs__N3_belief_propagation",
         "delta": 16.59,
         "ci95": [
-          7.07,
-          29.25
+          6.66,
+          28.99
         ],
         "significant": true
       },
@@ -1038,8 +1194,8 @@
         "pair": "B3_inr_subpixel__vs__R3",
         "delta": 17.41,
         "ci95": [
-          3.81,
-          32.67
+          4.1,
+          32.84
         ],
         "significant": true
       },
@@ -1047,8 +1203,8 @@
         "pair": "B3_inr_subpixel__vs__cyolo",
         "delta": 43.18,
         "ci95": [
-          32.18,
-          58.07
+          31.85,
+          58.21
         ],
         "significant": true
       },
@@ -1056,8 +1212,8 @@
         "pair": "B3_inr_subpixel__vs__cyolo_sb",
         "delta": 51.97,
         "ci95": [
-          45.58,
-          61.73
+          45.78,
+          61.7
         ],
         "significant": true
       },
@@ -1065,8 +1221,8 @@
         "pair": "B3_inr_subpixel__vs__cyolo_sb_a",
         "delta": 58.48,
         "ci95": [
-          53.36,
-          67.42
+          53.4,
+          67.56
         ],
         "significant": true
       },
@@ -1074,8 +1230,8 @@
         "pair": "B4_temporal_consistency__vs__CUNet_CB_TA",
         "delta": 5.12,
         "ci95": [
-          2.25,
-          8.04
+          2.32,
+          7.96
         ],
         "significant": true
       },
@@ -1083,8 +1239,8 @@
         "pair": "B4_temporal_consistency__vs__MERT_B2_pitch_aux",
         "delta": 27.06,
         "ci95": [
-          15.59,
-          41.62
+          16.25,
+          41.47
         ],
         "significant": true
       },
@@ -1092,8 +1248,8 @@
         "pair": "B4_temporal_consistency__vs__N3_belief_propagation",
         "delta": 28.11,
         "ci95": [
-          18.36,
-          41.77
+          18.14,
+          41.31
         ],
         "significant": true
       },
@@ -1101,8 +1257,8 @@
         "pair": "B4_temporal_consistency__vs__R3",
         "delta": 28.93,
         "ci95": [
-          15.42,
-          44.73
+          16.31,
+          44.42
         ],
         "significant": true
       },
@@ -1110,8 +1266,8 @@
         "pair": "B4_temporal_consistency__vs__cyolo",
         "delta": 54.7,
         "ci95": [
-          44.0,
-          69.29
+          43.96,
+          68.82
         ],
         "significant": true
       },
@@ -1119,7 +1275,7 @@
         "pair": "B4_temporal_consistency__vs__cyolo_sb",
         "delta": 63.5,
         "ci95": [
-          57.07,
+          57.13,
           73.58
         ],
         "significant": true
@@ -1128,8 +1284,8 @@
         "pair": "B4_temporal_consistency__vs__cyolo_sb_a",
         "delta": 70.01,
         "ci95": [
-          65.03,
-          78.75
+          64.77,
+          78.83
         ],
         "significant": true
       },
@@ -1137,8 +1293,8 @@
         "pair": "CUNet_CB_TA__vs__MERT_B2_pitch_aux",
         "delta": 21.94,
         "ci95": [
-          10.46,
-          36.72
+          11.03,
+          36.74
         ],
         "significant": true
       },
@@ -1146,8 +1302,8 @@
         "pair": "CUNet_CB_TA__vs__N3_belief_propagation",
         "delta": 22.99,
         "ci95": [
-          13.22,
-          37.02
+          13.53,
+          37.29
         ],
         "significant": true
       },
@@ -1155,8 +1311,8 @@
         "pair": "CUNet_CB_TA__vs__R3",
         "delta": 23.81,
         "ci95": [
-          11.58,
-          39.73
+          11.34,
+          39.21
         ],
         "significant": true
       },
@@ -1164,8 +1320,8 @@
         "pair": "CUNet_CB_TA__vs__cyolo",
         "delta": 49.58,
         "ci95": [
-          38.75,
-          65.27
+          39.02,
+          65.31
         ],
         "significant": true
       },
@@ -1173,8 +1329,8 @@
         "pair": "CUNet_CB_TA__vs__cyolo_sb",
         "delta": 58.37,
         "ci95": [
-          51.59,
-          69.45
+          51.54,
+          69.67
         ],
         "significant": true
       },
@@ -1182,8 +1338,8 @@
         "pair": "CUNet_CB_TA__vs__cyolo_sb_a",
         "delta": 64.88,
         "ci95": [
-          58.47,
-          74.93
+          58.64,
+          74.88
         ],
         "significant": true
       },
@@ -1191,8 +1347,8 @@
         "pair": "MERT_B2_pitch_aux__vs__N3_belief_propagation",
         "delta": 1.05,
         "ci95": [
-          -3.67,
-          4.23
+          -3.46,
+          4.21
         ],
         "significant": false
       },
@@ -1201,7 +1357,7 @@
         "delta": 1.87,
         "ci95": [
           0.02,
-          4.43
+          4.4
         ],
         "significant": true
       },
@@ -1209,8 +1365,8 @@
         "pair": "MERT_B2_pitch_aux__vs__cyolo",
         "delta": 27.64,
         "ci95": [
-          22.97,
-          32.92
+          23.07,
+          33.27
         ],
         "significant": true
       },
@@ -1218,8 +1374,8 @@
         "pair": "MERT_B2_pitch_aux__vs__cyolo_sb",
         "delta": 36.44,
         "ci95": [
-          26.54,
-          43.79
+          26.9,
+          43.87
         ],
         "significant": true
       },
@@ -1227,8 +1383,8 @@
         "pair": "MERT_B2_pitch_aux__vs__cyolo_sb_a",
         "delta": 42.95,
         "ci95": [
-          30.94,
-          51.84
+          31.11,
+          51.49
         ],
         "significant": true
       },
@@ -1236,8 +1392,8 @@
         "pair": "N3_belief_propagation__vs__R3",
         "delta": 0.82,
         "ci95": [
-          -3.35,
-          6.66
+          -3.23,
+          6.43
         ],
         "significant": false
       },
@@ -1245,8 +1401,8 @@
         "pair": "N3_belief_propagation__vs__cyolo",
         "delta": 26.59,
         "ci95": [
-          23.25,
-          32.23
+          23.33,
+          32.05
         ],
         "significant": true
       },
@@ -1254,8 +1410,8 @@
         "pair": "N3_belief_propagation__vs__cyolo_sb",
         "delta": 35.38,
         "ci95": [
-          27.04,
-          41.07
+          27.58,
+          41.47
         ],
         "significant": true
       },
@@ -1263,8 +1419,8 @@
         "pair": "N3_belief_propagation__vs__cyolo_sb_a",
         "delta": 41.9,
         "ci95": [
-          31.9,
-          48.55
+          32.62,
+          49.1
         ],
         "significant": true
       },
@@ -1272,8 +1428,8 @@
         "pair": "R3__vs__cyolo",
         "delta": 25.77,
         "ci95": [
-          19.48,
-          31.25
+          19.51,
+          31.59
         ],
         "significant": true
       },
@@ -1281,8 +1437,8 @@
         "pair": "R3__vs__cyolo_sb",
         "delta": 34.57,
         "ci95": [
-          22.86,
-          43.17
+          23.33,
+          43.53
         ],
         "significant": true
       },
@@ -1290,8 +1446,8 @@
         "pair": "R3__vs__cyolo_sb_a",
         "delta": 41.08,
         "ci95": [
-          27.37,
-          51.3
+          27.6,
+          51.41
         ],
         "significant": true
       },
@@ -1299,8 +1455,8 @@
         "pair": "cyolo__vs__cyolo_sb",
         "delta": 8.79,
         "ci95": [
-          1.86,
-          14.34
+          1.61,
+          14.37
         ],
         "significant": true
       },
@@ -1308,8 +1464,8 @@
         "pair": "cyolo__vs__cyolo_sb_a",
         "delta": 15.31,
         "ci95": [
-          6.17,
-          22.83
+          6.4,
+          22.75
         ],
         "significant": true
       },
@@ -1317,7 +1473,7 @@
         "pair": "cyolo_sb__vs__cyolo_sb_a",
         "delta": 6.51,
         "ci95": [
-          3.45,
+          3.51,
           8.57
         ],
         "significant": true
