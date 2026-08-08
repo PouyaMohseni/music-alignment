@@ -115,6 +115,48 @@ def _overlap_add(frames: np.ndarray, hop: int, out_len: int) -> np.ndarray:
     return out[:out_len]
 
 
+_IR_CACHE: dict = {}
+
+
+def _list_ir_bank(ir_bank: str) -> list:
+    """Every .wav under ir_bank, sorted so the choice is reproducible."""
+    files = sorted(str(p) for p in Path(ir_bank).rglob('*.wav'))
+    if not files:
+        raise RuntimeError(f'--ir_bank {ir_bank!r} contains no .wav files')
+    return files
+
+
+def _load_real_ir(ir_bank: str, sr: int, rng: np.random.Generator) -> np.ndarray:
+    """Pick one measured IR, resampled to sr and trimmed to its direct path.
+
+    Trimming to the peak matters: measured IRs carry an arbitrary amount of
+    pre-delay before the direct sound, and convolving with that lead-in
+    TRANSLATES the audio relative to its onset labels -- the same class of bug
+    as the mode='same' desync (e8320ea), just sourced from the file instead of
+    the convolution mode.  Aligning t=0 to the peak keeps onsets where the
+    labels say they are.
+    """
+    import librosa
+    files = _IR_CACHE.get(('list', ir_bank))
+    if files is None:
+        files = _list_ir_bank(ir_bank)
+        _IR_CACHE[('list', ir_bank)] = files
+    path = files[int(rng.integers(0, len(files)))]
+
+    key = ('ir', path, sr)
+    ir = _IR_CACHE.get(key)
+    if ir is None:
+        ir, _ = librosa.load(path, sr=sr, mono=True)
+        peak = int(np.argmax(np.abs(ir)))
+        ir = ir[peak:]                       # drop pre-delay; direct path at t=0
+        ir = ir[:int(2.0 * sr)]              # 2 s is past RT60 for any of these
+        n = float(np.abs(ir).max())
+        ir = (ir / n).astype(np.float32) if n > 0 else ir.astype(np.float32)
+        if len(_IR_CACHE) < 64:              # bounded: these are ~1-2 s each
+            _IR_CACHE[key] = ir
+    return ir
+
+
 def degrade(y: np.ndarray, sr: int, rng: np.random.Generator, args) -> np.ndarray:
     from scipy.signal import fftconvolve
     from extensions.augmentation.impulse_response import (generate_pink_noise, mix_at_snr,
@@ -126,11 +168,20 @@ def degrade(y: np.ndarray, sr: int, rng: np.random.Generator, args) -> np.ndarra
         y = random_tilt(y, sr, rng, max_db=args.tilt_db)
 
     if args.ir and rng.random() < args.p_ir:
-        # tau spread over a wide range of room sizes rather than B6's single
-        # 0.45 s, and mixed dry/wet so "close mic" is inside the prior too.
-        tau = float(rng.uniform(0.15, 0.9))
-        ir = synthesize_ir(sr, duration_sec=min(1.5, 3 * tau), decay_tau_sec=tau,
-                           seed=int(rng.integers(1 << 30)))
+        if args.ir_bank:
+            # REAL measured IRs.  A synthesised exponentially-decaying noise
+            # burst has the right RT60 but none of the structure a room
+            # actually imposes: discrete early reflections, frequency-dependent
+            # decay, and the comb filtering those produce.  Henkel & Widmer's
+            # +25.2 on room came from real IRs, so matching that setting means
+            # using real ones here rather than approximating the envelope.
+            ir = _load_real_ir(args.ir_bank, sr, rng)
+        else:
+            # tau spread over a wide range of room sizes rather than B6's single
+            # 0.45 s, and mixed dry/wet so "close mic" is inside the prior too.
+            tau = float(rng.uniform(0.15, 0.9))
+            ir = synthesize_ir(sr, duration_sec=min(1.5, 3 * tau), decay_tau_sec=tau,
+                               seed=int(rng.integers(1 << 30)))
         wet = fftconvolve(y, ir, mode='full')[:len(y)]
         mix = float(rng.uniform(0.2, 0.9))
         y = (1.0 - mix) * y + mix * wet
@@ -162,6 +213,9 @@ def main():
     p.add_argument('--tilt', action='store_true'); p.add_argument('--p_tilt', type=float, default=0.9)
     p.add_argument('--tilt_db', type=float, default=12.0)
     p.add_argument('--ir', action='store_true'); p.add_argument('--p_ir', type=float, default=0.8)
+    p.add_argument('--ir_bank', type=str, default=None,
+                   help='dir of REAL measured IR wavs (recursive). Without it, '
+                        'IRs are synthesised decaying noise.')
     p.add_argument('--noise', action='store_true'); p.add_argument('--p_noise', type=float, default=0.6)
     p.add_argument('--snr_lo', type=float, default=12.0)
     p.add_argument('--snr_hi', type=float, default=35.0)
@@ -180,7 +234,10 @@ def main():
     mine = midi_files[a.shard::a.num_shards]
     print(f'shard {a.shard}/{a.num_shards}: {len(mine)} of {len(midi_files)} MIDI files',
           flush=True)
-    print(f'  tilt={a.tilt}({a.tilt_db}dB) ir={a.ir} noise={a.noise} '
+    ir_kind = 'synthetic'
+    if a.ir and a.ir_bank:
+        ir_kind = f'REAL ({len(_list_ir_bank(a.ir_bank))} wavs from {a.ir_bank})'
+    print(f'  tilt={a.tilt}({a.tilt_db}dB) ir={a.ir}[{ir_kind}] noise={a.noise} '
           f'snr={a.snr_lo}-{a.snr_hi} salt={a.salt}', flush=True)
 
     done = skip = fail = 0

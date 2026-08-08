@@ -29,9 +29,15 @@
 #
 # --augment is ON and depends on the phase_vocoder port in
 # models/custom_modules.py (backup: custom_modules.py.orig): torch>=2 requires a
-# COMPLEX stft for torchaudio.functional.phase_vocoder. Their augmentation is
-# IR convolution + tempo 0.5-2.0 + image shifts, which is plausibly what buys
-# CYOLO its -4.3pt synthetic->real degradation vs our -48, so it must be active.
+# COMPLEX stft for torchaudio.functional.phase_vocoder.
+#
+# CORRECTION (2026-08-08): an earlier version of this comment claimed --augment
+# covers "IR convolution + tempo + image shifts". It does NOT include IR.
+# Verified: train.py:241 declares --ir_path with default=None, and
+# dataset.py:317-319 constructs ImpulseResponse only `if ir_path is not None`.
+# --augment alone gives tempo 0.5-2.0 and image shifts only. Every run this
+# script produced before today therefore had NO reverb augmentation, which is
+# why it landed on the paper's no-IR row. See the IR_PATH block below.
 
 set -uo pipefail
 echo "Job started on $(hostname) at $(date)"
@@ -45,7 +51,11 @@ python -c "import torch,madmom,librosa,cv2;print('torch',torch.__version__,'cuda
 
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
-OUT=/scratch/pmohseni/cyolo_repro/$CFG
+# IR and no-IR runs MUST NOT share a dump root: the resume block below picks the
+# newest .pt under $OUT/params, so a shared directory would silently warm-start
+# the IR run from the no-IR checkpoint and destroy the ablation.
+IR_TAG=$([ "${2:-/scratch/pmohseni/ir_bank}" = "none" ] && echo noir || echo ir)
+OUT=/scratch/pmohseni/cyolo_repro/${CFG}_${IR_TAG}
 mkdir -p "$OUT/params" "$OUT/runs"
 export PYTHONPATH=$CY:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1
@@ -94,12 +104,34 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 
-echo "=== training CYOLO config=$CFG (full msmd_train, --augment) ==="
+# IR augmentation is gated on --ir_path, NOT on --augment (train.py:241 defaults
+# it to None; dataset.py:317-319 only builds ImpulseResponse when it is set).
+# Without it this script reproduced the paper's published NO-IR row -- 80.4
+# synth / 46.0 room -- which is exactly where our own models sit (81.1 / 45.6).
+# Henkel & Widmer report the IR delta as 46.0 -> 71.2 on room, so this flag is
+# worth more than every architecture change we have tried.
+#
+# IR_PATH=none reproduces the old no-IR behaviour on purpose, so the pair of
+# runs is a clean controlled ablation rather than a replacement.
+IR_PATH=${2:-/scratch/pmohseni/ir_bank}
+IR_FLAG=""
+if [ "$IR_PATH" != "none" ]; then
+    N_IR=$(find "$IR_PATH" -name '*.wav' 2>/dev/null | wc -l)
+    [ "$N_IR" -eq 0 ] && { echo "FATAL: no .wav IRs under $IR_PATH"; exit 1; }
+    echo "IR augmentation ON: $N_IR wavs under $IR_PATH (CYOLO applies its own"
+    echo "  FILTER_LIST and drops virtual-membranes, so the used count is lower)"
+    IR_FLAG="--ir_path $IR_PATH"
+else
+    echo "IR augmentation OFF (reproduces the published no-IR row)"
+fi
+
+echo "=== training CYOLO config=$CFG (full msmd_train, --augment, ir=$IR_PATH) ==="
 python train.py \
     --train_sets "$DATA/msmd_train" \
     --val_sets   "$DATA/msmd_valid" \
     --config ./models/configs/${CFG}.yaml \
     --augment \
+    $IR_FLAG \
     --dump_root "$OUT/params" \
     --log_root  "$OUT/runs" \
     --tag ${CFG}_repro \
