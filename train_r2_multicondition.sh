@@ -50,7 +50,13 @@ export LD_LIBRARY_PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/lib:${LD_LIB
 export PATH=/scratch/pmohseni/micromamba/envs/fluidsynth/bin:${PATH}
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 
-OUT=/project/def-ichiro/pmohseni/music-alignment/results/cb_ta_ext/R2_multicondition
+# R2_TAG/R2_AUG_BANK select which degraded bank this run trains against.
+# OUT is derived from the tag: the resume block below picks up
+# $OUT/params/latest_model.pt, so a shared OUT would silently continue the
+# synthetic-IR run and destroy the synthetic-vs-real comparison.
+R2_TAG=${R2_TAG:-R2_multicondition}
+R2_AUG_BANK=${R2_AUG_BANK:-/scratch/pmohseni/mert_emb_aug/train_full}
+OUT=/project/def-ichiro/pmohseni/music-alignment/results/cb_ta_ext/${R2_TAG}
 mkdir -p "$OUT/runs" "$OUT/params"
 
 # Resume from our own latest; on the FIRST run warm-start from B1a_mert_swap.
@@ -87,14 +93,15 @@ export MERT_PATH_MAP="${TRAIN_SET}=/scratch/pmohseni/mert_emb_zenodo/train_full;
 # Degraded bank for the TRAIN set only. Validation stays clean on purpose: val
 # loss must remain comparable to every other experiment's, otherwise "did
 # augmentation help" cannot be read off the training curve at all.
-export MERT_AUG_PATH_MAP="${TRAIN_SET}=/scratch/pmohseni/mert_emb_aug/train_full"
+export MERT_AUG_PATH_MAP="${TRAIN_SET}=${R2_AUG_BANK}"
 export MERT_AUG_PROB=0.5
 export R2_TRAIN_SET="${TRAIN_SET}"   # lets the entry point verify the map covers it
 
 REPO=/project/def-ichiro/pmohseni/music-alignment/third_party/cpjku_unet
 cd "$REPO/audio_conditioned_unet"
 
-echo "=== R2: multi-condition MERT (clean + acoustically degraded banks) ==="
+echo "=== ${R2_TAG}: multi-condition MERT ==="
+echo "    degraded bank: ${R2_AUG_BANK} ($(ls ${R2_AUG_BANK}/*.npy 2>/dev/null | wc -l) npy)"
 python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_train_r2_multicondition.py \
     --film_layers 2 3 4 5 6 7 8 \
     --log_root  "$OUT/runs" \
@@ -105,7 +112,7 @@ python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_train_r
     --augment \
     --config    configs/msmd_aug.yaml \
     --audio_encoder MERTProjector \
-    --tag R2_multicondition \
+    --tag ${R2_TAG} \
     $PARAM_FLAG
 
 echo ""
