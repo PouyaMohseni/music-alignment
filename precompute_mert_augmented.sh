@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mert-aug
+#SBATCH --job-name=mert-aug-realir
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
@@ -12,6 +12,25 @@
 # training performances (see scripts/precompute_mert_augmented.py for why this
 # is done ahead of time rather than as an on-the-fly transform: MERT is frozen
 # and consumed from .npy, so waveform augmentation is otherwise invisible).
+#
+# REAL-IR REBUILD (2026-08-08).  Driven by two env vars so the synthetic-IR bank
+# stays intact for comparison:
+#
+#   MERT_AUG_OUT=/scratch/pmohseni/mert_emb_aug_realir/train_full \
+#   IR_BANK_FLAG="--ir_bank /scratch/pmohseni/ir_bank" \
+#   sbatch precompute_mert_augmented.sh
+#
+# Why rebuild at all: the existing bank convolves with synthesize_ir() --
+# exponentially-decaying white noise.  That matches an RT60 but has none of the
+# structure a room imposes (discrete early reflections, frequency-dependent
+# decay, the comb filtering those cause).  Henkel & Widmer's +25.2 on room came
+# from REAL measured IRs, and reproducing that setting means using real ones.
+# 693 wavs are staged under /scratch/pmohseni/ir_bank.
+#
+# _load_real_ir trims each IR to its peak before convolving.  Measured for this
+# bank: trimmed -> 0 samples of onset shift, raw -> up to 1005 samples
+# (0.84 frames @20fps).  Skipping the trim would reintroduce a milder version of
+# the label desync that made B6 useless (e8320ea).
 #
 # CPU array, not GPU: MERT-v1-95M is small, this is embarrassingly parallel
 # over pieces, and the GPU queue is the scarce resource that the four training
@@ -59,7 +78,7 @@ time timeout 7200 python -c "import torch, transformers, librosa, soundfile; pri
     || { echo "FATAL: venv imports failed or stalled >120min"; exit 1; }
 
 MIDI_DIR=/scratch/pmohseni/msmd_train_full/performance
-OUT_DIR=/scratch/pmohseni/mert_emb_aug/train_full
+OUT_DIR=${MERT_AUG_OUT:-/scratch/pmohseni/mert_emb_aug/train_full}
 SF=third_party/cpjku_unet/audio_conditioned_unet/sound_fonts/grand-piano-YDP-20160804.sf2
 FS=/scratch/pmohseni/micromamba/envs/fluidsynth/bin/fluidsynth
 
@@ -69,6 +88,6 @@ python -m scripts.precompute_mert_augmented \
     --sound_font "$SF" \
     --fluidsynth "$FS" \
     --shard "${SLURM_ARRAY_TASK_ID}" --num_shards 40 \
-    --tilt --ir --noise
+    --tilt --ir --noise ${IR_BANK_FLAG:-}
 
 echo "Shard ${SLURM_ARRAY_TASK_ID} finished at $(date)"
