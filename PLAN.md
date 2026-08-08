@@ -297,11 +297,52 @@ matcher with re-entry — this is what `M1.md` was designed for — is now a
 *measured* gap rather than a speculative one. Note this is the same failure mode
 as the repeat-ambiguity diagnostic.
 
-### P4 — Multi-condition / IR augmentation, **de-prioritised**
+### P0 — IR augmentation, correctly, on the MERT base ★ **do this first**
 
-§2 removes most of its rationale: if the room does not destroy the signal, there
-is less to be robust *to*. Keep the fixed `impulse_response.py` and the degraded
-MERT bank, but stop treating acoustic augmentation as the main lever.
+*(This section replaces an earlier draft that de-prioritised IR augmentation on
+the strength of §2. That reasoning was wrong and is corrected here.)*
+
+**Why §2 does not argue against IR — it argues FOR it.** "The room does not
+destroy the information" and "our model is not invariant to the room" are
+different statements. AMT proves the signal survives; our model still fails
+because it trained only on dry synthetic audio and its features shift
+out-of-distribution. That is exactly the failure augmentation fixes — and §2 is
+what guarantees there is recoverable signal to become invariant *to*. Had the
+room destroyed the information, no augmentation could help.
+
+**Three facts that make this the highest-value action in the document:**
+
+1. **[V]** We sit almost exactly on CYOLO's published **no-IR** row:
+   ours 81.1 synth / **45.6** room / 56% retention;
+   CYOLO-no-IR 80.4 / **46.0** / 57%.
+2. **[A]** Henkel & Widmer (EUSIPCO 2021) report the IR delta as
+   **46.0 → 71.2 = +25.2 points** on room.
+3. **[V] IR augmentation has never been correctly tested on our models.**
+   `extensions/augmentation/impulse_response.py` used
+   `fftconvolve(mode='same')`, which advances audio by `(len(ir)-1)//2` samples
+   — a **4.1–20.0 frame label desync on 50% of samples**. Fixed in `e8320ea`
+   (**2026-08-06**). B6, our only IR run, trained **2026-07-05 – 07-08** — a
+   month *before* the fix. B6 came last on room (15.6) and we concluded IR
+   augmentation does not work for us. **We were reading a bug.**
+
+**[V]** CYOLO gates IR separately from `--augment`: `train.py:241` defines
+`--ir_path` (default `None`) and `dataset.py:317-319` builds `ImpulseResponse`
+only when it is set. Our `train_cyolo_repro_gpu.sh` never passes it — so our
+reproduction has tempo and image-shift augmentation but **no IR**, which is why
+it lands on the no-IR row. (An in-script comment claiming `--augment` includes
+IR convolution is **wrong** and should be corrected.)
+
+**[V]** Assets are ready: **270 impulse responses** in
+`/scratch/pmohseni/ir_bank/mit_ir_survey/Audio/`, plus an `openair/` set.
+
+**Two runs, both cluster-only, no API cost:**
+- **P0a** — our MERT base retrained with the *fixed* IR augmentation.
+- **P0b** — `cyolo_sb` relaunched **with** `--ir_path`, giving us the correct
+  base for P2 and a verified reproduction of the 71.2 row.
+
+**Prediction:** P0a room **60–70**. **Falsifier:** if it lands under 55 with
+synth unchanged, the published IR delta does not transfer to a dense-heatmap
+model, and P1 becomes the whole plan.
 
 ---
 
@@ -354,13 +395,30 @@ effort goes back to §5.
 
 | # | action | cost | blocks |
 |---|---|---|---|
-| 1 | Check CYOLO `train.py` for an IR flag; relaunch `cyolo_sb` with it | cluster only | P2 |
-| 2 | Build the P1 output head (bucketed softmax / objectness) on our best MERT base | cluster only | — |
-| 3 | Draft the evaluation paper — §4.1 is complete and pushed | writing | — |
-| 4 | Fold the OMR + AMT diagnostics in as one table row each | writing | — |
+| 1 | **P0a** — retrain MERT base with the *fixed* IR augmentation (270 IRs ready) | cluster only | the whole model track |
+| 2 | **P0b** — relaunch `cyolo_sb` with `--ir_path` (flag confirmed to exist) | cluster only | P2 |
+| 3 | **P1** — bucketed-softmax / objectness output head on the MERT base | cluster only | — |
+| 4 | Fix the wrong `--augment`-includes-IR comment in `train_cyolo_repro_gpu.sh` | trivial | — |
+| 5 | Draft the evaluation paper — §4.1 is complete and pushed | writing | — |
+| 6 | Fold the OMR + AMT diagnostics in as one table row each | writing | — |
 
 **No further research agents are queued.** The remaining work is building and
 writing.
+
+### The arithmetic to 79.9
+
+| step | room | basis |
+|---|---|---|
+| today | 45.6 | measured |
+| + P0a (fixed IR augmentation) | 60–70 | **[A]** published delta +25.2, discounted for transfer |
+| + P1 (output reparameterisation) | +5–15 | **[V]** MM-Loc vs CUNet = +36 same-lab, discounted hard |
+| **target** | **79.9** | cyolo_sb, **[V]** self-reproduced |
+
+P0a and P1 are independent — one changes the input distribution, the other the
+output layer — so they should partially stack. They are not additive, since both
+attack the same synth→real degradation. **Reaching 79.9 needs both to land near
+the top of their ranges**, or P2 (MERT-in-CYOLO) on top. Honest read: 65–75 is
+likely, 80 is reachable but not assured.
 
 ---
 
