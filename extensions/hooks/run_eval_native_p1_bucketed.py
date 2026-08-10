@@ -22,6 +22,10 @@ import sys
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(_THIS_DIR, '..', '..'))
 sys.path.insert(0, REPO_ROOT)
+# Same explicit package path as the training entry point -- see the comment
+# there. This module imports audio_conditioned_unet.network inside
+# patch_bucketed_decode, which needs it too.
+sys.path.insert(0, os.path.join(REPO_ROOT, 'third_party', 'cpjku_unet'))
 
 from extensions.hooks.mert_patch import patch_mert_pipeline
 from extensions.hooks.lenient_load import patch_lenient_load_state_dict

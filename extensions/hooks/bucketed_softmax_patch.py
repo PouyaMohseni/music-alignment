@@ -26,11 +26,13 @@ import torch
 import tqdm
 from random import shuffle
 
-from audio_conditioned_unet.dataset import (prepare_batch, calculate_batch_stats,
-                                            summarize_stats)
-from audio_conditioned_unet.utils import dice_loss
-
 from extensions.heads.bucketed_softmax import bucketed_ce_loss, decode_mask
+
+# audio_conditioned_unet is imported LAZILY inside the functions below, matching
+# mert_patch.py and gated_film_patch.py.  Importing it at module level breaks:
+# this module is imported by the entry point before anything has made the cpjku
+# package importable, and job 551057 died on exactly that
+# (ModuleNotFoundError) after 2m52s of allocated A100 time.
 
 
 class LogitCapture:
@@ -50,6 +52,10 @@ def iterate_dataset_bucketed(network, optimizer, dataset, batch_size, seq_len, t
                              device="cpu", threshold=0.5, average_stats=True,
                              eval_center_of_mass=False, eval_only_onsets=False,
                              clip_grads=None, pool='logsumexp', dice_weight=0.0):
+    from audio_conditioned_unet.dataset import (prepare_batch, calculate_batch_stats,
+                                                summarize_stats)
+    from audio_conditioned_unet.utils import dice_loss
+
     if not hasattr(network, '_ext_logit_capture'):
         network._ext_logit_capture = LogitCapture(network)
     cap = network._ext_logit_capture

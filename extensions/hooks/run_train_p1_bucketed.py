@@ -22,8 +22,14 @@ import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.join(_THIS_DIR, '..', '..')
-_CPJKU_PKG_DIR = os.path.join(_PROJECT_ROOT, 'third_party', 'cpjku_unet', 'audio_conditioned_unet')
+_CPJKU_REPO = os.path.join(_PROJECT_ROOT, 'third_party', 'cpjku_unet')
+_CPJKU_PKG_DIR = os.path.join(_CPJKU_REPO, 'audio_conditioned_unet')
 sys.path.insert(0, _PROJECT_ROOT)
+# Make `audio_conditioned_unet` importable as a package EXPLICITLY. The other
+# entry points get this implicitly and it is not obvious how, so relying on it
+# cost job 551057 an A100 allocation. Being explicit is idempotent and removes
+# the dependency on whatever that mechanism is.
+sys.path.insert(0, _CPJKU_REPO)
 
 from extensions.hooks.mert_patch import patch_mert_pipeline
 from extensions.hooks.lenient_load import patch_lenient_load_state_dict
