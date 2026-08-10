@@ -44,7 +44,11 @@ if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/train_model.py ]; then
     git submodule update --init third_party/cpjku_unet || true
 fi
 module load gcc opencv
-source .venv/bin/activate
+# venv_cpjku310, NOT .venv -- audio_conditioned_unet/utils.py:12 imports madmom
+# at module level and .venv has no madmom, so every import of the cpjku package
+# dies there (this is the second thing that killed job 551057).  R2/B* all use
+# this venv; P1 warm-starts from an R2 checkpoint and must match it exactly.
+source /scratch/pmohseni/venv_cpjku310/bin/activate
 
 OUT=/project/def-ichiro/pmohseni/music-alignment/results/cb_ta_ext/${TAG}
 mkdir -p "$OUT/params" "$OUT/runs"
