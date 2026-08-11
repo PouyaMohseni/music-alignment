@@ -35,7 +35,14 @@ export PYTHONPATH=$CY:${PYTHONPATH:-}
 cd "$CY/cyolo_score_following"
 
 MODEL=${1:-cyolo_sb_a}
-CKPT=$CY/trained_models/$MODEL/best_model.pt
+# CYOLO_CKPT lets this evaluate OUR OWN trained checkpoints, not just the
+# released ones under trained_models/.  Needed to read an interim number off the
+# IR-augmented reproduction while it is still training: the run is 50 epochs at
+# ~10 epochs per 24h allocation, so waiting for convergence is ~5 days, and the
+# whole point of that run is to learn whether IR transfers to a detection model
+# at all.
+CKPT=${CYOLO_CKPT:-$CY/trained_models/$MODEL/best_model.pt}
+[ -f "$CKPT" ] || { echo "FATAL: checkpoint not found: $CKPT"; exit 1; }
 echo "model: $MODEL  ($CKPT)"
 
 echo ""
