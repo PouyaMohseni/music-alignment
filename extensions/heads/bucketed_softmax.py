@@ -95,22 +95,55 @@ def bucketed_ce_loss(logits: torch.Tensor, y: torch.Tensor,
     return ce.mean(), int(valid.sum().item())
 
 
+def decode_position(logits: torch.Tensor, pool: str = 'logsumexp',
+                    refine: int = 3) -> torch.Tensor:
+    """(N,1,H,W) logits -> (N,) decoded x position, in columns.
+
+    argmax, then a local expectation over +-`refine` columns for sub-pixel
+    accuracy.  NOT a global expectation: the distribution is routinely
+    multi-modal (the same passage appears at several x on the strip), and the
+    mean of two modes lands in the gap between them, which is precisely the
+    failure that made the first P1 run score 10.6 on room.
+    """
+    x_logits = marginalise_x(logits, pool)                       # (N, W)
+    p = F.softmax(x_logits, dim=1)
+    n, w = p.shape
+    idx = p.argmax(dim=1)                                        # (N,)
+    if refine <= 0:
+        return idx.float()
+    offs = torch.arange(-refine, refine + 1, device=p.device)
+    cols = (idx[:, None] + offs[None, :]).clamp(0, w - 1)        # (N, 2r+1)
+    wts = torch.gather(p, 1, cols)
+    return (wts * cols.float()).sum(1) / wts.sum(1).clamp_min(1e-12)
+
+
 def decode_mask(logits: torch.Tensor, height: int,
-                pool: str = 'logsumexp') -> torch.Tensor:
+                pool: str = 'logsumexp', halfwidth: int = 2,
+                refine: int = 3) -> torch.Tensor:
     """Build a mask the UNMODIFIED metric code can consume.
 
-    calculate_batch_stats thresholds at 0.5 and then takes the centre of mass,
-    so handing it a softmax (which sums to 1 over W and is therefore everywhere
-    far below 0.5) would threshold to all-zeros and score every frame as a
-    total miss.  We rescale to peak 1.0 so thresholding keeps the
-    above-half-maximum region, and broadcast over height so the centre of mass
-    lands at (H/2, E[x | p > p_max/2]).
+    calculate_batch_stats binarises at 0.5 and then takes the centre of mass of
+    whatever survives.  The obvious approach -- broadcast the peak-normalised
+    softmax and let it find the centre -- FAILS, and cost a full training run:
+    a diffuse or multi-modal distribution leaves a huge above-half-maximum
+    plateau (measured: ~13x wider than the target, precision 0.076), and its
+    centre of mass sits nowhere near the peak.
 
-    That keeps the entire evaluation path -- unrolling, interpol_c2o, the
-    threshold sweep -- byte-identical to every other experiment, so the numbers
-    stay comparable.
+    So we decode the position ourselves and hand the metric an unambiguous
+    delta: a symmetric bar of width 2*halfwidth+1 centred on the decoded
+    column, spanning the full height.  Centre of mass is then exactly
+    (H/2, round(x_hat)) by construction, which decouples "how we read a
+    position out of the distribution" from "how the metric reads a position out
+    of a mask".  Everything downstream -- unrolling, interpol_c2o, the
+    threshold sweep -- stays byte-identical to every other experiment.
+
+    Rounding to a whole column costs at most 0.5 px, which at w_scale=4 is 2
+    original pixels -- far below the 0.5 s tolerance the metric applies.
     """
-    x_logits = marginalise_x(logits, pool)            # (N, W)
-    p = F.softmax(x_logits, dim=1)
-    p = p / p.max(dim=1, keepdim=True).values.clamp_min(1e-12)
-    return p[:, None, None, :].expand(-1, 1, height, -1).contiguous()
+    x_hat = decode_position(logits, pool=pool, refine=refine)    # (N,)
+    n = x_hat.shape[0]
+    w = logits.shape[-1]
+    centre = x_hat.round().long().clamp(0, w - 1)
+    cols = torch.arange(w, device=logits.device)[None, :]        # (1, W)
+    bar = ((cols - centre[:, None]).abs() <= halfwidth).float()  # (N, W)
+    return bar[:, None, None, :].expand(-1, 1, height, -1).contiguous()
