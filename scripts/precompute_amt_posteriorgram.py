@@ -103,6 +103,12 @@ def main():
         # would otherwise leave a randomly initialised net happily emitting
         # garbage posteriors that look like a feature bank.
         ck = _real_load(a.checkpoint, map_location='cpu', weights_only=False)['model']
+        # The Note_pedal checkpoint nests two sub-models; flattening with their
+        # prefixes is required or every key mismatches. Without this the guard
+        # below reports matched=0/540 -- which is exactly what it did on the
+        # probe (job 773544), correctly refusing to emit a bank.
+        if len(ck) <= 4 and all(isinstance(v, dict) for v in ck.values()):
+            ck = {f'{pre}.{k}': v for pre in ck for k, v in ck[pre].items()}
         model = tr.model.module if hasattr(tr.model, 'module') else tr.model
         msd = model.state_dict()
         matched = [k for k in msd if k in ck and msd[k].shape == ck[k].shape]

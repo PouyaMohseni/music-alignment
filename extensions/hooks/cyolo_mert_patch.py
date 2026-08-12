@@ -135,7 +135,11 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
         dataset = _orig_load_dataset(*a, **kw)
 
         missing, ok = [], 0
-        for i, name in enumerate(dataset.piece_names):
+        # piece_names is a DICT {i: name} (dataset.py:269,308), keyed identically
+        # to performances. enumerate() over it yields the int KEYS, not the
+        # names, which is what killed job 773292 ('int' has no attribute
+        # 'encode'). .items() gives the pairing the lookup actually needs.
+        for i, name in dataset.piece_names.items():
             p = _lookup(name)
             if p is None:
                 missing.append(name)
@@ -143,7 +147,12 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
             emb = np.load(p).astype(np.float32)          # (T, 768)
             if emb.shape[1] != MERT_DIM:
                 raise RuntimeError(f'{name}: expected dim {MERT_DIM}, got {emb.shape}')
-            dataset.performances[i] = emb.reshape(-1)    # (T*768,)
+            flat = emb.reshape(-1)                       # (T*768,)
+            # one signal per piece here, but tolerate a list rather than
+            # silently storing an array where a list was expected
+            cur = dataset.performances.get(i) if hasattr(dataset.performances, 'get') \
+                else dataset.performances[i]
+            dataset.performances[i] = [flat] * len(cur) if isinstance(cur, (list, tuple)) else flat
             ok += 1
 
         if missing:
