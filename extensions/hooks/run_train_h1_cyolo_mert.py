@@ -56,11 +56,11 @@ patch_cyolo_mert(emb_map, aug_roots=aug_map, aug_prob=aug_prob)
 
 # Verify the swap took, rather than trusting that it did.
 import cyolo_score_following.dataset as _ds                       # noqa: E402
-from cyolo_score_following.models.yolo import YOLO                # noqa: E402
+from cyolo_score_following.models.yolo import Model as _CyoloModel  # noqa: E402
 if getattr(_ds.load_dataset, '__name__', '') != 'load_dataset' or \
-        YOLO.compute_spec.__name__ != 'compute_spec':
+        _CyoloModel.compute_spec.__name__ != 'compute_spec':
     raise RuntimeError('H1 patch did not take')
-print('[H1] verified: load_dataset and YOLO.compute_spec are patched', flush=True)
+print('[H1] verified: load_dataset and Model.compute_spec are patched', flush=True)
 
 _TRAIN = os.path.join(_CY, 'cyolo_score_following', 'train.py')
 sys.argv[0] = _TRAIN

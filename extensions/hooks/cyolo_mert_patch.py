@@ -94,7 +94,11 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
         n_aug = sum(len(b) for b in aug_banks.values())
         print(f'[H1] multi-condition ACTIVE: p(degraded)={aug_prob}, '
               f'{n_aug} degraded npy', flush=True)
-        if n_aug < 0.98 * total:
+        # compare against the CLEAN count for the same datasets the degraded
+        # map covers -- comparing train-only degraded against train+valid
+        # clean fired a false 94.9% warning on job 770876.
+        clean_same = sum(len(banks[k]) for k in aug_banks if k in banks)
+        if clean_same and n_aug < 0.98 * clean_same:
             print(f'[H1] WARNING: degraded bank covers {100.0*n_aug/total:.1f}% of the '
                   f'clean bank; effective augmentation rate is below {aug_prob}', flush=True)
     elif aug_roots or aug_prob:
@@ -159,7 +163,9 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
     ds_mod.load_dataset = load_dataset
 
     # ---- 2. compute_spec becomes a reshape ---------------------------------
-    from cyolo_score_following.models.yolo import YOLO
+    # The class is `Model`, not `YOLO` (models/yolo.py:78) -- job 770876
+    # died on that import after 4 minutes of A100 time.
+    from cyolo_score_following.models.yolo import Model as _CyoloModel
     from extensions.heads.mert_cyolo_projector import resample_frames
 
     def compute_spec(self, x, tempo_aug=False):
@@ -178,7 +184,7 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
             out.append(emb)
         return out
 
-    YOLO.compute_spec = compute_spec
+    _CyoloModel.compute_spec = compute_spec
 
     # ---- 3. swap the window encoder ----------------------------------------
     _orig_cc_init = cond_mod.ContextConditioning.__init__
