@@ -148,6 +148,17 @@ def main():
             post = np.concatenate([np.asarray(od['frame_output'], dtype=np.float32),
                                    np.asarray(od['reg_onset_output'], dtype=np.float32)],
                                   axis=1)                       # (T_amt, 176)
+
+            # The library segments audio into 10 s chunks and PADS the last one,
+            # so the posteriorgram runs past the end of the recording: the probe
+            # measured 60.00 s of output for a 52.43 s file (6 x 10 s segments).
+            # Left uncorrected, resample_to_n would squeeze 60 s of frames into
+            # 52.43 s of grid -- a ~14% time compression on every piece, which
+            # nothing downstream would flag. Truncate to the true duration.
+            dur_true = info.frames / float(info.samplerate)
+            n_true = int(round(dur_true * AMT_FPS))
+            if post.shape[0] > n_true:
+                post = post[:n_true]
             if post.shape[1] != OUT_DIM:
                 raise ValueError(f'expected {OUT_DIM} dims, got {post.shape}')
             if post.shape[0] == 0:
