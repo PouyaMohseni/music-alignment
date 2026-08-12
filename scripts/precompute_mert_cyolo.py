@@ -30,6 +30,7 @@ Output: {out_dir}/{piece_name}.npy, float16 (T, 768).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 
@@ -79,6 +80,25 @@ def main():
     p.add_argument('--mert_id', default='m-a-p/MERT-v1-95M')
     p.add_argument('--shard', type=int, default=0)
     p.add_argument('--num_shards', type=int, default=1)
+    # H1 multi-condition: build a SECOND bank from acoustically degraded audio.
+    # CYOLO's own ImpulseResponse transform cannot be used once MERT is
+    # precomputed (it convolves waveforms), so the degradation has to be baked
+    # into the features here, exactly as it was for R2r_realir.
+    p.add_argument('--ir_bank', type=str, default=None,
+                   help='dir of REAL measured IR wavs; enables degradation')
+    p.add_argument('--salt', type=int, default=0,
+                   help='vary to build an independent second condition')
+    # degrade() in precompute_mert_augmented reads all of these off the
+    # namespace; defaults match the R2r_realir bank that produced +11 on room.
+    p.add_argument('--tilt', action='store_true', default=True)
+    p.add_argument('--p_tilt', type=float, default=0.9)
+    p.add_argument('--tilt_db', type=float, default=12.0)
+    p.add_argument('--ir', action='store_true', default=True)
+    p.add_argument('--p_ir', type=float, default=0.8)
+    p.add_argument('--noise', action='store_true', default=True)
+    p.add_argument('--p_noise', type=float, default=0.6)
+    p.add_argument('--snr_lo', type=float, default=12.0)
+    p.add_argument('--snr_hi', type=float, default=35.0)
     a = p.parse_args()
 
     import soundfile as sf
@@ -96,6 +116,8 @@ def main():
           flush=True)
     print(f'  target grid: fps={CY_FPS:.6f} (={CY_SAMPLE_RATE}/{CY_HOP_SIZE}), '
           f'frame_size={CY_FRAME_SIZE}', flush=True)
+    print(f'  degradation: {"REAL IRs from " + a.ir_bank if a.ir_bank else "none (clean bank)"}',
+          flush=True)
 
     done = skip = fail = 0
     for i, wav_path in enumerate(mine):
@@ -110,7 +132,26 @@ def main():
             n_samples = int(round(info.frames * CY_SAMPLE_RATE / info.samplerate))
             n_dst = n_frames_for(n_samples)
 
-            emb = encode_wav(model, str(wav_path), device=device)     # (T, 768) @ MERT_FPS
+            if a.ir_bank:
+                # degrade the WAVEFORM, then re-encode: the degradation is then
+                # baked into the features the network consumes and cannot be
+                # undone by a normalisation layer.
+                import librosa, soundfile as sf, tempfile, time as _t
+                from scripts.precompute_mert_augmented import degrade, MERT_SR as _SR
+                rng = np.random.default_rng(
+                    int.from_bytes(hashlib.sha1(f'{key}|{a.salt}'.encode()).digest()[:8], 'big')
+                    % (2 ** 32))
+                y, sr = librosa.load(str(wav_path), sr=_SR, mono=True)
+                y = degrade(y, sr, rng, a)
+                tmp = os.path.join(tempfile.gettempdir(), f'{os.getpid()}_{_t.time()}.wav')
+                sf.write(tmp, y, sr)
+                try:
+                    emb = encode_wav(model, tmp, device=device)
+                finally:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+            else:
+                emb = encode_wav(model, str(wav_path), device=device)  # (T, 768) @ MERT_FPS
             if emb.shape[0] == 0:
                 print(f'  SKIP {key}: empty audio', flush=True)
                 fail += 1
