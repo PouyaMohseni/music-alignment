@@ -1,0 +1,273 @@
+% ICASSP 2027 submission -- DRAFT
+% Deadline: 2026-09-16 (UTC-12). 4 pages + 1 page references.
+% Requires the official ICASSP template (spconf.sty, IEEEbib.bst).
+%
+% STATUS: every number marked [V] below is verified in-repo; see
+% paper/icassp2027/NUMBERS.md for the provenance of each one.
+\documentclass{article}
+\usepackage{spconf,amsmath,graphicx,booktabs,microtype}
+
+\title{The Synthetic-to-Real Gap in Sheet-Image Score Following\\
+       is Representational, not Acoustic}
+
+\name{Anonymous}
+\address{Anonymous}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Score followers that track a live performance on a sheet-music image degrade
+sharply when moved from synthesised audio to real recordings. This degradation
+is routinely attributed to acoustic mismatch --- reverberation, microphone
+response, instrument timbre --- and is addressed with acoustic remedies. We
+show that this attribution is largely wrong. Using two microphones placed on
+the \emph{same} performances, so that the performance is held exactly fixed, we
+measure that room reverberation costs a stock automatic music transcription
+(AMT) system essentially nothing: onset $F_1$ is $0.9116$ on the room
+microphone versus $0.9124$ on a direct pickup at $50\,$ms tolerance. On those
+same recordings, image-conditioned trackers lose roughly thirty points of
+tracking accuracy. The note-level information survives the room almost intact;
+the tracking architecture discards it. We corroborate this with an intervention
+asymmetry: augmentation with real measured impulse responses, drawn from one
+bank and applied under one protocol, is reported to be worth $+25.2$ points to
+a detection-based tracker but is worth only $+11.0$ to a dense-heatmap tracker.
+We argue the binding constraint is the output parameterisation rather than the
+audio front end, and we report three measurement problems --- an aggregation
+mismatch worth $+7.3$ points, an effective sample size of $25$ rather than
+$4415$, and undisclosed oracle inputs --- that make small reported gains on
+this benchmark uninterpretable.
+\end{abstract}
+
+\begin{keywords}
+score following, music alignment, optical music recognition, evaluation,
+domain shift
+\end{keywords}
+
+\section{Introduction}
+\label{sec:intro}
+
+Sheet-image score following takes a live audio performance and a rendered image
+of the score, and predicts the performer's current position on the image, frame
+by frame. Unlike symbolic score following, it consumes the score as pixels,
+which removes any need for a machine-readable encoding of the piece.
+
+Systems in this family are trained almost exclusively on synthesised audio,
+because ground truth requires an exact alignment between audio and notehead
+coordinates, and that is cheap to obtain only by rendering. Every such system
+degrades when evaluated on real recordings. The degradation is large: on the
+real-audio subset of MSMD, published CUNet scores $22.4$ where the same
+architecture reaches the high eighties on synthetic audio.
+
+The prevailing explanation is acoustic. Real rooms add reverberation, real
+microphones colour the spectrum, and real pianos differ from the soundfont, so
+the audio encoder sees inputs unlike anything in training. This explanation
+motivates acoustic remedies --- impulse-response augmentation, multi-condition
+training, test-time normalisation --- and it is the framing under which we
+ourselves worked for several months.
+
+This paper argues that the explanation is mostly incorrect, and that acting on
+it has misdirected effort.
+
+Our contributions:
+\begin{enumerate}
+\itemsep0em
+\item A controlled measurement showing that the room preserves note-level
+      information almost perfectly (Section~\ref{sec:twomic}). Two microphones
+      on the same take isolate the room with the performance held fixed.
+\item An intervention asymmetry showing that the same acoustic remedy pays very
+      differently depending on the output parameterisation
+      (Section~\ref{sec:where}).
+\item Three measurement problems on this benchmark that jointly make gains
+      below roughly ten points uninterpretable (Section~\ref{sec:eval}), with
+      a corrected reporting protocol.
+\end{enumerate}
+
+\section{Setup}
+\label{sec:setup}
+
+\noindent\textbf{Data.} We use MSMD and its real-recording extension. We
+evaluate on four acoustic tiers over the same $25$ pages:
+\emph{synth} (soundfont rendering, matching training);
+\emph{rp\_synth} (a matched synthetic control: same pages, same ground truth,
+training soundfont);
+\emph{di-left} (real piano, direct pickup, no room);
+and \emph{room} (real piano, room microphone). Because \emph{di-left} and
+\emph{room} are two microphones recording the \emph{same} take, their
+difference isolates the room with the performance held exactly fixed. This
+pairing is the instrument used throughout Section~\ref{sec:twomic}.
+
+\noindent\textbf{Metric.} We report \textsc{pct@0.5s}: the percentage of onsets
+whose predicted position, mapped back through the score-to-onset interpolation,
+falls within $0.5\,$s of the true onset. Thresholds are
+$\{0.05, 0.1, 0.5, 1.0, 5.0\}\,$s. All numbers are onset-only and
+\emph{micro}-aggregated (onsets pooled across pieces, then divided), matching
+the convention of the baselines we compare against. Section~\ref{sec:eval}
+shows why that choice must be stated.
+
+\noindent\textbf{Baselines.} We reproduced the strongest reproducible published
+system ourselves rather than quoting it, obtaining
+$63.0$ at $0.1\,$s and $79.9$ at $0.5\,$s on \emph{room}, which matches the
+published row exactly. Numbers frequently quoted as $63.0$ for this system are
+the $0.1\,$s column; the $0.5\,$s column is $79.9$.
+
+\section{Does the room destroy the information?}
+\label{sec:twomic}
+
+If the synthetic-to-real gap were acoustic in the strong sense --- the room
+degrading the audio so that note events are no longer recoverable --- then any
+system reading notes from that audio should degrade too. We test this directly
+with an off-the-shelf AMT system, which shares no components with our tracker
+and was trained on entirely different data.
+
+We transcribe all $25$ real performances in both microphone conditions with two
+AMT models: a widely used piano transcription model (\textsc{kong}) and a
+reverb-augmented variant (\textsc{edwards}). We score note onsets with
+\texttt{mir\_eval} at $50$ and $100\,$ms.
+
+\begin{table}[t]
+\centering
+\caption{Note-onset $F_1$ on the same $25$ performances, two microphones,
+         same take. The room costs a transcriber essentially nothing.}
+\label{tab:twomic}
+\begin{tabular}{llccc}
+\toprule
+model & tol & room & di-left & $\Delta$ \\
+\midrule
+\textsc{kong}     & $50\,$ms  & 0.9116 & 0.9124 & $-0.001$ \\
+\textsc{kong}     & $100\,$ms & 0.9546 & 0.9903 & $-0.036$ \\
+\textsc{edwards}  & $50\,$ms  & 0.9441 & 0.9259 & $+0.018$ \\
+\textsc{edwards}  & $100\,$ms & 0.9864 & 0.9909 & $-0.005$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:twomic} is the central measurement of this paper. At $50\,$ms
+the room costs \textsc{kong} $0.001$ $F_1$, and the reverb-augmented model is
+in fact \emph{better} on the room microphone than on the direct pickup. At
+$100\,$ms the largest penalty is $0.036$. On these same files, our trackers
+lose roughly thirty points of \textsc{pct@0.5s}.
+
+\noindent\textbf{Validating the measurement path.} Before trusting these
+numbers we verified that the coordinate round-trip is lossless. Feeding the
+ground-truth MIDI in as if it were a transcription, and decoding position
+through the same score-note-to-pixel-to-onset-frame path used for the AMT
+output, yields exactly $100.00$ \textsc{pct@0.5s} when the tracker is allowed
+to hear the note it is scored on, and $94.79$ under the stricter convention
+where it is not. A coordinate or indexing error anywhere in this path would
+show up as a ceiling below $100$.
+
+\noindent\textbf{What this does and does not show.} It shows the note
+information survives the room. It does \emph{not} show that a decomposed
+transcribe-then-align system is a better score follower. Offline dynamic time
+warping over these transcriptions reaches $98.06$ on \emph{room}, but that
+figure is not comparable to an online tracker: it is non-causal, and it is
+close to tautological on this data, because the recordings are reproducing-piano
+playback of the score MIDI and therefore contain no tempo deviation for the
+alignment to resolve. The corresponding \emph{online} greedy matcher reaches
+only $10.7$, with a median error of eight to thirteen seconds; it loses the
+pointer and never recovers. Causal matching, not transcription, is the hard
+part of that pipeline.
+
+\section{Where the gap actually is}
+\label{sec:where}
+
+\subsection{The same remedy pays differently}
+
+If the audio is not the problem, acoustic augmentation should help less than
+expected --- and should help \emph{unevenly} across architectures. It does.
+
+Augmenting with real measured impulse responses is reported to move a
+detection-based tracker from $46.0$ to $71.2$ on \emph{room}, a gain of
+$+25.2$. We applied augmentation from a bank of $693$ real measured impulse
+responses to our own dense-heatmap tracker, re-encoding degraded waveforms
+through the frozen audio front end so the degradation cannot be undone by a
+normalisation layer. The gain was $+11.0$ ($45.6 \rightarrow 56.6$): real, the
+largest single improvement we have obtained, and well under half of what the
+same class of intervention buys a detection model.
+
+\noindent\textbf{A negative result we must disclose.} Our own earlier
+conclusion that impulse-response augmentation does not help was an artefact. The
+convolution used \texttt{mode='same'}, which advances the signal by
+$(\lvert h \rvert - 1)/2$ samples relative to its onset labels --- a
+$4$ to $20$ frame desynchronisation on half of all augmented samples. The
+experiment that produced the $+11.0$ above differs from the discarded one
+chiefly in that this bug is fixed and the impulse responses are measured rather
+than synthesised. We report this because the failure mode is silent: the
+training loss is unremarkable and only the real-audio metric suffers.
+
+\subsection{The output parameterisation}
+
+A controlled comparison in the literature points to the same place. Within one
+paper, on one dataset, with the same audio front end, a system that predicts
+position as a \emph{bucketed softmax classification} scores $58.5$ on
+\emph{room} where the dense soft-Dice heatmap formulation scores $22.4$ --- a
+$36$-point difference attributable to the output layer alone. This is
+consistent with the segmentation literature, where soft-Dice is known to
+perform well in-distribution and poorly out-of-distribution, and
+synthetic-to-real is exactly such a shift.
+
+Three independent observations therefore converge: the audio retains the
+information (Section~\ref{sec:twomic}); acoustic remedies transfer only partly
+to heatmap models; and the largest controlled swing in the literature is
+attributable to the output parameterisation. We take this as the strongest
+available guidance for where effort in this task should go.
+
+\section{Measurement problems on this benchmark}
+\label{sec:eval}
+
+Alongside the above we found three properties of the standard evaluation that
+affect how any result on it should be read.
+
+\noindent\textbf{Aggregation.} Reported numbers in this literature use two
+different estimators without stating which. Pooling all onsets and dividing
+(\emph{micro}) and averaging per-piece percentages (\emph{macro}) are not
+interchangeable: on one unchanged checkpoint we measure $45.4$ micro, $46.8$
+macro over pages, and $52.7$ macro over pieces. The spread of $+7.3$ points
+arises because a single difficult nocturne constitutes $29.8\%$ of the micro
+metric but only $6.2\%$ of the piece-macro metric, and it is the recording on
+which every system we have tested performs worst. Macro aggregation
+systematically discounts the hardest part of the benchmark.
+
+\noindent\textbf{Effective sample size.} Onsets within a piece are not
+independent. A piece-level cluster bootstrap gives a design effect of
+approximately $180$, so the effective sample size of the real-audio benchmark
+is about $25$ pieces, not $4415$ onsets. The minimum detectable difference is
+roughly ten points. We confirmed the practical consequence directly: retraining
+one recipe twice, changing nothing but the random seed and the run, produced
+$22.7$ and $16.4$ --- a spread larger than many published ablation effects.
+
+\noindent\textbf{Undisclosed oracle inputs.} Systems differ in what structure
+they are given versus what they must infer. In one recent system, ground-truth
+system and bar bounding boxes are required arguments of the forward pass at
+both training and inference; its loss contains no localisation term of any
+kind. It selects among given regions, whereas the baseline it is compared
+against must produce those regions from the image. This is not stated in the
+paper and is visible only in the released code.
+
+\noindent\textbf{Recommended protocol.} We suggest that work on this benchmark
+report (i) both micro and macro aggregation, (ii) piece-level bootstrap
+confidence intervals rather than point estimates, (iii) results across acoustic
+tiers rather than a single condition, including a matched synthetic control,
+and (iv) an explicit statement of which structures the model receives as input
+and which it must predict.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+The synthetic-to-real gap in sheet-image score following is not primarily an
+acoustic problem. A transcriber recovers $91$--$95\%$ of onsets from the same
+room recordings on which trackers lose thirty points, and loses essentially
+nothing to the room when the performance is held fixed. The information is
+present in the audio and is discarded downstream. Consistent with this,
+acoustic augmentation transfers only partially to dense-heatmap models, and the
+largest controlled effect in the literature is attributable to the output
+parameterisation. We also find that the benchmark, as commonly used, cannot
+support the size of the improvements typically claimed on it.
+
+\vfill\pagebreak
+
+\bibliographystyle{IEEEbib}
+\bibliography{refs}
+
+\end{document}
