@@ -53,92 +53,124 @@ from scripts.amt_bridge_eval import (REC, FPS, THRESHOLDS, load_piece,  # noqa: 
                                      pct_table)
 
 
-def particle_track(P, det_time, det_pitch, n_particles=2000, sigma_v=0.08,
-                   jump_prob=0.02, obs_sharp=4.0, match_window=3.0, seed=0):
-    """Causal filter. Returns (n_eval_frames,) predicted unrolled-x per frame.
+def _build_pitch_grid(notes, grid_dt=0.05, pad_s=0.25):
+    """Piano-roll of the SCORE over its own timeline: (G, 128) bool.
 
-    Everything here is causal: at frame t only detections with time <= t are
-    used.  No lookahead anywhere, which is the whole point.
+    `notes` is [onset_s, pitch, duration_s, vel, ch].  A pitch is marked
+    sounding for its whole duration, plus `pad_s` after onset even for very
+    short notes, because an AMT onset detection can land slightly late.
+
+    This replaces the previous observation model, which took ONE pitch per
+    merged onset and therefore matched against a fraction of every chord --
+    exactly the polyphony problem Nakamura's merged-output HMM formalises.
+    """
+    dur = float(notes[:, 0].max() + max(notes[:, 2].max(), pad_s)) + 1.0
+    G = int(np.ceil(dur / grid_dt)) + 1
+    grid = np.zeros((G, 128), dtype=bool)
+    for on, p, d, *_ in notes:
+        a = int(on / grid_dt)
+        b = int((on + max(float(d), pad_s)) / grid_dt) + 1
+        grid[max(0, a):min(G, b), int(p) % 128] = True
+    return grid, grid_dt
+
+
+def particle_track(P, det_time, det_pitch, n_particles=1200, sigma_v=0.06,
+                   jump_prob=0.015, obs_sharp=6.0, seed=0):
+    """Causal particle filter over (score TIME, tempo ratio).
+
+    WHAT CHANGED, AND WHY THE FIRST VERSION SCORED 49.6 WITH PERFECT INPUT
+    ---------------------------------------------------------------------
+    1. STATE SPACE.  The first version tracked position in *merged-onset index*
+       units with tempo in "onsets per second".  Onset spacing in real music is
+       wildly uneven, so a constant onset-rate model is badly mis-specified: it
+       drifts through every sparse passage.  The literature tracks position in
+       SCORE TIME with tempo as a ratio, which is what this does:
+           s <- s + v*dt,   v ~ lognormal random walk around 1.0
+       s is score seconds, v is dimensionless (performance speed / score speed).
+    2. OBSERVATION MODEL.  Was one pitch per merged onset, i.e. a fraction of
+       each chord.  Now a full score piano-roll (_build_pitch_grid) giving every
+       pitch SOUNDING at score time s, compared two-way against the detected
+       pitch set -- a multi-pitch frame model, which is what the particle-filter
+       score-following literature uses.
+    3. RESTS.  Frames with no detections previously left the weights untouched,
+       so the filter free-ran on the tempo prior through every silence.  Silence
+       is now evidence: it is consistent with a resting score position and
+       inconsistent with a dense one.
+
+    Causal throughout: at frame f only detections with time <= f/FPS are used.
     """
     rng = np.random.default_rng(seed)
     onsets_u = P['onsets_u']                 # (M,) onset FRAME per merged onset
     x_u = P['x_unrolled_u']                  # (M,) unrolled x per merged onset
-    notes = P['notes']                       # (K,5) [onset_s, pitch, dur, vel, ch]
+    notes = P['notes']
     M = len(onsets_u)
-    if M < 2:
+    if M < 2 or len(notes) < 2:
         return None
 
-    # score pitch content per merged-onset index, for the observation model
-    score_pitch = notes[:, 1].astype(int)
-    note_idx_u = P['note_idx_u']
-    # pitches sounding at each merged onset (the note(s) that start there)
-    pitches_at = [[] for _ in range(M)]
-    for k, ni in enumerate(note_idx_u):
-        if 0 <= k < M:
-            pitches_at[k].append(int(score_pitch[min(ni, len(score_pitch) - 1)]))
+    grid, gdt = _build_pitch_grid(notes)
+    G = grid.shape[0]
+    n_sounding = grid.sum(1).astype(np.float32)
+
+    # score time of each merged onset, for mapping state -> pixel
+    onset_time_u = onsets_u.astype(np.float64) / FPS
+    score_end = float(notes[:, 0].max())
 
     n_frames = int(onsets_u[-1]) + 1
     dt = 1.0 / FPS
 
-    # bucket detections by frame
     det_frame = np.floor(np.asarray(det_time) * FPS).astype(int)
     by_frame = {}
     for f, p in zip(det_frame, np.asarray(det_pitch, dtype=int)):
-        by_frame.setdefault(int(f), []).append(int(p))
+        by_frame.setdefault(int(f), []).append(int(p) % 128)
 
-    # init: position 0, tempo from the piece's mean onset rate
-    dur_s = max(1e-3, onsets_u[-1] / FPS)
-    v0 = M / dur_s
-    s = rng.uniform(0, 1.0, n_particles)
-    v = v0 * np.exp(rng.normal(0, 0.25, n_particles))
+    s = np.abs(rng.normal(0, 0.15, n_particles))          # score seconds
+    v = np.exp(rng.normal(0, 0.15, n_particles))          # tempo ratio ~1
     w = np.full(n_particles, 1.0 / n_particles)
 
     out = np.zeros(n_frames, dtype=np.float64)
     for f in range(n_frames):
         # ---- predict
         s = s + v * dt
-        v = v * np.exp(rng.normal(0, sigma_v, n_particles))
-        v = np.clip(v, 0.1 * v0, 10.0 * v0)
-        # recovery: reseed a small fraction uniformly over the score
+        v = np.clip(v * np.exp(rng.normal(0, sigma_v, n_particles)), 0.25, 4.0)
         n_jump = int(jump_prob * n_particles)
-        if n_jump:
+        if n_jump:                                        # recovery / repeats
             idx = rng.choice(n_particles, n_jump, replace=False)
-            s[idx] = rng.uniform(0, M, n_jump)
-            v[idx] = v0 * np.exp(rng.normal(0, 0.25, n_jump))
-        s = np.clip(s, 0, M - 1)
+            s[idx] = rng.uniform(0, score_end, n_jump)
+            v[idx] = np.exp(rng.normal(0, 0.15, n_jump))
+        s = np.clip(s, 0.0, score_end)
 
-        # ---- update
+        # ---- update (vectorised over particles)
+        gi = np.clip((s / gdt).astype(int), 0, G - 1)
         obs = by_frame.get(f)
         if obs:
-            si = np.rint(s).astype(int)
-            loglik = np.zeros(n_particles)
-            lo = np.maximum(0, si - int(match_window))
-            hi = np.minimum(M - 1, si + int(match_window))
-            for j in range(n_particles):
-                near = set()
-                for q in range(lo[j], hi[j] + 1):
-                    near.update(pitches_at[q])
-                if near:
-                    hit = sum(1 for p in obs if p in near) / len(obs)
-                else:
-                    hit = 0.0
-                loglik[j] = obs_sharp * hit
-            w = w * np.exp(loglik - loglik.max())
-            tot = w.sum()
-            w = np.full(n_particles, 1.0 / n_particles) if tot <= 0 else w / tot
+            obs_idx = np.unique(np.asarray(obs, dtype=int))
+            # recall: what fraction of detected pitches the score expects here
+            hit = grid[gi][:, obs_idx].sum(1) / len(obs_idx)
+            # precision: penalise positions expecting far more than we heard,
+            # which is what stops the filter parking on a dense chord forever
+            expect = np.maximum(n_sounding[gi], 1.0)
+            prec = np.minimum(1.0, len(obs_idx) / expect)
+            loglik = obs_sharp * (0.75 * hit + 0.25 * prec)
+        else:
+            # silence: favours positions the score also expects to be quiet
+            loglik = -obs_sharp * 0.25 * np.minimum(n_sounding[gi], 4.0) / 4.0
 
-            # ---- resample when degenerate
-            if 1.0 / np.sum(w ** 2) < n_particles / 2:
-                pos = (rng.random() + np.arange(n_particles)) / n_particles
-                idx = np.searchsorted(np.cumsum(w), pos)
-                idx = np.clip(idx, 0, n_particles - 1)
-                s, v = s[idx], v[idx]
-                w = np.full(n_particles, 1.0 / n_particles)
+        w = w * np.exp(loglik - loglik.max())
+        tot = w.sum()
+        w = np.full(n_particles, 1.0 / n_particles) if tot <= 0 else w / tot
 
-        # ---- output: MAP-ish estimate. Weighted mean would land between modes
-        # when two hypotheses are alive, which is the failure we are fixing.
+        if 1.0 / np.sum(w ** 2) < n_particles / 2:
+            pos = (rng.random() + np.arange(n_particles)) / n_particles
+            idx = np.clip(np.searchsorted(np.cumsum(w), pos), 0, n_particles - 1)
+            s, v = s[idx].copy(), v[idx].copy()
+            w = np.full(n_particles, 1.0 / n_particles)
+
+        # ---- output: MAP particle, not the weighted mean.  With two live
+        # hypotheses (a repeated passage) the mean lands in the gap between
+        # them, which is the failure this filter exists to avoid.
         best = int(np.argmax(w))
-        out[f] = x_u[int(np.clip(round(s[best]), 0, M - 1))]
+        k = int(np.clip(np.searchsorted(onset_time_u, s[best]) - 1, 0, M - 1))
+        out[f] = x_u[k]
 
     return out
 
