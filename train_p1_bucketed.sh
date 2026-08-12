@@ -37,7 +37,11 @@ nvidia-smi | head -12
 
 POOL=${1:-logsumexp}
 DICE_W=${2:-0}
-TAG=P1_bucketed_${POOL}$([ "$DICE_W" != "0" ] && echo "_dice${DICE_W}")
+# P1_TAG lets a re-formulated run get its own dump root.  The 2-D objective is
+# NOT resumable from the 1-D run: that objective supervised only the x-marginal
+# (logsumexp over height), so nothing constrained the vertical placement and it
+# drifted freely for 8 epochs.  Resuming would inherit that drift.
+TAG=${P1_TAG:-P1_bucketed_${POOL}$([ "$DICE_W" != "0" ] && echo "_dice${DICE_W}")}
 
 cd /project/def-ichiro/pmohseni/music-alignment
 if [ ! -f third_party/cpjku_unet/audio_conditioned_unet/train_model.py ]; then
