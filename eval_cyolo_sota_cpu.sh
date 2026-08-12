@@ -45,11 +45,20 @@ CKPT=${CYOLO_CKPT:-$CY/trained_models/$MODEL/best_model.pt}
 [ -f "$CKPT" ] || { echo "FATAL: checkpoint not found: $CKPT"; exit 1; }
 echo "model: $MODEL  ($CKPT)"
 
-echo ""
-echo "########## SYNTHETIC msmd_test ##########"
-python eval.py --param_path "$CKPT" --test_dirs "$DATA/msmd_test" --only_onsets 2>&1 | tail -25
+# CYOLO_SPLITS selects which evaluations to run. The synthetic msmd_test set is
+# 94 pieces and on CPU it alone can exceed an 8h allocation -- job 669026 timed
+# out inside it without ever reaching `room`, which was the only number wanted.
+# Default keeps the original full behaviour.
+CYOLO_SPLITS=${CYOLO_SPLITS:-synth rp_synth do room}
 
-for SPLIT in rp_synth do room; do
+if [[ " $CYOLO_SPLITS " == *" synth "* ]]; then
+  echo ""
+  echo "########## SYNTHETIC msmd_test ##########"
+  python eval.py --param_path "$CKPT" --test_dirs "$DATA/msmd_test" --only_onsets 2>&1 | tail -25
+fi
+
+for SPLIT in $CYOLO_SPLITS; do
+  [ "$SPLIT" = "synth" ] && continue
   echo ""
   echo "########## msmd_rp / $SPLIT ##########"
   python eval.py --param_path "$CKPT" --test_dirs "$DATA/msmd_rp" \
