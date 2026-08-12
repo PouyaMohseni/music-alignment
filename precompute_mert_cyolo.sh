@@ -30,12 +30,28 @@ time timeout 7200 python -c "import torch,transformers,librosa,soundfile;print('
     || { echo "FATAL: venv imports failed or stalled >120min"; exit 1; }
 
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
+
+# MERT_CYOLO_OUT / MERT_CYOLO_IR_BANK select clean vs acoustically degraded.
+# The degraded bank is what lets H1 be compared against the IR-trained
+# baseline: CYOLO's own ImpulseResponse transform convolves waveforms and
+# cannot run once MERT is precomputed, so the degradation must be baked into
+# the features (same construction as R2r_realir, which gave +11 on room).
+#
+#   clean:     sbatch precompute_mert_cyolo.sh
+#   degraded:  MERT_CYOLO_OUT=/scratch/pmohseni/mert_emb_cyolo_ir \
+#              MERT_CYOLO_IR_BANK=/scratch/pmohseni/ir_bank \
+#              sbatch --export=ALL,MERT_CYOLO_OUT=...,MERT_CYOLO_IR_BANK=... precompute_mert_cyolo.sh
+OUT_ROOT=${MERT_CYOLO_OUT:-/scratch/pmohseni/mert_emb_cyolo}
+IR_FLAG=""
+[ -n "${MERT_CYOLO_IR_BANK:-}" ] && IR_FLAG="--ir_bank ${MERT_CYOLO_IR_BANK}"
+echo "out_root=$OUT_ROOT  ir=${MERT_CYOLO_IR_BANK:-none}"
+
 for SPLIT in msmd_train msmd_valid msmd_test; do
     echo ""; echo "=== $SPLIT (shard ${SLURM_ARRAY_TASK_ID}/6) ==="
     python -m scripts.precompute_mert_cyolo \
         --wav_dir "$DATA/$SPLIT" \
-        --out_dir /scratch/pmohseni/mert_emb_cyolo/$SPLIT \
-        --shard "${SLURM_ARRAY_TASK_ID}" --num_shards 6
+        --out_dir "$OUT_ROOT/$SPLIT" \
+        --shard "${SLURM_ARRAY_TASK_ID}" --num_shards 6 $IR_FLAG
 done
 
 echo ""; echo "Shard ${SLURM_ARRAY_TASK_ID} finished at $(date)"
