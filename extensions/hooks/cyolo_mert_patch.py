@@ -227,7 +227,6 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
                     # the augmentation that IS available once the waveform is
                     # gone. Applied only when tempo_aug is on, i.e. training.
                     T, D = emb.shape
-                    g = torch.Generator(device='cpu')
                     # time mask: up to 15% of the window, contiguous
                     if T > 4 and np.random.rand() < feat_aug:
                         w_ = max(1, int(0.15 * T * np.random.rand()))
@@ -242,7 +241,10 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
                     if np.random.rand() < feat_aug:
                         sd = float(emb.std()) * 0.1
                         if sd > 0:
-                            emb = emb + torch.randn(emb.shape, generator=g) * sd
+                            # randn_like, not randn(generator=cpu_gen): emb may be
+                            # on the GPU and a CPU generator would make a CPU
+                            # tensor, raising on the add.
+                            emb = emb + torch.randn_like(emb) * sd
             out.append(emb)
         return out
 
