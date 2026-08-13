@@ -17,13 +17,29 @@ import torch.nn as nn
 
 _original_load_state_dict = nn.Module.load_state_dict
 
+# Keys allowed to be absent from a warm-start checkpoint because they are MEANT
+# to begin at their initial value. adaLN-Zero (extensions/heads/adaln_zero.py)
+# replaces FiLM's gamma/beta Linears with a single zero-initialised `proj`, so a
+# FiLM-trained checkpoint cannot contain those keys -- and must not, since the
+# method's entire premise is that conditioning starts as an exact no-op. Job
+# 780909 died on precisely this, correctly: without an explicit allowance, a
+# silently zero-filled tensor is indistinguishable from a broken load.
+_ZERO_INIT_OK = ('film_layer.proj.weight', 'film_layer.proj.bias')
+
 
 def _lenient_load_state_dict(self, state_dict, strict=True):
     missing, unexpected = _original_load_state_dict(self, state_dict, strict=False)
     if unexpected:
         print(f'[lenient_load] Ignoring extension-only checkpoint keys: {unexpected}', flush=True)
     if missing:
-        raise RuntimeError(f'Checkpoint is missing base-network keys: {missing}')
+        allowed = [k for k in missing if k.endswith(_ZERO_INIT_OK)]
+        hard = [k for k in missing if k not in allowed]
+        if allowed:
+            print(f'[lenient_load] {len(allowed)} zero-init conditioning keys absent '
+                  f'from the checkpoint, left at their zero initialisation BY DESIGN '
+                  f'(e.g. {allowed[:2]})', flush=True)
+        if hard:
+            raise RuntimeError(f'Checkpoint is missing base-network keys: {hard}')
     return missing, unexpected
 
 
