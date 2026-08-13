@@ -13,6 +13,8 @@ this monkey-patches nn.Module.load_state_dict itself to default to
 strict=False -- confirmed key error already reproduced running B2/B5 warm-
 starts (jobs 64785181, 64785183), both immediate crashes.
 """
+import os
+
 import torch.nn as nn
 
 _original_load_state_dict = nn.Module.load_state_dict
@@ -31,6 +33,17 @@ def _lenient_load_state_dict(self, state_dict, strict=True):
     missing, unexpected = _original_load_state_dict(self, state_dict, strict=False)
     if unexpected:
         print(f'[lenient_load] Ignoring extension-only checkpoint keys: {unexpected}', flush=True)
+        # Dropping _ext_* keys at EVAL means the trained heads were discarded and
+        # the score came from an untrained readout -- exactly how A4's 31.7 was
+        # produced. Loud by default; an eval wrapper that has constructed the
+        # heads itself sets STRICT_EXT_KEYS=0 (it will then have no such keys).
+        if os.environ.get('STRICT_EXT_KEYS', '1') == '1' and \
+                any(k.startswith('_ext_') for k in unexpected):
+            raise RuntimeError(
+                f'Checkpoint carries trained extension heads {[k for k in unexpected if k.startswith("_ext_")][:3]}... '
+                f'that this eval path cannot use. Scoring would silently measure an '
+                f'untrained readout. Use the matching run_eval_native_*.py wrapper, '
+                f'or set STRICT_EXT_KEYS=0 if you really mean to ignore them.')
     if missing:
         allowed = [k for k in missing if k.endswith(_ZERO_INIT_OK)]
         hard = [k for k in missing if k not in allowed]

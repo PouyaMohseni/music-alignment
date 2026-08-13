@@ -52,14 +52,32 @@ class StaffCoarseHead(nn.Module):
             nn.GroupNorm(1, hidden),
             nn.ELU(False),
         )
-        self.out = nn.Linear(hidden, n_bins)
+        # Per-BAND scoring, not a global Linear. See forward().
+        self.out = nn.Conv1d(hidden, 1, kernel_size=3, padding=1)
 
     def forward(self, feat: torch.Tensor) -> torch.Tensor:
-        """feat: (N, C, H, W) -> (N, n_bins) logits."""
-        h = self.net(feat)
-        h = h.mean(dim=3)                      # pool over x: staff is a y question
-        h = h.mean(dim=2)                      # (N, hidden)
-        return self.out(h)
+        """feat: (N, C, H, W) -> (N, n_bins) logits.
+
+        THE Y AXIS MUST SURVIVE. An earlier version did
+
+            h = h.mean(dim=3)   # pool over x -- correct, staff is a y question
+            h = h.mean(dim=2)   # pool over y -- destroys the answer
+
+        Convolutions are translation-equivariant and there is no positional
+        encoding, so averaging over y leaves nothing that depends on WHERE the
+        evidence was. Measured on the real feature shape: the same blob at rows
+        3-8 and at rows 40-45 gave the same argmax band, max |logit diff| 6e-8.
+        The head was position-blind by construction while its own docstring
+        claimed to fix exactly that failure.
+
+        Now: pool over x only, then pool the y axis down to n_bins and score
+        each band from its own features, so band k's logit is a function of the
+        features at band k.
+        """
+        h = self.net(feat)                     # (N, hidden, H, W)
+        h = h.mean(dim=3)                      # pool x only -> (N, hidden, H)
+        h = F.adaptive_avg_pool1d(h, self.n_bins)   # -> (N, hidden, n_bins)
+        return self.out(h)[:, 0]               # -> (N, n_bins)
 
 
 def staff_target(y: torch.Tensor, n_bins: int, eps: float = 1e-8):

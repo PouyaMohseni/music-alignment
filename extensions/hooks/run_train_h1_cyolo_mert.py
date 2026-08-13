@@ -58,8 +58,10 @@ patch_cyolo_mert(emb_map, aug_roots=aug_map, aug_prob=aug_prob,
 # Verify the swap took, rather than trusting that it did.
 import cyolo_score_following.dataset as _ds                       # noqa: E402
 from cyolo_score_following.models.yolo import Model as _CyoloModel  # noqa: E402
-if getattr(_ds.load_dataset, '__name__', '') != 'load_dataset' or \
-        _CyoloModel.compute_spec.__name__ != 'compute_spec':
+# Sentinels, not __name__: both replacement functions are named exactly
+# 'load_dataset' and 'compute_spec', so the name check passed whether or not
+# the patch applied -- a guard that verified nothing.
+if not getattr(_ds, '_h1_patched', False) or not getattr(_CyoloModel, '_h1_patched', False):
     raise RuntimeError('H1 patch did not take')
 print('[H1] verified: load_dataset and Model.compute_spec are patched', flush=True)
 

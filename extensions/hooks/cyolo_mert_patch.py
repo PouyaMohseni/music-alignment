@@ -190,11 +190,19 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
 
         dataset.frame_size = MERT_DIM
         dataset.hop_length = MERT_DIM
+        # dataset.py:150 caps a window at `120 * sample_rate` ELEMENTS. Left at
+        # 22050 that cut lands mid-frame (22050*120 is not a multiple of D), and
+        # since compute_spec reshapes from the front, every frame after the cut
+        # would mix two adjacent time frames -- silent garbage. 20*D makes the
+        # cap exactly 2400 whole frames, i.e. the same 120 s of context.
+        dataset.sample_rate = 20 * MERT_DIM
         print(f'[H1] dataset serving MERT for {ok} pieces '
               f'(frame_size=hop_length={MERT_DIM})', flush=True)
         return dataset
 
     ds_mod.load_dataset = load_dataset
+    ds_mod._h1_patched = True      # sentinel: the NAMES are identical,
+    # so a name-based check passes whether or not the patch applied.
 
     # ---- 2. compute_spec becomes a reshape ---------------------------------
     # The class is `Model`, not `YOLO` (models/yolo.py:78) -- job 770876
@@ -207,7 +215,10 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
         for item in x:
             flat = item if torch.is_tensor(item) else torch.as_tensor(item)
             n = flat.numel() // MERT_DIM
-            emb = flat[:n * MERT_DIM].reshape(n, MERT_DIM)
+            # Slice from the END: the window's end is always frame-aligned
+            # (slice end is (frame+1)*D, and the augmentation pad prepends whole
+            # frames), whereas the head is not after a mid-window cut.
+            emb = flat[flat.numel() - n * MERT_DIM:].reshape(n, MERT_DIM)
             if tempo_aug:
                 # CYOLO tempo-augments with a phase vocoder on the waveform,
                 # impossible on precomputed features. Frame-axis resampling
@@ -228,9 +239,14 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
                     # gone. Applied only when tempo_aug is on, i.e. training.
                     T, D = emb.shape
                     # time mask: up to 15% of the window, contiguous
-                    if T > 4 and np.random.rand() < feat_aug:
-                        w_ = max(1, int(0.15 * T * np.random.rand()))
-                        t0 = int(np.random.randint(0, max(1, T - w_)))
+                    if T > 48 and np.random.rand() < feat_aug:
+                        # cap at 20 frames (1 s) and never touch the last kw=40
+                        # frames: those ARE the moment being predicted, so
+                        # masking them is input/target inconsistency, not
+                        # augmentation.
+                        w_ = max(1, min(20, int(0.15 * T * np.random.rand())))
+                        hi = max(1, T - 40 - w_)
+                        t0 = int(np.random.randint(0, hi))
                         emb = emb.clone(); emb[t0:t0 + w_] = 0.0
                     # channel mask: up to 10% of dims, contiguous
                     if D > 8 and np.random.rand() < feat_aug:
@@ -249,6 +265,7 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
         return out
 
     _CyoloModel.compute_spec = compute_spec
+    _CyoloModel._h1_patched = True
 
     # ---- 3. swap the window encoder ----------------------------------------
     _orig_cc_init = cond_mod.ContextConditioning.__init__

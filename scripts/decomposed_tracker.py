@@ -159,6 +159,12 @@ def particle_track(P, det_time, det_pitch, n_particles=1200, sigma_v=0.06,
         tot = w.sum()
         w = np.full(n_particles, 1.0 / n_particles) if tot <= 0 else w / tot
 
+        # MAP must be read BEFORE resampling: resampling sets every weight to
+        # 1/N, so a later argmax(w) returns index 0 -- an arbitrary particle.
+        # With obs_sharp=6 and 2000 particles that fires on most frames, which
+        # silently defeated the "MAP, not mean" design this filter is built on.
+        best = int(np.argmax(w))
+
         if 1.0 / np.sum(w ** 2) < n_particles / 2:
             pos = (rng.random() + np.arange(n_particles)) / n_particles
             idx = np.clip(np.searchsorted(np.cumsum(w), pos), 0, n_particles - 1)
@@ -168,7 +174,6 @@ def particle_track(P, det_time, det_pitch, n_particles=1200, sigma_v=0.06,
         # ---- output: MAP particle, not the weighted mean.  With two live
         # hypotheses (a repeated passage) the mean lands in the gap between
         # them, which is the failure this filter exists to avoid.
-        best = int(np.argmax(w))
         k = int(np.clip(np.searchsorted(onset_time_u, s[best]) - 1, 0, M - 1))
         out[f] = x_u[k]
 

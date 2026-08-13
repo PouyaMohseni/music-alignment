@@ -154,10 +154,15 @@ def iterate_dataset_boundary(network, optimizer, dataset, batch_size, seq_len, t
 
             with torch.no_grad():
                 rows = _staff_rows_from_logits(s_log.detach(), H)
-                # scale the decoded column back to the mask's width
-                scale = W / a_log.shape[1]
-                dec = boundary_decode_mask(a_log.detach(), dl.detach() * scale,
-                                           dr.detach() * scale, H, staff_row=rows)
+                # dl/dr are NORMALISED (fractions of width) and decode_boundary
+                # denormalises them by the HEAD's own width. Pre-scaling them by
+                # W/W_small made the offsets W/W_small times too large while the
+                # anchor and the clamp stayed in small-column units -- measured
+                # up to 20 px of full-res error, worst at the page edges where
+                # the clamp bites. The full-res mapping is done correctly by the
+                # nearest-upsample below; nothing needs scaling here.
+                dec = boundary_decode_mask(a_log.detach(), dl.detach(),
+                                           dr.detach(), H, staff_row=rows)
                 if dec.shape[-1] != W:
                     dec = torch.nn.functional.interpolate(dec, size=(H, W), mode='nearest')
             piece_stats = calculate_batch_stats(dec, y_batch, piece_stats, current_pipeline,
