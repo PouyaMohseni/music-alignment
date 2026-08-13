@@ -51,7 +51,24 @@ from pathlib import Path
 import numpy as np
 import torch
 
-MERT_DIM = 768
+MERT_DIM = 768          # default; overridden by the bank's actual width
+
+# CAPACITY IS THE BINDING CONSTRAINT, NOT REPRESENTATION QUALITY.
+# Measured on `room`, across every audio input we have tried:
+#     native mel        78-dim   -> 67.1
+#     MERT             768-dim   -> 56.6
+#     MERT+gated xattn 768+      -> 35.3
+#     MERT+xattn       768+      -> 19.3
+#     MERT+DINOv2      768+ViT   ->  2.6
+# Monotonically worse with more capacity, on 353 training pieces. H1 with the
+# 768-dim MERT tower confirmed the mechanism directly: at epoch 35 its train
+# frame-diff was 2.04 against a val frame-diff of 25.73, a 12.6x gap, while
+# native cyolo_sb+IR had val (4.48) BETTER than train (7.61) because its
+# waveform-level augmentation makes training the harder task.
+#
+# Hence `dim` is now read from the bank: the same machinery serves the 176-dim
+# AMT posteriorgram, which is both lower-capacity AND room-invariant by
+# measurement (0.001 F1 lost to the room on the same take).
 
 
 def _load_bank(emb_root: str) -> dict:
@@ -62,7 +79,8 @@ def _load_bank(emb_root: str) -> dict:
 
 
 def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
-                     aug_roots=None, aug_prob: float = 0.0):
+                     aug_roots=None, aug_prob: float = 0.0, dim: int = None,
+                     feat_aug: float = 0.0):
     """emb_roots: {dataset_dir: mert_emb_dir}. Call BEFORE load_dataset.
 
     aug_roots/aug_prob enable MULTI-CONDITION training: a deterministic
@@ -85,6 +103,13 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
 
     banks = {k: _load_bank(v) for k, v in emb_roots.items()}
     total = sum(len(b) for b in banks.values())
+
+    global MERT_DIM
+    if dim is None:
+        _probe = next(iter(next(iter(banks.values())).values()))
+        dim = int(np.load(_probe).shape[1])
+    MERT_DIM = dim
+    print(f'[H1] feature dim = {MERT_DIM} (read from the bank)', flush=True)
     print(f'[H1] MERT banks: ' +
           ', '.join(f'{k}->{len(v)} npy' for k, v in banks.items()), flush=True)
 
@@ -190,6 +215,34 @@ def patch_cyolo_mert(emb_roots, spec_out: int = 32, strict: bool = True,
                 # fast the score is traversed) but not its acoustics.
                 factor = float(np.random.uniform(0.5, 2.0))
                 emb = resample_frames(emb, factor)
+
+                if feat_aug > 0.0:
+                    # FEATURE-SPACE AUGMENTATION. Precomputing frozen features
+                    # removes most of what regularises this architecture: native
+                    # cyolo_sb+IR reaches val frame-diff BETTER than train
+                    # (4.48 vs 7.61) precisely because waveform IR + phase
+                    # vocoder make training the harder task, whereas H1 with
+                    # precomputed MERT hit train 2.04 / val 25.73 -- a 12.6x
+                    # overfit. SpecAugment-style masking plus feature noise is
+                    # the augmentation that IS available once the waveform is
+                    # gone. Applied only when tempo_aug is on, i.e. training.
+                    T, D = emb.shape
+                    g = torch.Generator(device='cpu')
+                    # time mask: up to 15% of the window, contiguous
+                    if T > 4 and np.random.rand() < feat_aug:
+                        w_ = max(1, int(0.15 * T * np.random.rand()))
+                        t0 = int(np.random.randint(0, max(1, T - w_)))
+                        emb = emb.clone(); emb[t0:t0 + w_] = 0.0
+                    # channel mask: up to 10% of dims, contiguous
+                    if D > 8 and np.random.rand() < feat_aug:
+                        w_ = max(1, int(0.10 * D * np.random.rand()))
+                        d0 = int(np.random.randint(0, max(1, D - w_)))
+                        emb = emb.clone(); emb[:, d0:d0 + w_] = 0.0
+                    # gaussian feature noise, scaled to the window's own spread
+                    if np.random.rand() < feat_aug:
+                        sd = float(emb.std()) * 0.1
+                        if sd > 0:
+                            emb = emb + torch.randn(emb.shape, generator=g) * sd
             out.append(emb)
         return out
 

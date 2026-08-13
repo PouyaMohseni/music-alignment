@@ -30,7 +30,20 @@ nvidia-smi | head -12
 
 CFG=${1:-cyolo_sb}
 AUG_PROB=${2:-0.5}
-TAG=H1_${CFG}_mert$([ "$AUG_PROB" != "0" ] && echo "_mc${AUG_PROB}")
+# H1_BANK selects the audio representation. The 176-dim AMT posteriorgram is the
+# LOW-CAPACITY option and, on this data, capacity is the binding constraint:
+# room accuracy fell monotonically with input dimension across every model we
+# ran (78-dim mel 67.1 > 768 MERT 56.6 > 768+xattn 35.3 > 19.3 > 2.6), and H1
+# with MERT overfit 12.6x (train frame-diff 2.04, val 25.73). The posteriorgram
+# is 4.4x smaller AND room-invariant by measurement.
+BANK=${H1_BANK:-mert}
+case "$BANK" in
+  mert) CLEAN=/scratch/pmohseni/mert_emb_cyolo;      DEG=/scratch/pmohseni/mert_emb_cyolo_ir ;;
+  post) CLEAN=/scratch/pmohseni/amt_post_cyolo;      DEG="" ;;
+  *) echo "FATAL: unknown H1_BANK=$BANK (mert|post)"; exit 1 ;;
+esac
+export H1_FEAT_AUG=${H1_FEAT_AUG:-0.5}
+TAG=H1_${CFG}_${BANK}$([ "$AUG_PROB" != "0" ] && echo "_mc${AUG_PROB}")$([ "$H1_FEAT_AUG" != "0" ] && echo "_fa${H1_FEAT_AUG}")
 
 cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc python/3.10 opencv/4.10.0
@@ -52,9 +65,9 @@ unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 # with >1 thread the pool deadlocks before the first batch.
 export OMP_NUM_THREADS=1
 
-export H1_EMB_MAP="$DATA/msmd_train=/scratch/pmohseni/mert_emb_cyolo/msmd_train;$DATA/msmd_valid=/scratch/pmohseni/mert_emb_cyolo/msmd_valid"
-if [ "$AUG_PROB" != "0" ]; then
-    export H1_AUG_MAP="$DATA/msmd_train=/scratch/pmohseni/mert_emb_cyolo_ir/msmd_train"
+export H1_EMB_MAP="$DATA/msmd_train=$CLEAN/msmd_train;$DATA/msmd_valid=$CLEAN/msmd_valid"
+if [ "$AUG_PROB" != "0" ] && [ -n "$DEG" ]; then
+    export H1_AUG_MAP="$DATA/msmd_train=$DEG/msmd_train"
     export H1_AUG_PROB=$AUG_PROB
     echo "multi-condition ON: p(degraded)=$AUG_PROB (train set only; validation stays clean"
     echo "  so val loss remains comparable with every other run)"
@@ -64,7 +77,7 @@ PARAM_FLAG=""
 LAST=$(find "$OUT/params" -name "*.pt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 [ -n "$LAST" ] && { LAST=$(readlink -f "$LAST"); echo "Resuming from $LAST"; PARAM_FLAG="--param_path $LAST"; }
 
-echo "=== $TAG: MERT tower in CYOLO detector (config=$CFG) ==="
+echo "=== $TAG: bank=$BANK feat_aug=$H1_FEAT_AUG (config=$CFG) ==="
 python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_train_h1_cyolo_mert.py \
     --train_sets "$DATA/msmd_train" \
     --val_sets   "$DATA/msmd_valid" \

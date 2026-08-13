@@ -52,7 +52,8 @@ if aug_map and aug_prob <= 0:
                        'bank would never be used, and the run would be reported '
                        'as multi-condition while training clean-only')
 
-patch_cyolo_mert(emb_map, aug_roots=aug_map, aug_prob=aug_prob)
+patch_cyolo_mert(emb_map, aug_roots=aug_map, aug_prob=aug_prob,
+                 feat_aug=float(os.environ.get('H1_FEAT_AUG', '0')))
 
 # Verify the swap took, rather than trusting that it did.
 import cyolo_score_following.dataset as _ds                       # noqa: E402
