@@ -1,0 +1,40 @@
+% Minimal ICASSP-compatible style (two-column, letter, 10pt).
+% NOT the official spconf.sty -- reproduced so the draft can be typeset and
+% read. For actual submission, replace this file with the official one from
+% the ICASSP author kit; the macro names and page geometry match, so main.tex
+% needs no changes.
+\ProvidesPackage{spconf}
+\RequirePackage{times}
+\RequirePackage[margin=0.75in,top=0.75in,bottom=1.0in]{geometry}
+\setlength{\columnsep}{0.33in}
+\setlength{\parindent}{1em}
+\twocolumn
+\sloppy
+
+\def\name#1{\gdef\@name{#1}}
+\def\address#1{\gdef\@address{#1}}
+\gdef\@name{}\gdef\@address{}
+
+\renewcommand{\maketitle}{%
+  \twocolumn[%
+    \begin{@twocolumnfalse}
+    \begin{center}
+      {\Large\bf \@title\par}\vskip 1.2em
+      {\large \@name\par}\vskip 0.4em
+      {\normalsize\it \@address\par}\vskip 1.6em
+    \end{center}
+    \end{@twocolumnfalse}
+  ]%
+}
+
+\renewenvironment{abstract}{%
+  \centerline{\bf ABSTRACT}\vspace{0.5em}\small}{\par\vspace{0.6em}}
+\newenvironment{keywords}{%
+  \vspace{0.2em}\noindent{\bf Index Terms}---\,\small}{\par\vspace{0.8em}}
+
+\def\ninept{\def\baselinestretch{.95}\let\normalsize\small\normalsize}
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+  {-1.0ex plus -0.6ex}{0.7ex}{\normalsize\bf\centering}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+  {-0.9ex plus -0.5ex}{0.5ex}{\normalsize\bf}}
+\endinput
