@@ -97,13 +97,26 @@ def main():
     print(f'  pieces improved: {int((d_pct > 0).sum())}/{len(rows)}   '
           f'unchanged: {int((d_pct == 0).sum())}   hurt: {int((d_pct < 0).sum())}')
 
-    # ---- paired bootstrap over pieces
+    # ---- paired bootstrap, CLUSTERED BY PIECE
+    # The recorder keys on file name, and a piece spans several score PAGES
+    # (ChopinFF__O9__nocturne appears 5 times, BachJS__BWV830 3 times) -- 16
+    # pieces render as 25 pages. Pages of one performance share a recording, a
+    # room, a player and a tempo, so resampling PAGES treats correlated units as
+    # independent and reports a CI that is too narrow. Resample whole pieces.
+    import re
+    clusters = {}
+    for k in keys:
+        clusters.setdefault(re.sub(r'_page_\d+$', '', k), []).append(k)
+    cnames = sorted(clusters)
+    print(f'\nclustering: {len(keys)} pages -> {len(cnames)} pieces '
+          f'(bootstrap resamples PIECES)')
+
     rng = np.random.default_rng(a.seed)
-    idx = np.arange(len(keys))
+    idx = np.arange(len(cnames))
     dmi, dma = [], []
     for _ in range(a.n_boot):
         s = rng.choice(idx, size=len(idx), replace=True)
-        ks = [keys[i] for i in s]
+        ks = [p for i in s for p in clusters[cnames[i]]]
         dmi.append(micro(C, ks) - micro(B, ks))
         dma.append(macro(C, ks) - macro(B, ks))
     for name, arr in (('MICRO', np.array(dmi)), ('MACRO', np.array(dma))):
