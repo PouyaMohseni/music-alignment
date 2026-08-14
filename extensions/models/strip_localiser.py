@@ -99,7 +99,7 @@ class StripBlock(nn.Module):
 
     def forward(self, x, z):
         x = self.conv(x)
-        if self.film is not None:
+        if self.film is not None and z is not None:
             x = self.film(x, z)
         return self.pool(x)
 
@@ -125,6 +125,7 @@ class StripLocaliser(nn.Module):
                                      pool_x=(1 if i == 0 else 2),
                                      pool_y=2))
         self.blocks = nn.ModuleList(blocks)
+        self.film_from = film_from
         c = chans[-1]
         self.col = nn.Sequential(
             nn.Conv1d(c, c, 3, padding=1), nn.GroupNorm(1, c), nn.ELU(False))
@@ -141,9 +142,31 @@ class StripLocaliser(nn.Module):
         self.bar = nn.Conv1d(c, 1, 3, padding=1) if n_bar_classes else None
         self.x_stride = 2 ** (n_blocks - 1)
 
-    def forward(self, strip: torch.Tensor, z: torch.Tensor):
+    def encode_strip(self, strip: torch.Tensor) -> torch.Tensor:
+        """Unconditioned trunk. Runs ONCE per piece and is cached.
+
+        This split is what makes a full-strip model trainable at all. The strip
+        is ~112 x 4500 (median), 6x the pixels of CYOLO's 416x416 page, and the
+        score does not change across the thousands of audio frames of a piece.
+        Re-running the trunk per frame would be that cost multiplied by the
+        frame count. FiLM lives only in the LATE blocks (film_from), so
+        everything below it is audio-independent and computed once.
+        """
         x = strip
-        for b in self.blocks:
+        for b in self.blocks[:self.film_from]:
+            x = b(x, None)
+        return x
+
+    def forward(self, strip: torch.Tensor, z: torch.Tensor, cached=None):
+        """`cached` is encode_strip's output, broadcast over the frames of the
+        piece it came from."""
+        if cached is None:
+            x = strip
+            for b in self.blocks[:self.film_from]:
+                x = b(x, None)
+        else:
+            x = cached
+        for b in self.blocks[self.film_from:]:
             x = b(x, z)
         x = x.mean(dim=2)                       # collapse y -> (N, C, W')
         x = self.col(x)
