@@ -26,6 +26,11 @@ import os
 
 _BATCH = {'file_names': None, 'add_per_staff': None, 'scale_factors': None}
 
+# Which detection classes the temporal filter is allowed to decode. Class 0 is
+# the tracked position -- the only thing this method is about. Classes 1 and 2
+# are the bar/system readouts eval_class scores separately.
+_CLASSES = {int(c) for c in os.environ.get('C2_CLASSES', '0').split(',') if c != ''}
+
 
 def patch_cyolo_temporal(lam: float = 1.0, fwd_px: float = 6.0, sigma_px: float = 18.0,
                          jump_logp: float = -6.0, topk: int = 32, warmup: int = 3):
@@ -45,6 +50,18 @@ def patch_cyolo_temporal(lam: float = 1.0, fwd_px: float = 6.0, sigma_px: float 
         if names is None:
             return _orig_get_max_box(prediction, class_id=class_id)
 
+        # ONLY the tracked position (class 0). eval_class calls this same
+        # function for class 1 (bar) and class 2 (system) to score its auxiliary
+        # readouts, so the unfixed patch ran the temporal filter three times per
+        # frame over ONE shared per-piece state: the note tracker's "previous
+        # position" was really the system box from the previous call, a bar box
+        # got a prior tuned for note motion, and the warmup counter advanced 3x
+        # too fast. That is why bar accuracy fell monotonically in lam
+        # (0.829 -> 0.791 -> 0.695 -> 0.496) while timing on those same frames
+        # stayed exact -- the boxes were right and the read-out was corrupted.
+        if class_id not in _CLASSES:
+            return _orig_get_max_box(prediction, class_id=class_id)
+
         aps = _BATCH['add_per_staff']
         sfs = _BATCH['scale_factors']
         out = []
@@ -58,7 +75,9 @@ def patch_cyolo_temporal(lam: float = 1.0, fwd_px: float = 6.0, sigma_px: float 
             # decide in the METRIC's coordinate space: boxes here are pre-scale,
             # and compute_batch_stats unrolls post-scale.
             boxes = sel[:, :4]
-            chosen = dec.decode(boxes * sf, sel[:, 4], names[xi],
+            # key state per (piece, class) even though only class 0 reaches here,
+            # so enabling another class cannot silently reintroduce the sharing
+            chosen = dec.decode(boxes * sf, sel[:, 4], f'{names[xi]}::{class_id}',
                                 staff_coords=staff_coords, add_per_staff=add_per_staff)
             out.append(chosen / sf)
         return torch.stack(out)
