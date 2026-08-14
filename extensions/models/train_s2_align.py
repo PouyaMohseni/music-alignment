@@ -118,6 +118,8 @@ def main():
     ap.add_argument('--step_sigma', type=float, default=3.0)
     ap.add_argument('--max_pieces', type=int, default=0, help='0 = all (subset probe)')
     ap.add_argument('--max_minutes', type=float, default=0)
+    ap.add_argument('--watchdog_min', type=float, default=20,
+                    help='abort if no training step completes in this many minutes')
     a = ap.parse_args()
 
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -144,15 +146,44 @@ def main():
     print(f'groups/epoch={len(samp)}  ({a.batch} chunks x {a.chunk} onsets each)', flush=True)
     if len(samp) == 0:
         raise RuntimeError(f'no groups: need >= {a.batch * a.chunk} onsets in a piece')
+    # SPAWN, not the default fork. By the time the DataLoader starts its workers
+    # the parent has initialised CUDA (torch.cuda.is_available / .to(dev)) and
+    # exercised the BLAS threadpool building the dataset. fork() copies those
+    # mutexes in whatever state they were in, so the child blocks forever the
+    # first time it calls into FFT/BLAS -- which is _log_mel, on every item.
+    # Observed exactly that: workers accumulated ~2.7 s of CPU, then all
+    # processes sat in futex_wait_queue with /dev/nvidiactl inherited, GPU at 0%
+    # for 33 minutes. spawn starts each worker from a clean interpreter.
+    kw = {}
+    if a.workers > 0:
+        import torch.multiprocessing as tmp
+        kw = dict(multiprocessing_context=tmp.get_context('spawn'),
+                  persistent_workers=True)
     dl = torch.utils.data.DataLoader(
         tr, batch_sampler=samp, num_workers=a.workers, collate_fn=collate_group,
-        persistent_workers=a.workers > 0, pin_memory=(dev == 'cuda'))
+        pin_memory=(dev == 'cuda'), **kw)
 
     model = MonotonicAligner().to(dev)
     print(f'params: {sum(p.numel() for p in model.parameters())/1e6:.2f}M', flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.epochs)
     stride = model.score.x_stride
+
+    # Watchdog. The fork deadlock above produced no output at all -- on the 24 h
+    # run that is 24 h of allocation spent on a futex. Fail loudly instead.
+    hb = {'n': 0, 't': time.time()}
+
+    def _watch():
+        while True:
+            time.sleep(60)
+            if time.time() - hb['t'] > a.watchdog_min * 60:
+                print(f'[WATCHDOG] no step completed in {a.watchdog_min:.0f} min '
+                      f'(steps so far: {hb["n"]}). Deadlock or pathological '
+                      f'slowness -- aborting so the failure is visible.', flush=True)
+                os._exit(3)
+    if a.watchdog_min > 0:
+        import threading
+        threading.Thread(target=_watch, daemon=True).start()
 
     t_start, best, stop = time.time(), 1e9, False
     for ep in range(a.epochs):
@@ -176,6 +207,7 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
                 tot += float(loss); n += 1
+                hb['n'], hb['t'] = hb['n'] + 1, time.time()
                 # A canary that prints nothing until epoch 0 ends is not a
                 # canary: the first epoch's length is exactly what is unknown.
                 if n <= 5 or n % 100 == 0:
