@@ -86,10 +86,17 @@ class StripFollowDataset(Dataset):
             sp = os.path.join(score_dir, p + '.npz')
             if not os.path.exists(sp):
                 continue
-            z = np.load(sp, allow_pickle=True)
+            # allow_pickle=False on purpose. The only pickled member is
+            # `coord2onset`, an object-array dict that convert.py:91 builds as
+            # the IDENTITY map `{i: i for i in range(N)}` after truncating
+            # coords and onset_frames together -- so coords[k] is onset[k] by
+            # construction and reading it back would tell us nothing. Loading
+            # it anyway cost us a hard failure: the NPZs were written under
+            # NumPy 2.x, whose pickles reference `numpy._core`, which does not
+            # exist in the 1.x interpreter this trains under.
+            z = np.load(sp, allow_pickle=False)
             coords = np.array(z['coords'], dtype=np.float32)
             onsets = np.array(z['onset_frames'], dtype=np.int64)
-            c2o = z['coord2onset'][0]
             # coords are [y, x, ...]; on a strip every y is the same row, so
             # only x carries information
             xs = coords[:, 1]
@@ -109,7 +116,7 @@ class StripFollowDataset(Dataset):
         if pi in self._strip_cache:
             return self._strip_cache[pi]
         z = np.load(os.path.join(self.score_dir, self.pieces[pi] + '.npz'),
-                    allow_pickle=True)
+                    allow_pickle=False)
         s = np.array(z['sheet'], dtype=np.float32) / 255.0
         s = 1.0 - s                                    # ink = high, as CYOLO does
         if self.strip_scale > 1:
