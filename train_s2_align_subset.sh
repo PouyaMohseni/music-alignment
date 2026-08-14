@@ -13,7 +13,8 @@
 set -uo pipefail
 cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
-source /scratch/pmohseni/venv_cpjku310/bin/activate
+# .venv, NOT venv_cpjku310 -- see train_s2_align.sh for why.
+source .venv/bin/activate
 export PYTHONPATH=/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export OMP_NUM_THREADS=4 PYTHONUNBUFFERED=1
 

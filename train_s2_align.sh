@@ -11,7 +11,11 @@
 set -uo pipefail
 cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc opencv
-source /scratch/pmohseni/venv_cpjku310/bin/activate
+# .venv, NOT venv_cpjku310. That venv exists for madmom/CPJKU compatibility and
+# S2 shares no code with that stack -- it imports only torch, librosa, scipy,
+# numpy, yaml. It also has no librosa (the strip dataset renders mel on the fly)
+# and NumPy 1.22, which cannot unpickle NPZs written under 2.x.
+source .venv/bin/activate
 export PYTHONPATH=/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export OMP_NUM_THREADS=6 PYTHONUNBUFFERED=1
 
