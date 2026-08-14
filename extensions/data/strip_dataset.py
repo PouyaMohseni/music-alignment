@@ -40,6 +40,8 @@ N_MELS = 78
 FRAME_SIZE = 2048
 HOP = int(round(SR / FPS))
 
+_NO_STRIP = torch.zeros(0)      # placeholder when return_strip=False
+
 
 def _log_mel(y: np.ndarray) -> np.ndarray:
     import librosa
@@ -57,12 +59,17 @@ class StripFollowDataset(Dataset):
 
     def __init__(self, score_dir, perf_dir, pieces, strip_scale=2, win=40,
                  ir_bank=None, ir_prob=0.5, tempo_range=(0.7, 1.4),
-                 augment=True, max_strip_w=24000):
+                 augment=True, max_strip_w=24000, return_strip=True):
         self.score_dir, self.perf_dir = score_dir, perf_dir
         self.strip_scale, self.win = strip_scale, win
         self.augment = augment
         self.ir_prob, self.tempo_range = ir_prob, tempo_range
         self.max_strip_w = max_strip_w
+        # S2 reads the strip once per piece in the MAIN process. Returning it
+        # per item too would ship ~5 MB through the worker pickle for every
+        # frame in the batch -- gigabytes of IPC to re-send an object that
+        # never changes within a piece. S1 still needs it, so this is a flag.
+        self.return_strip = return_strip
 
         self.irs = []
         if ir_bank and augment:
@@ -161,7 +168,7 @@ class StripFollowDataset(Dataset):
             mel = np.pad(mel, ((self.win - mel.shape[0], 0), (0, 0)))
         mel = mel[-self.win:]
 
-        strip = self._strip(pi)
+        strip = self._strip(pi) if self.return_strip else _NO_STRIP
         # target in DOWNSCALED strip pixels, matching the model's input
         return (strip, torch.from_numpy(mel),
                 torch.tensor(x_true / self.strip_scale, dtype=torch.float32),

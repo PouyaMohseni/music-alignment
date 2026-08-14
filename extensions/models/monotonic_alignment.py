@@ -68,9 +68,35 @@ import torch.nn.functional as F
 NEG_INF = -1e4          # finite, so gradients stay well-defined
 
 
+def step_log_prior(max_step: int, fwd_step: float, step_sigma: float,
+                   device=None, dtype=None) -> torch.Tensor:
+    """Log-prior over the per-step displacement s in {0, ..., max_step}.
+
+    A FLAT window over [x - max_step, x] -- which is what this file used at
+    first -- prices "stay" and "advance" identically. That leaves a hole the
+    probe walked straight into: against a fixed-column decoy of equal strength,
+    sitting on it forever is a genuinely optimal path, because nothing ever
+    charges for not moving. The decoder was not failing; the model was telling
+    the truth about a kernel that had no notion of forward motion.
+
+    So shape it, the way the one decode that actually works does: C2 scores
+    candidates under a Gaussian centred on expected forward motion (+3.5 on
+    room), not a flat window. `step_sigma` stays broad, so this expresses a mild
+    preference rather than a hard tempo assumption -- a held chord must still be
+    cheap, it just cannot be free forever.
+
+    Normalised, so it is a probability distribution over s and not a second
+    implicit temperature on the similarity matrix.
+    """
+    s = torch.arange(max_step + 1, device=device, dtype=dtype or torch.float32)
+    lp = -0.5 * ((s - fwd_step) / step_sigma) ** 2
+    return lp - lp.logsumexp(0)
+
+
 def forward_sum_loss(logits: torch.Tensor, anchors: torch.Tensor = None,
                      max_step: int = 8, jump_cost: float = 8.0,
-                     anchor_weight: float = 1.0):
+                     anchor_weight: float = 1.0, fwd_step: float = 1.5,
+                     step_sigma: float = 3.0):
     """Negative log-probability of all monotone paths through the score matrix.
 
     logits : (B, T, X) or (T, X). BATCHED ON PURPOSE: the recursion is a Python
@@ -100,20 +126,33 @@ def forward_sum_loss(logits: torch.Tensor, anchors: torch.Tensor = None,
     logp = F.log_softmax(logits, dim=2)
 
     a = logp[:, 0]                                    # (B, X)
+    # Running log-scale. The per-step max subtraction below keeps `a` bounded,
+    # but it is NOT free: it shifts the running total by a PARAMETER-DEPENDENT
+    # amount, so dropping it does not merely rescale the loss -- it adds
+    # `sum_t max_x a[t, x]` to the objective, whose gradient pushes the peak
+    # log-probability DOWN. That is an anti-confidence term pointing the exact
+    # wrong way. Carry the constant and add it back, so what we minimise is the
+    # true negative log-likelihood of the monotone-path set.
+    norm = torch.zeros(B, device=logits.device, dtype=logits.dtype)
+    w = step_log_prior(max_step, fwd_step, step_sigma,
+                       device=logits.device, dtype=logits.dtype)
     for t in range(1, T):
-        # predecessors x' in [x-max_step, x]: one shifted copy per step, stacked
-        shifts = [a]
+        # predecessors x' in [x-max_step, x]: one shifted copy per step, stacked,
+        # each weighted by how likely a displacement of that size is
+        shifts = [a + w[0]]
         for s in range(1, max_step + 1):
             sh = torch.full_like(a, NEG_INF)
-            sh[:, s:] = a[:, :-s]
+            sh[:, s:] = a[:, :-s] + w[s]
             shifts.append(sh)
         local = torch.logsumexp(torch.stack(shifts, 0), dim=0)     # (B, X)
         # a jump from anywhere, at a fixed cost -- repeats must stay reachable
         jump = (a.logsumexp(dim=1) - jump_cost)[:, None]
         a = logp[:, t] + torch.logaddexp(local, jump.expand_as(local))
-        a = a - a.max(dim=1, keepdim=True).values      # keep it bounded
+        c = a.max(dim=1, keepdim=True).values          # keep it bounded
+        a = a - c
+        norm = norm + c[:, 0]
 
-    loss = (-a.logsumexp(dim=1) / T).mean()
+    loss = (-(a.logsumexp(dim=1) + norm) / T).mean()
 
     if anchors is not None and anchor_weight > 0:
         valid = anchors >= 0
@@ -126,23 +165,27 @@ def forward_sum_loss(logits: torch.Tensor, anchors: torch.Tensor = None,
 
 @torch.no_grad()
 def causal_viterbi(logits: torch.Tensor, max_step: int = 8,
-                   jump_cost: float = 8.0) -> torch.Tensor:
+                   jump_cost: float = 8.0, fwd_step: float = 1.5,
+                   step_sigma: float = 3.0) -> torch.Tensor:
     """Online decode: at frame t use only frames <= t. Returns (T,) columns.
 
-    This is the same transition structure the loss was trained under, so
-    training and inference agree by construction -- unlike C2, which bolted a
-    prior onto a model that had never seen one.
+    Shares `step_log_prior` with the loss, so the transition structure the model
+    was trained under is the one it is decoded under -- unlike C2, which bolted
+    a prior onto a model that had never seen one. Any change to the kernel
+    therefore moves both, and they cannot silently drift apart.
     """
     T, X = logits.shape
     logp = F.log_softmax(logits, dim=1)
+    w = step_log_prior(max_step, fwd_step, step_sigma,
+                       device=logits.device, dtype=logits.dtype)
     a = logp[0].clone()
     out = torch.empty(T, dtype=torch.long, device=logits.device)
     out[0] = int(a.argmax())
     for t in range(1, T):
-        shifts = [a]
+        shifts = [a + w[0]]
         for s in range(1, max_step + 1):
             sh = torch.full_like(a, NEG_INF)
-            sh[s:] = a[:-s]
+            sh[s:] = a[:-s] + w[s]
             shifts.append(sh)
         local = torch.stack(shifts, 0).max(dim=0).values
         jump = a.max() - jump_cost
@@ -196,6 +239,21 @@ class FrameEncoder(nn.Module):
         h = self.temporal(h).transpose(1, 2)
         return F.normalize(self.proj(h), dim=-1)
 
+    def window_embed(self, win: torch.Tensor) -> torch.Tensor:
+        """(N, win, n_mels) -> (N, d): ONE embedding per audio window.
+
+        The dataset hands us, per annotated onset, the `win` mel frames ENDING
+        at that onset. So the axis we align along is the onset index, not the
+        mel-frame index, and each window must collapse to a single row of A.
+
+        We take the LAST position rather than a mean: the window ends at the
+        onset, so that position is the one whose receptive field is centred on
+        the event we are localising, and averaging would blend in the two
+        seconds of preceding context that the window deliberately carries only
+        as context. Nothing here sees past the onset, so the decode stays causal.
+        """
+        return self(win)[:, -1, :]
+
 
 class MonotonicAligner(nn.Module):
     def __init__(self, d: int = 128, n_mels: int = 78, tau: float = 0.07):
@@ -210,3 +268,14 @@ class MonotonicAligner(nn.Module):
         a = self.audio(mel)[0]                       # (T, d)
         b = cols if cols is not None else self.score(strip)[0]   # (X, d)
         return (a @ b.T) / self.tau
+
+    def align(self, windows: torch.Tensor, cols: torch.Tensor) -> torch.Tensor:
+        """(B, T, win, n_mels) x (X, d) -> (B, T, X) log-compatibility.
+
+        `cols` is passed in rather than recomputed because the strip is
+        audio-independent: one ColumnEncoder pass serves every chunk in the
+        group, and the whole point of grouping is that its cost is amortised.
+        """
+        B, T = windows.shape[:2]
+        a = self.audio.window_embed(windows.reshape(B * T, *windows.shape[2:]))
+        return (a.view(B, T, -1) @ cols.T) / self.tau
