@@ -81,6 +81,7 @@ class StripFollowDataset(Dataset):
         self.items = []          # (piece, frame_idx, target_col)
         self.pieces = []
         self._strip_cache, self._audio_cache = {}, {}
+        self._mel_cache, self._ir_cache = {}, {}
 
         for p in pieces:
             sp = os.path.join(score_dir, p + '.npz')
@@ -138,16 +139,24 @@ class StripFollowDataset(Dataset):
             self._audio_cache[pi] = y
         return y
 
-    def _augment_audio(self, y, rng):
-        from scipy.signal import fftconvolve
-        if self.irs and rng.random() < self.ir_prob:
+    def _ir(self, k):
+        """Decoded IR, cached. It was being re-read and re-resampled from disk on
+        EVERY augmented item -- 0.154 s each, measured, against a 0.292 s total
+        item cost. Six files that never change."""
+        if k not in self._ir_cache:
             import librosa
-            ir, _ = librosa.load(self.irs[rng.integers(0, len(self.irs))], sr=SR, mono=True)
+            ir, _ = librosa.load(self.irs[k], sr=SR, mono=True)
             pk = int(np.argmax(np.abs(ir)))
             ir = ir[pk:][:SR]                          # trim pre-delay: it would
             n = float(np.abs(ir).max())                # translate audio vs labels
-            if n > 0:
-                ir = ir / n
+            self._ir_cache[k] = (ir / n) if n > 0 else None
+        return self._ir_cache[k]
+
+    def _augment_audio(self, y, rng):
+        from scipy.signal import fftconvolve
+        if self.irs and rng.random() < self.ir_prob:
+            ir = self._ir(int(rng.integers(0, len(self.irs))))
+            if ir is not None:
                 # 'full' then truncate, NOT mode='same': 'same' advances the
                 # signal by (len(ir)-1)//2 samples relative to its onset labels,
                 # a 4-20 frame desync that made an entire IR experiment look
@@ -157,23 +166,52 @@ class StripFollowDataset(Dataset):
             y = y + rng.normal(0, float(np.abs(y).std()) * 0.02, len(y)).astype(np.float32)
         return y
 
+    def _piece_mel(self, pi):
+        """Log-mel of the WHOLE piece, augmented once, cached.
+
+        WHY PER PIECE AND NOT PER ITEM
+        ------------------------------
+        The original code drew a fresh IR and rendered a fresh mel for every
+        onset. Measured, that is 0.292 s per item -- 75 s for one 256-item group,
+        which is CPU-bound and therefore not something a GPU fixes. It made the
+        data pipeline, not the model, the cost of training.
+
+        It was also wrong on its own terms. A performance is recorded in ONE
+        room. Drawing an independent impulse response per NOTE models a player
+        who teleports between halls mid-phrase, which is not a thing, and it
+        does not even buy augmentation diversity -- that comes from redrawing
+        across epochs and pieces, which this still does, because a fresh draw
+        happens on every cache miss and the sampler visits each piece once per
+        epoch.
+
+        Rendering the piece once also removes the per-segment edge effects of
+        the old path: frame f of this mel is exactly time f/FPS, so an onset at
+        frame f indexes directly, with no offset to get wrong.
+        """
+        if pi in self._mel_cache:
+            return self._mel_cache[pi]
+        y = self._audio(pi)
+        if self.augment:
+            y = self._augment_audio(y, np.random.default_rng(random.randrange(1 << 30)))
+        mel = _log_mel(y)
+        if len(self._mel_cache) >= 4:                  # small LRU: a miss is a
+            self._mel_cache.pop(next(iter(self._mel_cache)))   # fresh IR draw
+        self._mel_cache[pi] = mel
+        return mel
+
     def __getitem__(self, i):
         pi, frame, x_true = self.items[i]
-        rng = np.random.default_rng(random.randrange(1 << 30))
 
-        y = self._audio(pi)
-        t_end = FRAME_SIZE + int(frame * HOP)
-        t_start = max(0, t_end - (self.win + 2) * HOP - FRAME_SIZE)
-        seg = y[t_start:t_end]
-        if len(seg) < FRAME_SIZE + HOP:
-            seg = np.pad(seg, (FRAME_SIZE + HOP - len(seg), 0))
-        if self.augment:
-            seg = self._augment_audio(seg, rng)
-
-        mel = _log_mel(seg)                            # (T, 78)
-        if mel.shape[0] < self.win:
-            mel = np.pad(mel, ((self.win - mel.shape[0], 0), (0, 0)))
-        mel = mel[-self.win:]
+        # librosa's default center=True puts frame f at sample f*HOP, and
+        # onset_frames is round(onset_sec * FPS) with FPS = SR/HOP -- so frame f
+        # IS time f/FPS and the onset indexes directly. The window ends at the
+        # onset, so nothing here sees past it.
+        full = self._piece_mel(pi)                     # (T_piece, 78)
+        end = min(int(frame) + 1, full.shape[0])
+        mel = full[max(0, end - self.win):end]
+        if mel.shape[0] < self.win:                    # pad at the START, so the
+            mel = np.pad(mel, ((self.win - mel.shape[0], 0), (0, 0)))  # onset
+        mel = np.ascontiguousarray(mel)                # stays at the last frame
 
         strip = self._strip(pi) if self.return_strip else _NO_STRIP
         # target in DOWNSCALED strip pixels, matching the model's input

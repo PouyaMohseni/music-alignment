@@ -59,23 +59,33 @@ class ChunkGroupSampler(torch.utils.data.Sampler):
     """
 
     def __init__(self, dataset, chunk, batch, shuffle=True):
-        self.groups = []
+        self.by_piece = []           # [(pi, [group, group, ...]), ...]
         for pi in range(len(dataset.pieces)):
             chs = chunks_for_piece(dataset, pi, chunk)
-            for i in range(0, len(chs) - batch + 1, batch):
-                grp = chs[i:i + batch]
-                self.groups.append((pi, [j for c in grp for j in c]))
+            gs = [[j for c in chs[i:i + batch] for j in c]
+                  for i in range(0, len(chs) - batch + 1, batch)]
+            if gs:
+                self.by_piece.append((pi, gs))
         self.shuffle = shuffle
 
     def __iter__(self):
-        order = list(range(len(self.groups)))
+        # Shuffle the PIECE order, but keep one piece's groups adjacent. The
+        # dataset renders and caches a whole augmented piece at a time, so a
+        # globally shuffled order makes every group a cache miss and pays the
+        # render again. Randomness that matters (which pieces follow which, and
+        # the IR drawn for each) is untouched.
+        order = list(range(len(self.by_piece)))
         if self.shuffle:
             random.shuffle(order)
-        for g in order:
-            yield self.groups[g][1]
+        for p in order:
+            gs = list(self.by_piece[p][1])
+            if self.shuffle:
+                random.shuffle(gs)
+            for g in gs:
+                yield g
 
     def __len__(self):
-        return len(self.groups)
+        return sum(len(gs) for _pi, gs in self.by_piece)
 
 
 def collate_group(batch):
