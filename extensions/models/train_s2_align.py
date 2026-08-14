@@ -149,6 +149,7 @@ def main():
         model.train(); tot, n, oom = 0.0, 0, 0
         for mels, tgts, pi in dl:
             B = mels.shape[0] // a.chunk
+            t_step = time.time()
             try:
                 strip = tr._strip(pi)[None].to(dev)
                 cols = model.score(strip)[0]                       # (X, d), ONCE
@@ -165,6 +166,12 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
                 tot += float(loss); n += 1
+                # A canary that prints nothing until epoch 0 ends is not a
+                # canary: the first epoch's length is exactly what is unknown.
+                if n <= 5 or n % 100 == 0:
+                    print(f'  [ep{ep} step {n}] {tr.pieces[pi][:26]:26s} '
+                          f'X={cols.shape[0]:5d} loss={float(loss):7.4f} '
+                          f'{time.time()-t_step:5.2f}s', flush=True)
             except torch.cuda.OutOfMemoryError:
                 # the widest strips are ~20k columns; skip rather than die, and
                 # report the count so --strip_scale can be raised if it is common
