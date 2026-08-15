@@ -25,6 +25,17 @@ elif KIND == 'viterbi':
     common['bin_px'] = float(os.environ.get('VIT_BIN', '8.0'))
     common['band_px'] = float(os.environ.get('VIT_BAND', '400.0'))
 
+# probes must be installed BEFORE the search patch, so Detect/FiLM are already
+# wrapped by the time anything reads their outputs
+from extensions.hooks.cyolo_probe_patch import configure, patch_probes
+
+_drop = [s for s in os.environ.get('DROP_SCALES', '').split(',') if s != '']
+configure(drop_scales=_drop,
+          film_scale=float(os.environ.get('FILM_SCALE', '1.0')),
+          sys_constrain=float(os.environ.get('SYS_SLACK', '0')))
+if _drop or os.environ.get('FILM_SCALE', '1.0') != '1.0':
+    patch_probes()
+
 from extensions.hooks.cyolo_search_patch import patch_cyolo_search
 
 patch_cyolo_search(kind=KIND, **common)
