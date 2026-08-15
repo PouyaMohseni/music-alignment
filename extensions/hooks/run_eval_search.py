@@ -37,6 +37,11 @@ configure(drop_scales=_drop,
 if _drop or os.environ.get('FILM_SCALE', '1.0') != '1.0':
     patch_probes()
 patch_int_scale_width()
+_zmask = os.environ.get('Z_MASK', 'none')
+if _zmask != 'none':
+    from extensions.hooks.cyolo_probe_patch import patch_z_mask, set_z_mask
+    set_z_mask(_zmask)
+    patch_z_mask()
 
 from extensions.hooks.cyolo_search_patch import patch_cyolo_search
 

@@ -20,6 +20,7 @@ _BATCH = {'file_names': None, 'add_per_staff': None, 'scale_factors': None}
 _CLASSES = {int(c) for c in os.environ.get('C2_CLASSES', '0').split(',') if c != ''}
 # P-SYS: pin the note to the predicted system box (slack in pixels, 0 = off)
 _SYS_SLACK = float(os.environ.get('SYS_SLACK', '0'))
+_BAR_SLACK = float(os.environ.get('BAR_SLACK', '0'))
 
 
 def patch_cyolo_search(kind='beam', **kw):
@@ -55,6 +56,9 @@ def patch_cyolo_search(kind='beam', **kw):
             if class_id == 0 and _SYS_SLACK > 0:
                 from extensions.hooks.cyolo_probe_patch import system_filter
                 sel = system_filter(sel, x, _SYS_SLACK)
+            if class_id == 0 and _BAR_SLACK > 0:
+                from extensions.hooks.cyolo_probe_patch import bar_filter
+                sel = bar_filter(sel, x, _BAR_SLACK)
             chosen = dec.decode(sel[:, :4] * sf, sel[:, 4], f'{names[xi]}::{class_id}',
                                 staff_coords=staff_coords, add_per_staff=add_per_staff)
             out.append(chosen / sf)
