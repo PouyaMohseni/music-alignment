@@ -74,8 +74,10 @@ class BeamDecoder:
 
     def __init__(self, beam: int = 8, lam: float = 1.0, fwd_px: float = 6.0,
                  sigma_px: float = 18.0, jump_logp: float = -6.0,
-                 topk: int = 32, warmup: int = 3, discount: float = 1.0):
+                 topk: int = 32, warmup: int = 3, discount: float = 1.0,
+                 cluster_px: float = 0.0):
         """
+        cluster_px  radius for EVIDENCE POOLING (0 = off, decoder unchanged).
         discount  fading memory on the accumulated path score, in [0, 1].
 
         This is not a tuning knob, it is the difference between a working
@@ -94,7 +96,7 @@ class BeamDecoder:
         finite half-life, so evidence can still overturn a wrong commit.
         """
         self.beam, self.lam, self.topk, self.warmup = beam, lam, topk, warmup
-        self.discount = discount
+        self.discount, self.cluster_px = discount, cluster_px
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp)
         self._state = {}          # piece -> (scores, xs, boxes, n_seen)
 
@@ -104,6 +106,42 @@ class BeamDecoder:
         else:
             self._state.pop(piece, None)
 
+    def _pool(self, boxes, obj, xs):
+        """EVIDENCE POOLING -- treat co-located detections as one hypothesis.
+
+        The detector fires several anchors on the same notehead. A bare argmax
+        over objectness asks "which single anchor is most confident?", when the
+        question we actually want answered is "which POSITION has the most
+        evidence behind it". A spot backed by four medium detections is stronger
+        evidence than one backed by a single slightly-higher spike, and the
+        current rule cannot express that difference at all.
+
+        So bin candidates by unrolled x, sum their probability mass per bin, and
+        represent each bin by its objectness-weighted centroid. Summing in
+        PROBABILITY space rather than log space is the point -- it is the total
+        mass at that location. The centroid also averages several continuous box
+        centres for one note, which cuts the variance of any single anchor's
+        regression.
+
+        cluster_px = 0 disables this and the decoder is bit-identical to before.
+        """
+        if self.cluster_px <= 0 or len(xs) < 2:
+            return boxes, obj, xs
+        order = np.argsort(xs)
+        gb, go, gx = [], [], []
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and xs[order[j + 1]] - xs[order[i]] <= self.cluster_px:
+                j += 1
+            grp = order[i:j + 1]
+            w = np.clip(obj[grp], 1e-8, None).astype(np.float64)
+            gb.append(np.average(boxes[grp], axis=0, weights=w))
+            go.append(min(float(w.sum()), 1.0 - 1e-6))   # pooled mass stays a probability
+            gx.append(float(np.average(xs[grp], weights=w)))
+            i = j + 1
+        return np.stack(gb), np.array(go), np.array(gx)
+
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
@@ -112,6 +150,11 @@ class BeamDecoder:
         boxes = cand_xywh[idx]
         log_obj = torch.log(obj.clamp_min(1e-8)).cpu().numpy()
         xs = np.array([_unroll(b, staff_coords, add_per_staff) for b in boxes])
+
+        if self.cluster_px > 0:
+            bnp, onp, xs = self._pool(boxes.cpu().numpy(), obj.cpu().numpy(), xs)
+            boxes = torch.as_tensor(bnp, dtype=cand_xywh.dtype, device=cand_xywh.device)
+            log_obj = np.log(np.clip(onp, 1e-8, None))
 
         st = self._state.get(piece)
         if st is None or st[3] < self.warmup:

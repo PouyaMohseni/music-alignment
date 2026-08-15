@@ -21,6 +21,7 @@ common = dict(lam=float(os.environ.get('C2_LAM', '1.0')),
               topk=int(os.environ.get('C2_TOPK', '32')))
 if KIND == 'beam':
     common['beam'] = int(os.environ.get('BEAM', '8'))
+    common['cluster_px'] = float(os.environ.get('CLUSTER_PX', '0'))
 elif KIND == 'viterbi':
     common['bin_px'] = float(os.environ.get('VIT_BIN', '8.0'))
     common['band_px'] = float(os.environ.get('VIT_BAND', '400.0'))
