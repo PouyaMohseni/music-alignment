@@ -27,7 +27,7 @@ run () {  # tag  [extra env already exported]
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
         --scale_width ${SW:-416} --only_onsets 2>&1 \
-        | grep -vE "it/s\]|it\]" | grep -E "^<= 0.5|^Average accuracy for (Bar|System)|Error|Traceback|^\\s+File |ModuleNotFound|RuntimeError|\\[PROBE\\]"
+        | grep -vE "it/s\]|it\]" | grep -E "^<= 0.5|^Average accuracy for (Bar|System)|[Ee]rror|Traceback|^\\s+File |ModuleNotFound|RuntimeError|\\[PROBE\\]"
 }
 reset_env () { export DROP_SCALES="" FILM_SCALE=1.0 SYS_SLACK=0 SW=416; }
 

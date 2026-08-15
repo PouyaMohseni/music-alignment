@@ -104,3 +104,29 @@ def system_filter(sel_note, prediction_row, slack):
     lo, hi = cy - ch / 2 - slack, cy + ch / 2 + slack
     keep = (sel_note[:, 1] >= lo) & (sel_note[:, 1] <= hi)
     return sel_note[keep] if int(keep.sum()) > 0 else sel_note
+
+
+def patch_int_scale_width():
+    """Make --scale_width usable at all.
+
+    eval.py:23 declares `--scale_width type=float, default=416` -- an INT
+    default with a float parser. Omit the flag and cv2 gets ints and is happy;
+    pass it, even at its own default value, and data_utils.py:104 calls
+    cv2.resize(score, (416.0, 416.0)) which raises cv2.error. So the option has
+    never been usable, which is very likely why input resolution has never been
+    varied in this codebase.
+
+    eval.py does `from ...dataset import load_dataset`, and that import runs
+    when runpy executes it -- after this patch -- so rebinding the module
+    attribute here is enough.
+    """
+    import cyolo_score_following.dataset as ds
+
+    _orig = ds.load_dataset
+
+    def load_dataset(paths, augment=False, scale_width=416, **kw):
+        return _orig(paths, augment=augment, scale_width=int(scale_width), **kw)
+
+    ds.load_dataset = load_dataset
+    print('[PROBE] --scale_width coerced to int (upstream passes a float to cv2)',
+          flush=True)
