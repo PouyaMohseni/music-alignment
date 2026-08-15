@@ -74,8 +74,27 @@ class BeamDecoder:
 
     def __init__(self, beam: int = 8, lam: float = 1.0, fwd_px: float = 6.0,
                  sigma_px: float = 18.0, jump_logp: float = -6.0,
-                 topk: int = 32, warmup: int = 3):
+                 topk: int = 32, warmup: int = 3, discount: float = 1.0):
+        """
+        discount  fading memory on the accumulated path score, in [0, 1].
+
+        This is not a tuning knob, it is the difference between a working
+        online tracker and a frozen one. Textbook beam search accumulates path
+        log-likelihood without bound, which is correct when you decode a whole
+        sequence offline and read the best path at the end. Here we must EMIT A
+        POSITION EVERY FRAME, and the accumulated spread grows without limit:
+        after a few hundred frames a leading hypothesis is ahead by hundreds of
+        nats while one frame of fresh evidence is worth a few, so the beam can
+        never revise itself. Wider beams then decode a stale commitment with
+        more conviction -- which is exactly the monotonic degradation measured
+        (84.7 / 84.3 / 84.3 / 83.8 / 83.8 for beam 1/4/8/16/32).
+
+        discount=0 discards history entirely and reduces to C2's greedy rule;
+        discount=1 is textbook beam search. Anything between gives the past a
+        finite half-life, so evidence can still overturn a wrong commit.
+        """
         self.beam, self.lam, self.topk, self.warmup = beam, lam, topk, warmup
+        self.discount = discount
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp)
         self._state = {}          # piece -> (scores, xs, boxes, n_seen)
 
@@ -105,7 +124,8 @@ class BeamDecoder:
         h_scores, h_xs, _h_boxes, n_seen = st
         # (H, K): every hypothesis extended by every candidate
         d = xs[None, :] - h_xs[:, None]
-        total = h_scores[:, None] + log_obj[None, :] + self.lam * self.prior(d)
+        total = (self.discount * h_scores[:, None]
+                 + log_obj[None, :] + self.lam * self.prior(d))
 
         flat = total.ravel()
         take = min(self.beam * 4, flat.size)
@@ -141,10 +161,15 @@ class BandedViterbi:
 
     def __init__(self, bin_px: float = 8.0, band_px: float = 400.0, lam: float = 1.0,
                  fwd_px: float = 6.0, sigma_px: float = 18.0, jump_logp: float = -6.0,
-                 topk: int = 32, warmup: int = 3, floor_logp: float = -12.0):
+                 topk: int = 32, warmup: int = 3, floor_logp: float = -12.0,
+                 discount: float = 1.0):
+        # same unbounded-accumulation problem as the beam: `a` sums evidence
+        # over the whole piece, so the belief hardens until fresh frames cannot
+        # move it. Discounting gives the past a finite half-life.
         self.bin_px, self.band_px = bin_px, band_px
         self.lam, self.topk, self.warmup = lam, topk, warmup
         self.floor_logp = floor_logp
+        self.discount = discount
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp)
         self._state = {}          # piece -> (a, x0, n_seen)
 
@@ -181,7 +206,7 @@ class BandedViterbi:
             a = e.copy()
             n = 1 if st is None else st[2] + 1
         else:
-            a_prev, prev_c, n = st[0], st[1], st[2]
+            a_prev, prev_c, n = st[0] * self.discount, st[1], st[2]
             # re-centre the previous state onto the new grid
             shift = int(round((prev_c - centre) / self.bin_px))
             a_old = np.full(n_bins, NEG_INF)
