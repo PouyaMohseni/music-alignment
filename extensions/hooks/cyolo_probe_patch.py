@@ -152,20 +152,33 @@ def set_z_mask(mask):
     print(f'[PROBE] z mask = {mask}', flush=True)
 
 
+class _MaskedZ(torch.nn.Module):
+    """z_enc sees cat(LSTM hidden [:H], present-window encoding [H:]); zero one
+    half to find out which one the detector is actually steered by.
+
+    Must be an nn.Module: ContextConditioning holds z_enc in `_modules`, and
+    nn.Module.__setattr__ raises TypeError on assigning a plain function there.
+    That is what killed the first run of this probe.
+    """
+
+    def __init__(self, orig, hidden_size):
+        super().__init__()
+        self.orig = orig
+        self.H = hidden_size
+
+    def forward(self, v):
+        m = _ZCFG['mask']
+        if m == 'hist':          # drop the LSTM history, keep the present
+            v = torch.cat([torch.zeros_like(v[..., :self.H]), v[..., self.H:]], -1)
+        elif m == 'now':         # drop the present, keep only history
+            v = torch.cat([v[..., :self.H], torch.zeros_like(v[..., self.H:])], -1)
+        return self.orig(v)
+
+
 def _wrap_z(self):
     if getattr(self, '_z_wrapped', False):
         return
-    orig, H = self.z_enc, self.seq_model.hidden_size
-
-    def masked(v):
-        m = _ZCFG['mask']
-        if m == 'hist':          # drop the LSTM history, keep the present
-            v = torch.cat([torch.zeros_like(v[..., :H]), v[..., H:]], -1)
-        elif m == 'now':         # drop the present, keep only history
-            v = torch.cat([v[..., :H], torch.zeros_like(v[..., H:])], -1)
-        return orig(v)
-
-    self.z_enc = masked
+    self.z_enc = _MaskedZ(self.z_enc, self.seq_model.hidden_size)
     self._z_wrapped = True
 
 

@@ -53,6 +53,26 @@ import cyolo_score_following.utils.general as _g
 if not getattr(_g, '_search_patched', False) or not getattr(_d, '_search_iterate_patched', False):
     raise RuntimeError('search patch did not take')
 
+# architecture probes: recurrence timing, then the candidate-ceiling recorder.
+# the oracle probe must go LAST so its get_max_box wrapper sees the same raw
+# candidate tensor the decoder is handed.
+_anchor = os.environ.get('ANCHOR', 'start')
+_window = int(os.environ.get('WINDOW', '0'))
+if _anchor != 'start' or _window:
+    from extensions.hooks import cyolo_recur_patch as _rec
+    _rec.configure(anchor=_anchor, window=_window)
+    _rec.patch_encode_samples()
+    from cyolo_score_following.models.conditioning_networks import ContextConditioning
+    if not getattr(ContextConditioning, '_recur_patched', False):
+        raise RuntimeError('recur patch did not take')
+
+if os.environ.get('ORACLE', '0') == '1':
+    from extensions.hooks import cyolo_oracle_probe as _orc
+    _orc.patch_oracle()
+    if not getattr(_d, '_oracle_patched', False):
+        raise RuntimeError('oracle patch did not take')
+    atexit.register(lambda: _orc.dump(os.environ['ORACLE_OUT']))
+
 atexit.register(lambda: dump(os.environ['REC_OUT']))
 
 _EVAL = os.path.join(_CY, 'cyolo_score_following', 'eval.py')
