@@ -18,7 +18,10 @@ common = dict(lam=float(os.environ.get('C2_LAM', '1.0')),
               fwd_px=float(os.environ.get('C2_FWD', '6.0')),
               sigma_px=float(os.environ.get('C2_SIGMA', '18.0')),
               jump_logp=float(os.environ.get('C2_JUMP', '-6.0')),
-              topk=int(os.environ.get('C2_TOPK', '32')))
+              topk=int(os.environ.get('C2_TOPK', '32')),
+              mu_pow=float(os.environ.get('TIME_MU_POW', '0')),
+              sig_pow=float(os.environ.get('TIME_SIG_POW', '0')),
+              ref_frames=float(os.environ.get('TIME_REF', '5')))
 if KIND == 'beam':
     common['beam'] = int(os.environ.get('BEAM', '8'))
     common['cluster_px'] = float(os.environ.get('CLUSTER_PX', '0'))

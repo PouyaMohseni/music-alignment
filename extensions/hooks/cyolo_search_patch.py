@@ -16,11 +16,37 @@ from __future__ import annotations
 
 import os
 
-_BATCH = {'file_names': None, 'add_per_staff': None, 'scale_factors': None}
+_BATCH = {'file_names': None, 'add_per_staff': None, 'scale_factors': None,
+          'frames': None}
 _CLASSES = {int(c) for c in os.environ.get('C2_CLASSES', '0').split(',') if c != ''}
 # P-SYS: pin the note to the predicted system box (slack in pixels, 0 = off)
 _SYS_SLACK = float(os.environ.get('SYS_SLACK', '0'))
 _BAR_SLACK = float(os.environ.get('BAR_SLACK', '0'))
+
+
+def patch_batch_frames():
+    """Carry the spectrogram frame index into the batch.
+
+    SequenceDataset.__getitem__ already emits `t` (the audio sample the frame
+    ends at) but CustomBatch.__init__ never copies it, so nothing downstream can
+    tell how much time separates two scored steps. Under --only_onsets that gap
+    is the whole point: non-onset frames are dropped from the dataset, so
+    consecutive steps are one to sixty-four frames apart.
+    """
+    import cyolo_score_following.dataset as ds_mod
+    from cyolo_score_following.utils.data_utils import FRAME_SIZE, HOP_SIZE
+
+    if getattr(ds_mod.CustomBatch, '_frames_patched', False):
+        return
+    _orig_init = ds_mod.CustomBatch.__init__
+
+    def __init__(self, batch):
+        _orig_init(self, batch)
+        self.frames = [int((x['t'] - FRAME_SIZE) // HOP_SIZE) for x in batch]
+
+    ds_mod.CustomBatch.__init__ = __init__
+    ds_mod.CustomBatch._frames_patched = True
+    print('[SEARCH] batch carries frame index', flush=True)
 
 
 def patch_cyolo_search(kind='beam', **kw):
@@ -29,6 +55,8 @@ def patch_cyolo_search(kind='beam', **kw):
     import cyolo_score_following.dataset as ds_mod
     import cyolo_score_following.utils.general as gen_mod
     from extensions.heads.cyolo_beam_decode import BandedViterbi, BeamDecoder
+
+    patch_batch_frames()
 
     if kind == 'beam':
         dec = BeamDecoder(**kw)
@@ -59,8 +87,10 @@ def patch_cyolo_search(kind='beam', **kw):
             if class_id == 0 and _BAR_SLACK > 0:
                 from extensions.hooks.cyolo_probe_patch import bar_filter
                 sel = bar_filter(sel, x, _BAR_SLACK)
+            frames = _BATCH['frames']
             chosen = dec.decode(sel[:, :4] * sf, sel[:, 4], f'{names[xi]}::{class_id}',
-                                staff_coords=staff_coords, add_per_staff=add_per_staff)
+                                staff_coords=staff_coords, add_per_staff=add_per_staff,
+                                frame=(frames[xi] if frames is not None else None))
             out.append(chosen / sf)
         return torch.stack(out)
 
@@ -86,6 +116,7 @@ def patch_cyolo_search(kind='beam', **kw):
                     _BATCH['file_names'] = data.file_names
                     _BATCH['add_per_staff'] = data.add_per_staff
                     _BATCH['scale_factors'] = data.scale_factors
+                    _BATCH['frames'] = getattr(data, 'frames', None)
                     yield data
 
         try:

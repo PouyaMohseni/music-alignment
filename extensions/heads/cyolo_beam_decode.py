@@ -54,18 +54,53 @@ def _unroll(box, staff_coords, add_per_staff) -> float:
 
 
 class _TransitionPrior:
-    """Heavy-tailed prior over per-frame displacement in unrolled pixels.
+    """Heavy-tailed prior over per-STEP displacement in unrolled pixels.
 
-    Identical to C2's, deliberately: the search strategy is the variable under
-    test, so the scoring function must be held fixed for the comparison to mean
-    anything.
+    TIME AWARENESS
+    --------------
+    The prior was written as if consecutive scored frames were equally spaced.
+    Under --only_onsets they are not: load_dataset DROPS every non-onset frame,
+    so a "step" is one onset to the next, and measured over the 16 room pieces
+    (4007 steps) those gaps run
+
+        p1 = 1 frame (0.05 s)   p50 = 5 (0.25 s)   p99 = 19 (0.95 s)   max = 64 (3.2 s)
+
+    A fixed fwd_px=6 / sigma_px=18 therefore expects the same 6 px of travel and
+    allows the same 18 px of slack whether 50 ms or 3.2 s of music has gone by.
+    For a piece moving at a roughly steady tempo the mean displacement is
+    PROPORTIONAL to elapsed time, so the prior actively fights the largest real
+    jumps -- exactly the steps where a tracker is most likely to be lost.
+
+    mu_pow / sig_pow set how mean and width scale with the step ratio
+    s = dframes / ref_frames:
+
+        mu  = fwd_px   * s**mu_pow
+        sig = sigma_px * s**sig_pow
+
+    mu_pow=1 is constant tempo. sig_pow=0.5 is a random walk in tempo, sig_pow=1
+    is multiplicative tempo noise. BOTH ZERO REPRODUCES THE SHIPPED PRIOR
+    EXACTLY, so the control arm is bit-identical rather than merely close.
     """
 
-    def __init__(self, fwd_px=6.0, sigma_px=18.0, jump_logp=-6.0):
+    def __init__(self, fwd_px=6.0, sigma_px=18.0, jump_logp=-6.0,
+                 mu_pow=0.0, sig_pow=0.0, ref_frames=5.0, clip=(0.2, 8.0)):
         self.fwd_px, self.sigma_px, self.jump_logp = fwd_px, sigma_px, jump_logp
+        self.mu_pow, self.sig_pow = mu_pow, sig_pow
+        self.ref_frames, self.clip = ref_frames, clip
 
-    def __call__(self, d):
-        near = -0.5 * ((d - self.fwd_px) / self.sigma_px) ** 2
+    @property
+    def time_aware(self):
+        return self.mu_pow != 0.0 or self.sig_pow != 0.0
+
+    def scale_of(self, dframes):
+        if dframes is None or not self.time_aware:
+            return 1.0
+        return float(np.clip(dframes / self.ref_frames, *self.clip))
+
+    def __call__(self, d, s=1.0):
+        mu = self.fwd_px * s ** self.mu_pow
+        sg = self.sigma_px * s ** self.sig_pow
+        near = -0.5 * ((d - mu) / sg) ** 2
         return np.maximum(near, self.jump_logp)
 
 
@@ -75,7 +110,8 @@ class BeamDecoder:
     def __init__(self, beam: int = 8, lam: float = 1.0, fwd_px: float = 6.0,
                  sigma_px: float = 18.0, jump_logp: float = -6.0,
                  topk: int = 32, warmup: int = 3, discount: float = 1.0,
-                 cluster_px: float = 0.0):
+                 cluster_px: float = 0.0, mu_pow: float = 0.0,
+                 sig_pow: float = 0.0, ref_frames: float = 5.0):
         """
         cluster_px  radius for EVIDENCE POOLING (0 = off, decoder unchanged).
         discount  fading memory on the accumulated path score, in [0, 1].
@@ -97,14 +133,33 @@ class BeamDecoder:
         """
         self.beam, self.lam, self.topk, self.warmup = beam, lam, topk, warmup
         self.discount, self.cluster_px = discount, cluster_px
-        self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp)
+        self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
+                                      mu_pow=mu_pow, sig_pow=sig_pow,
+                                      ref_frames=ref_frames)
         self._state = {}          # piece -> (scores, xs, boxes, n_seen)
+        self._last_frame = {}     # piece -> spectrogram frame of the last step
 
     def reset(self, piece=None):
         if piece is None:
             self._state = {}
+            self._last_frame = {}
         else:
             self._state.pop(piece, None)
+            self._last_frame.pop(piece, None)
+
+    def _step_scale(self, piece, frame):
+        """Ratio of this step's elapsed time to the reference step.
+
+        Returns 1.0 whenever the frame index is unavailable or the prior is not
+        time-aware, so an unpatched dataloader degrades to the shipped
+        behaviour instead of silently inventing a scale."""
+        if frame is None or not self.prior.time_aware:
+            return 1.0
+        prev = self._last_frame.get(piece)
+        self._last_frame[piece] = frame
+        if prev is None or frame <= prev:
+            return 1.0
+        return self.prior.scale_of(frame - prev)
 
     def _pool(self, boxes, obj, xs):
         """EVIDENCE POOLING -- treat co-located detections as one hypothesis.
@@ -142,9 +197,11 @@ class BeamDecoder:
             i = j + 1
         return np.stack(gb), np.array(go), np.array(gx)
 
-    def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None):
+    def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
+               frame=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
+        s = self._step_scale(piece, frame)
         k = min(self.topk, cand_obj.shape[0])
         obj, idx = cand_obj.topk(k)
         boxes = cand_xywh[idx]
@@ -168,7 +225,7 @@ class BeamDecoder:
         # (H, K): every hypothesis extended by every candidate
         d = xs[None, :] - h_xs[:, None]
         total = (self.discount * h_scores[:, None]
-                 + log_obj[None, :] + self.lam * self.prior(d))
+                 + log_obj[None, :] + self.lam * self.prior(d, s))
 
         flat = total.ravel()
         take = min(self.beam * 4, flat.size)
@@ -205,7 +262,8 @@ class BandedViterbi:
     def __init__(self, bin_px: float = 8.0, band_px: float = 400.0, lam: float = 1.0,
                  fwd_px: float = 6.0, sigma_px: float = 18.0, jump_logp: float = -6.0,
                  topk: int = 32, warmup: int = 3, floor_logp: float = -12.0,
-                 discount: float = 1.0):
+                 discount: float = 1.0, mu_pow: float = 0.0,
+                 sig_pow: float = 0.0, ref_frames: float = 5.0):
         # same unbounded-accumulation problem as the beam: `a` sums evidence
         # over the whole piece, so the belief hardens until fresh frames cannot
         # move it. Discounting gives the past a finite half-life.
@@ -213,14 +271,21 @@ class BandedViterbi:
         self.lam, self.topk, self.warmup = lam, topk, warmup
         self.floor_logp = floor_logp
         self.discount = discount
-        self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp)
+        self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
+                                      mu_pow=mu_pow, sig_pow=sig_pow,
+                                      ref_frames=ref_frames)
         self._state = {}          # piece -> (a, x0, n_seen)
+        self._last_frame = {}
 
     def reset(self, piece=None):
         if piece is None:
             self._state = {}
+            self._last_frame = {}
         else:
             self._state.pop(piece, None)
+            self._last_frame.pop(piece, None)
+
+    _step_scale = BeamDecoder._step_scale
 
     def _emission(self, xs, log_obj, grid):
         """Rasterise sparse candidates onto the grid: each cell takes the best
@@ -230,9 +295,11 @@ class BandedViterbi:
         np.maximum.at(e, b, log_obj)
         return e
 
-    def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None):
+    def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
+               frame=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
+        s = self._step_scale(piece, frame)
         k = min(self.topk, cand_obj.shape[0])
         obj, idx = cand_obj.topk(k)
         boxes = cand_xywh[idx]
@@ -257,7 +324,7 @@ class BandedViterbi:
             if src_hi > src_lo:
                 a_old[src_lo + shift:src_hi + shift] = a_prev[src_lo:src_hi]
             steps = np.arange(-4, 33)                     # displacement in bins
-            tr = self.lam * self.prior(steps * self.bin_px)
+            tr = self.lam * self.prior(steps * self.bin_px, s)
             stack = np.full((steps.size, n_bins), NEG_INF)
             for i, s in enumerate(steps):
                 if s >= 0:
