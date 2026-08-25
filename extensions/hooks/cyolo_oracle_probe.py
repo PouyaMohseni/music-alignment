@@ -92,14 +92,20 @@ def patch_oracle():
                         file_interpols, file_add_per_staff)
 
         gt = true_positions.float().cpu()
+        # A batch holds up to 32 items and they are usually all the SAME piece,
+        # so `new` below is the whole batch's worth of appends for that piece,
+        # not this item's. Walk the items in order and index into it -- the
+        # harness appends exactly when len(gt_note) == 1, so replicating that
+        # test reproduces its indexing without assuming one item per piece.
+        seen = {}
         for num, fname in enumerate(file_names):
-            new = out.get(fname, {}).get('frame_diff', [])[before[fname]:]
-            if len(new) != 1:
-                # the harness only scores frames carrying exactly one note GT;
-                # skip anything it skipped so our arrays stay index-aligned
-                continue
             gt_note = gt[((gt[:, 0] == num) & (gt[:, 1] == 0))]
             if len(gt_note) != 1:
+                continue
+            new = out.get(fname, {}).get('frame_diff', [])[before[fname]:]
+            i = seen.get(fname, 0)
+            seen[fname] = i + 1
+            if i >= len(new):
                 continue
             gt_note = gt_note[0, 2:4]
             staff_coords, add_per_staff = file_add_per_staff[num]
@@ -121,7 +127,7 @@ def patch_oracle():
 
             s = _slot(fname)
             s['t_gt'].append(t_gt)
-            s['fd_actual'].append(float(new[0]))
+            s['fd_actual'].append(float(new[i]))
             s['t_cand'].append(t_c.astype(np.float32))
             s['obj'].append(np.asarray(obj, np.float32))
         return out
