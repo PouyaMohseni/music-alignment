@@ -22,7 +22,17 @@ common = dict(lam=float(os.environ.get('C2_LAM', '1.0')),
               mu_pow=float(os.environ.get('TIME_MU_POW', '0')),
               sig_pow=float(os.environ.get('TIME_SIG_POW', '0')),
               ref_frames=float(os.environ.get('TIME_REF', '5')))
-if KIND == 'beam':
+if KIND == 'scorer':
+    # the learned selector supplies its own scoring function, so the prior's
+    # constants only matter through `blend`
+    common = dict(scorer_path=os.environ['SCORER_PATH'],
+                  topk=int(os.environ.get('C2_TOPK', '256')),
+                  blend=float(os.environ.get('SCORER_BLEND', '1.0')),
+                  lam=common['lam'], fwd_px=common['fwd_px'],
+                  sigma_px=common['sigma_px'], jump_logp=common['jump_logp'],
+                  mu_pow=common['mu_pow'], sig_pow=common['sig_pow'],
+                  ref_frames=common['ref_frames'])
+elif KIND == 'beam':
     common['beam'] = int(os.environ.get('BEAM', '8'))
     common['cluster_px'] = float(os.environ.get('CLUSTER_PX', '0'))
 elif KIND == 'viterbi':

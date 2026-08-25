@@ -198,7 +198,10 @@ class BeamDecoder:
         return np.stack(gb), np.array(go), np.array(gx)
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None):
+               frame=None, bar=None, sys=None, ntot=None):
+        # bar/sys/ntot are accepted and ignored: the caller passes the same
+        # kwargs to every decoder so they stay interchangeable, and only the
+        # learned scorer reads them.
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
         s = self._step_scale(piece, frame)
@@ -296,7 +299,7 @@ class BandedViterbi:
         return e
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None):
+               frame=None, bar=None, sys=None, ntot=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
         s = self._step_scale(piece, frame)
@@ -340,3 +343,101 @@ class BandedViterbi:
         # the metric needs a BOX, so return the candidate nearest the chosen
         # position -- the grid carries the belief, the detector carries geometry
         return boxes[int(np.argmin(np.abs(xs - best_x)))]
+
+
+class ScorerDecoder:
+    """Greedy decode where the scoring function is LEARNED, not hand-tuned.
+
+    The shipped rule is `log p_obj + lam * heavy_tail(displacement)`: four
+    constants, all of them chosen by sweeping on the room test set. This
+    replaces that expression with a 9.7k-parameter listwise network fit on the
+    353-piece TRAINING split, which removes both the hand-tuning and the
+    test-set dependence in one step.
+
+    Greedy on purpose. The beam-width sweep degraded monotonically (84.7 / 84.3
+    / 84.3 / 83.8 / 83.8 for width 1/4/8/16/32), so beam=1 is the configuration
+    that actually wins and there is nothing to gain from carrying the extra
+    hypotheses through a learned score as well.
+
+    `blend` mixes the learned score with the shipped prior:
+        blend=1  -> learned only
+        blend=0  -> the shipped decoder exactly (the control)
+    so the comparison has a bit-identical control arm rather than a nearby one.
+    """
+
+    def __init__(self, scorer_path: str, topk: int = 256, blend: float = 1.0,
+                 lam: float = 1.0, fwd_px: float = 6.0, sigma_px: float = 18.0,
+                 jump_logp: float = -6.0, mu_pow: float = 1.0,
+                 sig_pow: float = 0.0, ref_frames: float = 5.0):
+        import torch as _t
+
+        from extensions.heads.cand_scorer import load
+        self.model, self.meta = load(scorer_path)
+        self._t = _t
+        self.topk, self.blend = topk, blend
+        self.lam = lam
+        self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
+                                      mu_pow=mu_pow, sig_pow=sig_pow,
+                                      ref_frames=ref_frames)
+        self._state = {}          # piece -> (x_prev, y_prev)
+        self._last_frame = {}
+        print(f'[SCORER] {scorer_path}: {self.model.n_params} params, '
+              f'blend={blend}, topk={topk}, meta={self.meta}', flush=True)
+
+    def reset(self, piece=None):
+        if piece is None:
+            self._state, self._last_frame = {}, {}
+        else:
+            self._state.pop(piece, None)
+            self._last_frame.pop(piece, None)
+
+    def decode(self, cand_xywh, cand_obj, piece, staff_coords=None,
+               add_per_staff=None, frame=None, bar=None, sys=None, ntot=None):
+        import numpy as _np
+
+        from extensions.heads.cand_features import build
+        if cand_obj.numel() == 0:
+            return cand_xywh.new_zeros(4)
+        total = int(cand_obj.shape[0]) if ntot is None else int(ntot)
+        k = min(self.topk, cand_obj.shape[0])
+        obj, idx = cand_obj.topk(k)
+        boxes = cand_xywh[idx]
+        bnp = boxes.detach().cpu().numpy()
+        xs = _np.array([_unroll(b, staff_coords, add_per_staff) for b in bnp])
+
+        prev = self._state.get(piece)
+        x_prev, y_prev = (None, None) if prev is None else prev
+        pf = self._last_frame.get(piece)
+        self._last_frame[piece] = frame
+        dfr = None if (frame is None or pf is None or frame <= pf) else frame - pf
+
+        # cand layout must match the dump exactly: [xu, y, w, h, obj, t].
+        # `t` (the onset coordinate) is a LABEL, never an input, so it is left
+        # zero here -- build() does not read column 5.
+        c = _np.zeros((k, 6), _np.float32)
+        c[:, 0], c[:, 1] = xs, bnp[:, 1]
+        c[:, 2], c[:, 3] = bnp[:, 2], bnp[:, 3]
+        c[:, 4] = obj.detach().cpu().numpy()
+        bar_u = _np.zeros(5, _np.float32) if bar is None else _np.asarray(bar, _np.float32)
+        sys_u = _np.zeros(5, _np.float32) if sys is None else _np.asarray(sys, _np.float32)
+        for box in (bar_u, sys_u):
+            if box[4] > 0:
+                box[0] = _unroll(box, staff_coords, add_per_staff)
+
+        f = build(c, bar_u, sys_u, x_prev, y_prev, dfr, ntot=total,
+                  use_abs_obj=self.model.use_abs_obj)
+        with self._t.no_grad():
+            s = self.model(self._t.from_numpy(f).unsqueeze(0))[0].numpy()
+
+        if self.blend < 1.0:
+            lo = _np.log(_np.clip(c[:, 4], 1e-8, None))
+            if x_prev is None:
+                hand = lo
+            else:
+                sc = self.prior.scale_of(dfr)
+                hand = lo + self.lam * self.prior(xs - x_prev, sc)
+            s = self.blend * s + (1.0 - self.blend) * hand
+
+        j = int(_np.argmax(s))
+        self._state[piece] = (float(xs[j]), float(bnp[j, 1]))
+        return boxes[j]

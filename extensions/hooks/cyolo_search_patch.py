@@ -62,8 +62,18 @@ def patch_cyolo_search(kind='beam', **kw):
         dec = BeamDecoder(**kw)
     elif kind == 'viterbi':
         dec = BandedViterbi(**kw)
+    elif kind == 'scorer':
+        from extensions.heads.cyolo_beam_decode import ScorerDecoder
+        dec = ScorerDecoder(**kw)
     else:
         raise ValueError(f'unknown decoder {kind!r}')
+
+    def _best_of_class(x, cls, sf):
+        rows = x[x[:, -1] == cls]
+        if rows.shape[0] == 0:
+            return None
+        b = rows[int(rows[:, 4].argmax())].detach().cpu().numpy()
+        return [b[0] * sf, b[1] * sf, b[2] * sf, b[3] * sf, b[4]]
 
     _orig_get_max_box = gen_mod.get_max_box
 
@@ -88,9 +98,14 @@ def patch_cyolo_search(kind='beam', **kw):
                 from extensions.hooks.cyolo_probe_patch import bar_filter
                 sel = bar_filter(sel, x, _BAR_SLACK)
             frames = _BATCH['frames']
+            # the learned scorer uses the frame's bar and system boxes as
+            # features; the hand-tuned decoders ignore them
             chosen = dec.decode(sel[:, :4] * sf, sel[:, 4], f'{names[xi]}::{class_id}',
                                 staff_coords=staff_coords, add_per_staff=add_per_staff,
-                                frame=(frames[xi] if frames is not None else None))
+                                frame=(frames[xi] if frames is not None else None),
+                                bar=_best_of_class(x, 1, sf),
+                                sys=_best_of_class(x, 2, sf),
+                                ntot=int(sel.shape[0]))
             out.append(chosen / sf)
         return torch.stack(out)
 
