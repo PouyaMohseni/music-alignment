@@ -3,7 +3,7 @@
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=3:00:00
+#SBATCH --time=11:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/train_scorer-%j.log
 # Fit the selector on the 353-piece TRAIN split, select on the 19-piece VALID
 # split, never touch room. Variants exist to measure things rather than to
@@ -22,14 +22,16 @@ C=/scratch/pmohseni/omr/cand
 M=/scratch/pmohseni/omr/scorer; mkdir -p "$M"
 
 run () { local tag=$1; shift
+    if [ -f "$M/$tag.pt" ]; then echo ""; echo "########## $tag  already fit, skipping"; return; fi
     echo ""; echo "########## $tag  $*"
     python extensions/analysis/train_cand_scorer.py \
         --train "$C/train_c*.npz" --valid "$C/valid_c0.npz" \
         --out "$M/$tag.pt" "$@" 2>&1 | grep -vE "^\s*$"; }
 
-run base
-run noabs        --no_abs_obj
-run nonoise      --noise_p 0
+# base / noabs / nonoise already fit in job 1658889; skip anything on disk so a
+# resubmit resumes rather than repeats
 run strongnoise  --noise_p 0.5 --noise_px 60
 run big          --hidden 128 --embed 64
+run bignoise     --hidden 128 --embed 64 --noise_p 0.5 --noise_px 60
+run longer       --epochs 80
 echo ""; echo "Job finished at $(date)"
