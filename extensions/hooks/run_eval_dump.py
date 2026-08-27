@@ -28,6 +28,15 @@ import cyolo_score_following.dataset as _d
 
 patch_batch_frames()
 
+_ir = os.environ.get('IR_PATH', '')
+if _ir:
+    from extensions.hooks.piece_ir_patch import patch_loader_ir, patch_piece_ir
+    patch_piece_ir(seed=int(os.environ.get('IR_SEED', '0')),
+                   prob=float(os.environ.get('IR_PROB', '1.0')))
+    patch_loader_ir(_ir.split(','))
+    if not getattr(_d, '_ir_loader_patched', False):
+        raise RuntimeError('IR loader patch did not take')
+
 from extensions.hooks import cyolo_cand_dump as _cd
 
 _cd.patch_dump()
