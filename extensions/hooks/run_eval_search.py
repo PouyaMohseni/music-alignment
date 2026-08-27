@@ -86,6 +86,13 @@ if os.environ.get('ORACLE', '0') == '1':
         raise RuntimeError('oracle patch did not take')
     atexit.register(lambda: _orc.dump(os.environ['ORACLE_OUT']))
 
+if os.environ.get('TRAJ_OUT'):
+    from extensions.hooks import cyolo_record_traj as _tj
+    _tj.patch_traj()
+    if not getattr(_d, '_traj_patched', False):
+        raise RuntimeError('trajectory patch did not take')
+    atexit.register(lambda: _tj.dump(os.environ['TRAJ_OUT']))
+
 atexit.register(lambda: dump(os.environ['REC_OUT']))
 
 _EVAL = os.path.join(_CY, 'cyolo_score_following', 'eval.py')
