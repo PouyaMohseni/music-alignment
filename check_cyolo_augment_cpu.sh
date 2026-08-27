@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=smoke-train-cyolo
+#SBATCH --job-name=cyolo-aug-check
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=2:00:00
-#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/smoke_train_cyolo-%j.log
-#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/smoke_train_cyolo-%j.log
+#SBATCH --time=0:40:00
+#SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/cyolo_aug_check-%j.log
+#SBATCH --error=/project/def-ichiro/pmohseni/music-alignment/results/cyolo_aug_check-%j.log
 
 # Does CPJKU's CYOLO TRAINING code actually run in our environment? This is the
 # prerequisite for modifying their architecture (e.g. swapping MERT into the
@@ -58,18 +58,18 @@ echo "=== CYOLO training smoke: 1 epoch, CPU, 8 train / 4 val pieces ==="
 python train.py \
     --train_sets "$DATA/msmd_train" \
     --val_sets   "$DATA/msmd_valid" \
-    --train_split_files "$DATA/split_files/smoke_train_split.yaml" \
-    --val_split_files   "$DATA/split_files/smoke_valid_split.yaml" \
+    --train_split_files "$DATA/split_files/tiny_train_split.yaml" \
+    --val_split_files   "$DATA/split_files/tiny_valid_split.yaml" \
     --config ./models/configs/cyolo.yaml \
     --augment \
     --no_log \
     --device cpu \
     --num_epochs 1 \
-    --batch_size 4 \
+    --batch_size 8 \
     --num_workers 2 \
     --dump_root "$OUT/params" \
     --log_root  "$OUT/runs" \
-    --tag cyolo_smoke
+    --tag cyolo_aug_check
 STATUS=$?
 
 echo ""
