@@ -61,9 +61,25 @@ if _zmask != 'none':
     set_z_mask(_zmask)
     patch_z_mask()
 
+# IR degradation of the evaluation audio. Only ever used to build a VALIDATION
+# proxy for room: clean synthetic validation anti-selected once already (`big`
+# was best on it at 95.79 and second-worst on room at 88.4), so a validation set
+# has to at least share the acoustic failure mode with the target.
+_ir = os.environ.get('IR_PATH', '')
+if _ir:
+    from extensions.hooks.piece_ir_patch import patch_loader_ir, patch_piece_ir
+    patch_piece_ir(seed=int(os.environ.get('IR_SEED', '0')),
+                   prob=float(os.environ.get('IR_PROB', '1.0')))
+    patch_loader_ir(_ir.split(','))
+
 from extensions.hooks.cyolo_search_patch import patch_cyolo_search
 
 patch_cyolo_search(kind=KIND, **common)
+
+if _ir:
+    import cyolo_score_following.dataset as _dsmod
+    if not getattr(_dsmod, '_ir_loader_patched', False):
+        raise RuntimeError('IR loader patch did not take')
 
 import cyolo_score_following.dataset as _d
 import cyolo_score_following.utils.general as _g
