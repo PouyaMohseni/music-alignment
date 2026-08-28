@@ -36,6 +36,8 @@ import os
 
 import numpy as np
 
+from extensions.hooks.cyolo_z_capture import LAST_Z as _Z
+
 # 256 because the decode sweep saturates there: fewer would mean the scorer is
 # trained on a candidate set the inference path does not reproduce.
 MAXK = int(os.environ.get('DUMP_MAXK', '256'))
@@ -44,7 +46,7 @@ REC: dict = {}
 _CAND: dict = {}
 _BATCH = {'scale_factors': None, 'frames': None}
 
-_FIELDS = ('frame', 't_gt', 'x_gt', 'lens', 'ntot', 'cand', 'bar', 'sys')
+_FIELDS = ('frame', 't_gt', 'x_gt', 'lens', 'ntot', 'cand', 'bar', 'sys', 'z')
 
 
 def _slot(fname):
@@ -114,6 +116,9 @@ def patch_dump():
             x_gt = float(unroll(np.array([float(gt_note[0])]),
                                 np.array([float(gt_note[1])]))[0])
             s = _slot(fname)
+            zz = _Z.get('z')
+            s['z'].append(zz[num] if zz is not None and num < len(zz)
+                          else np.zeros(128, np.float32))
             s['frame'].append(int(frames[num]) if frames is not None else -1)
             s['t_gt'].append(float(interp(x_gt)))
             s['x_gt'].append(x_gt)
@@ -182,6 +187,7 @@ def dump(path):
                                  else np.zeros((0, 6), np.float32))
         out[f'{fname}||bar'] = (np.stack(d['bar']) if n else np.zeros((0, 5), np.float32))
         out[f'{fname}||sys'] = (np.stack(d['sys']) if n else np.zeros((0, 5), np.float32))
+        out[f'{fname}||z'] = (np.stack(d['z']) if n else np.zeros((0, 128), np.float32))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     np.savez_compressed(path, **out)
     print(f'[DUMP] wrote {path}: {len(REC)} pieces, {nf} frames', flush=True)

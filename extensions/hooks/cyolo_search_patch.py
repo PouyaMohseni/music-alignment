@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import os
 
+from extensions.hooks.cyolo_z_capture import LAST_Z as _Z
+
 _BATCH = {'file_names': None, 'add_per_staff': None, 'scale_factors': None,
           'frames': None}
 _CLASSES = {int(c) for c in os.environ.get('C2_CLASSES', '0').split(',') if c != ''}
@@ -105,7 +107,9 @@ def patch_cyolo_search(kind='beam', **kw):
                                 frame=(frames[xi] if frames is not None else None),
                                 bar=_best_of_class(x, 1, sf),
                                 sys=_best_of_class(x, 2, sf),
-                                ntot=int(sel.shape[0]))
+                                ntot=int(sel.shape[0]),
+                                z=(_Z['z'][xi] if _Z.get('z') is not None
+                                   and xi < len(_Z['z']) else None))
             out.append(chosen / sf)
         return torch.stack(out)
 

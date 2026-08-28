@@ -419,7 +419,8 @@ class ScorerDecoder:
             self._last_frame.pop(piece, None)
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None,
-               add_per_staff=None, frame=None, bar=None, sys=None, ntot=None):
+               add_per_staff=None, frame=None, bar=None, sys=None, ntot=None,
+               z=None):
         import numpy as _np
 
         from extensions.heads.cand_features import build
@@ -453,8 +454,11 @@ class ScorerDecoder:
 
         f = build(c, bar_u, sys_u, x_prev, y_prev, dfr, ntot=total,
                   use_abs_obj=self.model.use_abs_obj)
+        zz = None
+        if self.model.zenc is not None and z is not None:
+            zz = self._t.from_numpy(_np.asarray(z, _np.float32)).unsqueeze(0)
         with self._t.no_grad():
-            s = self.model(self._t.from_numpy(f).unsqueeze(0))[0].numpy()
+            s = self.model(self._t.from_numpy(f).unsqueeze(0), z=zz)[0].numpy()
 
         if self.blend < 1.0:
             lo = _np.log(_np.clip(c[:, 4], 1e-8, None))

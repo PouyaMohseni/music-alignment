@@ -49,9 +49,11 @@ def load_dumps(paths):
                 continue
             flat = z[f'{nm}||cand']
             off = np.concatenate([[0], np.cumsum(lens)])
+            zk = f'{nm}||z'
             pieces.append(dict(
                 name=nm, frame=z[f'{nm}||frame'], t_gt=z[f'{nm}||t_gt'],
                 ntot=z[f'{nm}||ntot'], bar=z[f'{nm}||bar'], sys=z[f'{nm}||sys'],
+                z=(z[zk] if zk in z.files else None),
                 cand=[flat[off[i]:off[i + 1]] for i in range(len(lens))]))
     return pieces
 
@@ -69,7 +71,7 @@ def oracle_idx(c, t_gt):
 
 
 def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True):
-    feats, labels, masks = [], [], []
+    feats, labels, zs = [], [], []
     for pi, fi in items:
         p = pieces[pi]
         c = p['cand'][fi]
@@ -87,6 +89,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True)
         feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
+        zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
     K = max(f.shape[0] for f in feats)
     B = len(feats)
     X = np.zeros((B, K, NF), np.float32)
@@ -95,7 +98,8 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True)
     for i, (f, e) in enumerate(zip(feats, labels)):
         k = f.shape[0]
         X[i, :k], E[i, :k], M[i, :k] = f, e, True
-    return torch.from_numpy(X), torch.from_numpy(E), torch.from_numpy(M)
+    return (torch.from_numpy(X), torch.from_numpy(E), torch.from_numpy(M),
+            torch.from_numpy(np.stack(zs)))
 
 
 @torch.no_grad()
@@ -116,7 +120,9 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu'):
                    if fi > 0 and p['frame'][fi] >= 0 else None)
             f = build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj)
-            s = model(torch.from_numpy(f).unsqueeze(0).to(device))[0]
+            zz = (torch.from_numpy(p['z'][fi]).unsqueeze(0)
+                  if p['z'] is not None else None)
+            s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz)[0]
             j = int(s.argmax())
             hit += err[j] <= TH
             x_prev, y_prev = float(c[j, 0]), float(c[j, 1])
@@ -138,6 +144,8 @@ def main():
     ap.add_argument('--noise_p', type=float, default=0.3)
     ap.add_argument('--noise_px', type=float, default=30.0)
     ap.add_argument('--no_abs_obj', action='store_true')
+    ap.add_argument('--use_z', action='store_true',
+                    help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
     a = ap.parse_args()
 
@@ -153,10 +161,16 @@ def main():
 
     # normalisation from a sample of the training features, no noise applied
     samp = [idx[i] for i in rng.choice(len(idx), min(4000, len(idx)), replace=False)]
-    Xs, _, Ms = make_batch(tr, samp, rng, use_abs_obj=use_abs)
+    Xs, _, Ms, Zs = make_batch(tr, samp, rng, use_abs_obj=use_abs)
     flat = Xs[Ms]
-    model = CandScorer(hidden=a.hidden, embed=a.embed, use_abs_obj=use_abs)
+    zdim = Zs.shape[1] if (a.use_z and tr[0]['z'] is not None) else 0
+    if a.use_z and not zdim:
+        raise SystemExit('--use_z but the dump carries no z; re-dump first')
+    model = CandScorer(hidden=a.hidden, embed=a.embed, use_abs_obj=use_abs,
+                       zdim=zdim)
     model.set_norm(flat.mean(0).numpy(), flat.std(0).numpy())
+    if zdim:
+        model.set_znorm(Zs.mean(0).numpy(), Zs.std(0).numpy())
     print(f'model: {model.n_params} parameters', flush=True)
 
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
@@ -168,8 +182,8 @@ def main():
         tot = nb = 0.0
         for i in range(0, len(order), a.bs):
             items = [idx[j] for j in order[i:i + a.bs]]
-            X, E, M = make_batch(tr, items, rng, a.noise_p, a.noise_px, use_abs)
-            s = model(X, M)
+            X, E, M, Z = make_batch(tr, items, rng, a.noise_p, a.noise_px, use_abs)
+            s = model(X, M, z=(Z if model.zenc is not None else None))
             with torch.no_grad():                      # soft target on error
                 tgt = torch.softmax(torch.where(M, -E / a.tau, torch.full_like(E, -1e9)), -1)
             loss = -(tgt * torch.log_softmax(s, -1)).sum(-1).mean()

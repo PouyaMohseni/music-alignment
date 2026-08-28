@@ -79,6 +79,10 @@ if _ir:
                    prob=float(os.environ.get('IR_PROB', '1.0')))
     patch_loader_ir(_ir.split(','))
 
+from extensions.hooks.cyolo_z_capture import patch_capture_z
+
+patch_capture_z()
+
 from extensions.hooks.cyolo_search_patch import patch_cyolo_search
 
 patch_cyolo_search(kind=KIND, **common)

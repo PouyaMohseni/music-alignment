@@ -37,6 +37,10 @@ if _ir:
     if not getattr(_d, '_ir_loader_patched', False):
         raise RuntimeError('IR loader patch did not take')
 
+from extensions.hooks.cyolo_z_capture import patch_capture_z
+
+patch_capture_z()
+
 from extensions.hooks import cyolo_cand_dump as _cd
 
 _cd.patch_dump()
