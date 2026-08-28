@@ -39,6 +39,13 @@ if KIND == 'scorer':
 elif KIND == 'beam':
     common['beam'] = int(os.environ.get('BEAM', '8'))
     common['cluster_px'] = float(os.environ.get('CLUSTER_PX', '0'))
+    # discount was written as the fix for a beam that commits and cannot revise,
+    # then never exposed or swept. It is a NO-OP at beam=1 -- one hypothesis
+    # means the carried score shifts every candidate equally -- so the untested
+    # cell is beam>1 together with discount<1.
+    common['discount'] = float(os.environ.get('DISCOUNT', '1.0'))
+    common['reanchor_k'] = int(os.environ.get('REANCHOR_K', '0'))
+    common['reanchor_px'] = float(os.environ.get('REANCHOR_PX', '200'))
 elif KIND == 'viterbi':
     common['bin_px'] = float(os.environ.get('VIT_BIN', '8.0'))
     common['band_px'] = float(os.environ.get('VIT_BAND', '400.0'))

@@ -111,7 +111,8 @@ class BeamDecoder:
                  sigma_px: float = 18.0, jump_logp: float = -6.0,
                  topk: int = 32, warmup: int = 3, discount: float = 1.0,
                  cluster_px: float = 0.0, mu_pow: float = 0.0,
-                 sig_pow: float = 0.0, ref_frames: float = 5.0):
+                 sig_pow: float = 0.0, ref_frames: float = 5.0,
+                 reanchor_k: int = 0, reanchor_px: float = 200.0):
         """
         cluster_px  radius for EVIDENCE POOLING (0 = off, decoder unchanged).
         discount  fading memory on the accumulated path score, in [0, 1].
@@ -136,16 +137,20 @@ class BeamDecoder:
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
                                       mu_pow=mu_pow, sig_pow=sig_pow,
                                       ref_frames=ref_frames)
+        self.reanchor_k, self.reanchor_px = reanchor_k, reanchor_px
         self._state = {}          # piece -> (scores, xs, boxes, n_seen)
         self._last_frame = {}     # piece -> spectrogram frame of the last step
+        self._stall = {}          # piece -> consecutive steps the evidence disagreed
 
     def reset(self, piece=None):
         if piece is None:
             self._state = {}
             self._last_frame = {}
+            self._stall = {}
         else:
             self._state.pop(piece, None)
             self._last_frame.pop(piece, None)
+            self._stall.pop(piece, None)
 
     def _step_scale(self, piece, frame):
         """Ratio of this step's elapsed time to the reference step.
@@ -225,6 +230,28 @@ class BeamDecoder:
             return boxes[int(order[0])]
 
         h_scores, h_xs, _h_boxes, n_seen = st
+
+        # RECOVERY. 70.9% of our remaining error frames sit in runs of five or
+        # more consecutive onsets, some lasting 16 s -- the tracker loses the
+        # place and the temporal prior, which is what removed the jitter, is
+        # also what holds it there. Compared with the raw baseline we cut the
+        # number of error runs from 289 to 126 and made the survivors LONGER.
+        #
+        # So watch for the evidence disagreeing persistently: if the detector's
+        # own most confident box has been far from the tracked position for
+        # `reanchor_k` onsets in a row, stop arguing with it and jump. One
+        # frame of disagreement is noise; five in a row is being lost.
+        if self.reanchor_k > 0:
+            top = int(np.argmax(log_obj))
+            far = abs(float(xs[top]) - float(h_xs[0])) > self.reanchor_px
+            n_stall = self._stall.get(piece, 0) + 1 if far else 0
+            self._stall[piece] = n_stall
+            if n_stall >= self.reanchor_k:
+                self._stall[piece] = 0
+                self._state[piece] = (np.zeros(1), xs[top:top + 1],
+                                      boxes[top:top + 1], n_seen + 1)
+                return boxes[top]
+
         # (H, K): every hypothesis extended by every candidate
         d = xs[None, :] - h_xs[:, None]
         total = (self.discount * h_scores[:, None]
