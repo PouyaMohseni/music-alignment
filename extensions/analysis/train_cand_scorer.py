@@ -36,6 +36,12 @@ from extensions.heads.cand_scorer import CandScorer, save
 
 TH = 10.0          # 0.5 s at 20 fps, the reported threshold
 
+# Selection and the training target are separate knobs. The soft label
+# exp(-|dt|/tau) with tau=3 frames says "land within about 0.15 s", which is
+# what the 0.5 s column rewards. The 0.05 s column is a different objective and
+# we have never optimised for it: 63.8 there against a causal ceiling of 94.0,
+# a 30-point gap next to 4.6 at 0.5 s.
+
 
 def load_dumps(paths):
     """-> list of pieces, each a dict of parallel per-frame arrays."""
@@ -103,7 +109,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True)
 
 
 @torch.no_grad()
-def rollout(model, pieces, use_abs_obj=True, device='cpu'):
+def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
     """Greedy decode, exactly the loop the decoder runs. Returns (rollout hit,
     argmax hit, oracle hit) as percentages over every scored frame."""
     hit = arg = orc = n = 0
@@ -114,8 +120,8 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu'):
                 continue
             n += 1
             err = np.abs(c[:, 5] - p['t_gt'][fi])
-            arg += err[0] <= TH
-            orc += err.min() <= TH
+            arg += err[0] <= th
+            orc += err.min() <= th
             dfr = (int(p['frame'][fi] - p['frame'][fi - 1])
                    if fi > 0 and p['frame'][fi] >= 0 else None)
             f = build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
@@ -124,7 +130,7 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu'):
                   if p['z'] is not None else None)
             s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz)[0]
             j = int(s.argmax())
-            hit += err[j] <= TH
+            hit += err[j] <= th
             x_prev, y_prev = float(c[j, 0]), float(c[j, 1])
     return (100.0 * hit / max(n, 1), 100.0 * arg / max(n, 1),
             100.0 * orc / max(n, 1), n)
@@ -144,6 +150,9 @@ def main():
     ap.add_argument('--noise_p', type=float, default=0.3)
     ap.add_argument('--noise_px', type=float, default=30.0)
     ap.add_argument('--no_abs_obj', action='store_true')
+    ap.add_argument('--sel_th', type=float, default=TH,
+                    help='rollout threshold in FRAMES used to pick the best '
+                         'epoch (10 = 0.5 s, 1 = 0.05 s)')
     ap.add_argument('--use_z', action='store_true',
                     help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
@@ -195,7 +204,7 @@ def main():
             nb += 1
         sched.step()
         model.eval()
-        r, arg, orc, n = rollout(model, va, use_abs)
+        r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th)
         flag = ''
         if r > best:
             best, best_state = r, {k: v.clone() for k, v in model.state_dict().items()}
@@ -204,7 +213,9 @@ def main():
               f'(argmax {arg:5.2f}  oracle {orc:5.2f}){flag}', flush=True)
 
     model.load_state_dict(best_state)
-    r, arg, orc, n = rollout(model, va, use_abs)
+    r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th)
+    r5, a5, o5, _ = rollout(model, va, use_abs, th=TH)
+    print(f'  at 0.5 s: rollout {r5:.2f}  argmax {a5:.2f}  oracle {o5:.2f}')
     print(f'\nBEST valid rollout hit@0.5s = {r:.2f}   argmax {arg:.2f}   '
           f'oracle {orc:.2f}   over {n} frames')
     print(f'  selector recovers {100 * (r - arg) / max(orc - arg, 1e-9):.1f}% of the '
