@@ -41,6 +41,10 @@ from extensions.hooks.cyolo_z_capture import patch_capture_z
 
 patch_capture_z()
 
+if os.environ.get('DUMP_FEATK', '0') != '0':
+    from extensions.hooks.cyolo_feat_capture import patch_capture_feat
+    patch_capture_feat(scale=0)          # P3: every note candidate comes from it
+
 from extensions.hooks import cyolo_cand_dump as _cd
 
 _cd.patch_dump()
