@@ -31,7 +31,7 @@ run () { export REC_OUT="$T/$1_$2.rec.npz" TRAJ_OUT="$T/$1_$2.traj.npz"
     echo ""; echo "##### tier=$2  arm=$1"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/$2_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 for TIER in room do rp_synth; do
     export C2_CLASSES='' TIME_MU_POW=0;  run baseline "$TIER"

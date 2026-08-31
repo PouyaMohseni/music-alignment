@@ -30,6 +30,6 @@ for B in 0.0 0.7; do
     python extensions/hooks/run_eval_search.py \
         --param_path "$CY/trained_models/cyolo_sb/best_model.pt" \
         --test_dirs "$DATA/msmd_test" --split_files "$DATA/split_files/test_full_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"
 done
 echo ""; echo "Job finished at $(date)"

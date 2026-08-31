@@ -26,7 +26,7 @@ run () { local tag=$1; shift
     echo ""; echo "########## $tag  $*"
     python extensions/analysis/train_cand_scorer.py \
         --train "$C/train_c*.npz" --valid "$C/valid_c0.npz" \
-        --out "$M/$tag.pt" "$@" 2>&1 | grep -vE "^\s*$"; }
+        --out "$M/$tag.pt" "$@" 2>&1 | stdbuf -oL grep --line-buffered -vE "^\s*$"; }
 
 # base / noabs / nonoise already fit in job 1658889; skip anything on disk so a
 # resubmit resumes rather than repeats

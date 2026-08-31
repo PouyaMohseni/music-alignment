@@ -24,7 +24,7 @@ M=/scratch/pmohseni/omr/scorer
 run () { local tag=$1; shift
     [ -f "$M/$tag.pt" ] && { echo ""; echo "########## $tag already fit"; return; }
     echo ""; echo "########## $tag  $*"
-    python extensions/analysis/train_cand_scorer.py --out "$M/$tag.pt" "$@" 2>&1 | grep -vE "^\s*$"; }
+    python extensions/analysis/train_cand_scorer.py --out "$M/$tag.pt" "$@" 2>&1 | stdbuf -oL grep --line-buffered -vE "^\s*$"; }
 
 run noz_union --train "$Z/train_c*.npz" "$ZI/train_c*.npz" --valid "$ZI/valid.npz"
 run z_union   --train "$Z/train_c*.npz" "$ZI/train_c*.npz" --valid "$ZI/valid.npz" --use_z

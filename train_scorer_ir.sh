@@ -28,7 +28,7 @@ M=/scratch/pmohseni/omr/scorer; mkdir -p "$M"
 run () { local tag=$1; shift
     if [ -f "$M/$tag.pt" ]; then echo ""; echo "########## $tag already fit, skipping"; return; fi
     echo ""; echo "########## $tag  $*"
-    python extensions/analysis/train_cand_scorer.py --out "$M/$tag.pt" "$@" 2>&1 | grep -vE "^\s*$"; }
+    python extensions/analysis/train_cand_scorer.py --out "$M/$tag.pt" "$@" 2>&1 | stdbuf -oL grep --line-buffered -vE "^\s*$"; }
 
 # union of clean and reverberant, selected on reverberant validation
 run ir_union --train "$C/train_c*.npz" "$I/train_c*.npz" --valid "$I/valid_c0.npz"

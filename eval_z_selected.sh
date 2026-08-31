@@ -37,7 +37,7 @@ run () { export REC_OUT="$REC/$1_$2.npz" SCORER_PATH=$M/$3.pt SCORER_BLEND=$4
     echo ""; echo "##### $1  tier=$2  $3 blend=$4"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/$2_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"; }
 
 run z_only    room z_only    0.7
 run noz_union room noz_union 0.7

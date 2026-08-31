@@ -42,7 +42,7 @@ run () { export REC_OUT="$REC/$1.npz"
     echo ""; echo "##### $1  scorer=$(basename "$SCORER_PATH") blend=$SCORER_BLEND ir=${IR_PATH:-none}"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_valid" --split_files "$DATA/split_files/valid_c0_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average accuracy|rror|Traceback"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average accuracy|rror|Traceback"; }
 
 for COND in reverberant clean; do
   if [ "$COND" = reverberant ]; then export IR_PATH=/scratch/pmohseni/ir_bank/mit_ir_survey

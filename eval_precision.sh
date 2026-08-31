@@ -37,7 +37,7 @@ run () { local v=$1 b=$2
     echo ""; echo "##### $v  blend=$b  tier=room"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"; }
 
 # reference: the configuration validation already chose, so every row below is
 # read against a number produced by the identical code path

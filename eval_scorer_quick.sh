@@ -31,7 +31,7 @@ run () { export REC_OUT="$REC/$1_room.npz" SCORER_BLEND=$2
     echo ""; echo "##### $1  blend=$2"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 run control 0.0     # hand-tuned prior, must return 86.5
 run learned 1.0     # the selector

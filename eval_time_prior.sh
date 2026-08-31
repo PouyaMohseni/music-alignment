@@ -36,7 +36,7 @@ run () { export REC_OUT="$REC/$1_room.npz" TIME_MU_POW=$2 TIME_SIG_POW=$3 TIME_R
     echo ""; echo "##### $1  mu_pow=$2 sig_pow=$3 ref=$4"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 run ctrl      0    0    5      # must reproduce 85.9 exactly
 run mu1_s0    1    0    5      # scale the mean only

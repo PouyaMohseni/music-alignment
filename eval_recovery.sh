@@ -47,7 +47,7 @@ run () { export REC_OUT="$REC/$1.npz" TRAJ_OUT="$REC/$1.traj.npz"
     echo ""; echo "##### $1  beam=$BEAM discount=$DISCOUNT reanchor=${REANCHOR_K}/${REANCHOR_PX}px"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average accuracy|\[TRAJ\]|rror|Traceback"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average accuracy|\[TRAJ\]|rror|Traceback"; }
 
 export BEAM=1 DISCOUNT=1.0 REANCHOR_K=0 REANCHOR_PX=200
 run control                       # must return 86.5 exactly

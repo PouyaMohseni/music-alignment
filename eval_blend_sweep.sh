@@ -38,7 +38,7 @@ run () { local tag=$1 tier=$2
     echo ""; echo "##### $tag  tier=$tier  $(basename "$SCORER_PATH") blend=$SCORER_BLEND"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/${tier}_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 echo "=== A. fine blend grid on room (is the top flat or a spike?) ==="
 export SCORER_PATH=$M/base.pt

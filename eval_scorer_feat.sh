@@ -25,5 +25,5 @@ for V in nofeat_ctrl feat_base feat_small; do
     python extensions/hooks/run_eval_search.py \
         --param_path "$CY/trained_models/cyolo_sb/best_model.pt" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/room_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |^Average|rror"
 done

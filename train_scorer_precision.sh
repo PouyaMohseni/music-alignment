@@ -32,7 +32,7 @@ run () { local tag=$1; shift
     [ -f "$M/$tag.pt" ] && { echo ""; echo "########## $tag already fit"; return; }
     echo ""; echo "########## $tag  $*"
     python extensions/analysis/train_cand_scorer.py --out "$M/$tag.pt" \
-        --train "$I/train_c*.npz" --valid "$I/valid_c0.npz" "$@" 2>&1 | grep -vE "^\s*$"; }
+        --train "$I/train_c*.npz" --valid "$I/valid_c0.npz" "$@" 2>&1 | stdbuf -oL grep --line-buffered -vE "^\s*$"; }
 
 run prec_tau1   --tau 1.0 --sel_th 1.0
 run prec_tau05  --tau 0.5 --sel_th 1.0

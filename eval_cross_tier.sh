@@ -34,7 +34,7 @@ run () { export REC_OUT="$REC/$1_$2.npz"
     echo ""; echo "##### tier=$2  arm=$1  C2_CLASSES='${C2_CLASSES}' mu=$TIME_MU_POW"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/$2_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 for TIER in rp_synth do room; do
     export C2_CLASSES='' TIME_MU_POW=0;  run baseline "$TIER"   # untouched argmax

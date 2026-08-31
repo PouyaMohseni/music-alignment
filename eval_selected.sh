@@ -38,7 +38,7 @@ run () { export REC_OUT="$REC/$1_$2.npz"
     echo ""; echo "##### $1  tier=$2  $(basename $SCORER_PATH) blend=$SCORER_BLEND"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/$2_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" \
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" \
         | grep -E "^<= |^Average accuracy|rror|Traceback"; }
 
 export SCORER_PATH=$M/ir_only.pt SCORER_BLEND=0.0; run control room     # must be 86.5

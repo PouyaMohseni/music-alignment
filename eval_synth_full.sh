@@ -31,7 +31,7 @@ run () { export REC_OUT="$REC/$1.npz"
     echo ""; echo "##### $1"
     python extensions/hooks/run_eval_search.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_test" --split_files "$DATA/split_files/test_full_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 export C2_CLASSES='' TIME_MU_POW=0;  run baseline
 export C2_CLASSES='0' TIME_MU_POW=0; run decode

@@ -32,7 +32,7 @@ run () { local out=$1 dir=$2 split=$3
     echo ""; echo "##### $(basename $out)  ir=${IR_PATH:-none}"
     python extensions/hooks/run_eval_dump.py --param_path "$CKPT" \
         --test_dirs "$DATA/$dir" --split_files "$DATA/split_files/$split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |\[DUMP\]|\[Z\]|\[IR\]|rror"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |\[DUMP\]|\[Z\]|\[IR\]|rror"; }
 
 # room first: it is what the offline testbed validates against, and it is quick
 unset IR_PATH

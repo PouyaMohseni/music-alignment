@@ -28,6 +28,6 @@ for TIER in room do rp_synth; do
     echo ""; echo "##### $TIER"
     python extensions/hooks/run_eval_dump.py --param_path "$CKPT" \
         --test_dirs "$DATA/msmd_rp" --split_files "$DATA/split_files/${TIER}_split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |\[DUMP\]|rror"
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" | grep -E "^<= |\[DUMP\]|rror"
 done
 echo ""; echo "Job finished at $(date)"

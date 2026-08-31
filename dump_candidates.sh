@@ -29,7 +29,7 @@ run () { local tag=$1 dir=$2 split=$3
     echo ""; echo "##### $tag  ($split)"
     python extensions/hooks/run_eval_dump.py --param_path "$CKPT" \
         --test_dirs "$DATA/$dir" --split_files "$DATA/split_files/$split.yaml" \
-        --only_onsets 2>&1 | grep -vE "it/s\]|it\]|^\s*$"; }
+        --only_onsets 2>&1 | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$"; }
 
 run valid_c0 msmd_valid valid_c0_split
 for i in 0 1 2 3 4 5; do run train_c$i msmd_train train_c${i}_split; done
