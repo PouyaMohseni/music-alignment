@@ -35,4 +35,5 @@ run () { local tag=$1; shift
 run nofeat_ctrl                                  # control on the SAME dump
 run feat_base   --use_feat
 run feat_small  --use_feat --featproj 8          # narrower path, less to overfit
+run feat_wide   --use_feat --featproj 64         # wider, to see which side of the ridge 32 is on
 echo ""; echo "Job finished at $(date)"

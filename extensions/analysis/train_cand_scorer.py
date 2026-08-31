@@ -180,6 +180,8 @@ def main():
     ap.add_argument('--sel_th', type=float, default=TH,
                     help='rollout threshold in FRAMES used to pick the best '
                          'epoch (10 = 0.5 s, 1 = 0.05 s)')
+    ap.add_argument('--featproj', type=int, default=32,
+                    help='width of the per-candidate feature projection')
     ap.add_argument('--use_feat', action='store_true',
                     help='per-candidate backbone features, the 128 numbers the '
                          '1,935-parameter Detect conv maps to objectness')
@@ -209,7 +211,7 @@ def main():
     if a.use_z and not zdim:
         raise SystemExit('--use_z but the dump carries no z; re-dump first')
     model = CandScorer(hidden=a.hidden, embed=a.embed, use_abs_obj=use_abs,
-                       zdim=zdim, featdim=fdim)
+                       zdim=zdim, featdim=fdim, featproj=a.featproj)
     model.set_norm(flat.mean(0).numpy(), flat.std(0).numpy())
     if zdim:
         model.set_znorm(Zs.mean(0).numpy(), Zs.std(0).numpy())

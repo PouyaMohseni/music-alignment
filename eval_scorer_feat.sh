@@ -18,6 +18,15 @@ export SEARCH_KIND=scorer C2_TOPK=256 C2_LAM=1.0 C2_FWD=6.0 C2_SIGMA=18.0 C2_JUM
 export TIME_MU_POW=1 TIME_SIG_POW=0 TIME_REF=5 CLUSTER_PX=0
 export ANCHOR=start WINDOW=0 Z_MASK=none ORACLE=0
 M=/scratch/pmohseni/omr/scorer; R=/scratch/pmohseni/omr/featval; mkdir -p "$R"
+
+# Fail loudly on a broken environment. The previous run of this job lost every
+# arm to `No module named mpmath` -- torch pulls it in through sympy -- and the
+# per-arm grep swallowed the traceback, so the job exited 0 with nothing in it.
+python - <<'PY' || { echo "ENVIRONMENT BROKEN, aborting"; exit 1; }
+import numpy, cv2, torch, mpmath, sympy, scipy
+print(f'[ENV] numpy {numpy.__version__} cv2 {cv2.__version__} torch {torch.__version__} '
+      f'mpmath {mpmath.__version__} sympy {sympy.__version__}')
+PY
 for V in nofeat_ctrl feat_base feat_small; do
     [ -f "$M/$V.pt" ] || { echo ""; echo "##### $V missing"; continue; }
     export SCORER_PATH=$M/$V.pt SCORER_BLEND=0.7 REC_OUT="$R/${V}_room.npz"
