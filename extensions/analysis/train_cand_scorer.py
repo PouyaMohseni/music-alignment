@@ -99,9 +99,18 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                 x_prev += float(rng.laplace(0.0, noise_px))
         else:
             x_prev = y_prev = None
+        # a second step back, so the model can see SPEED and not only position
+        x_prev2 = dfr_prev = None
+        if fi >= 2 and len(p['cand'][fi - 2]):
+            pv2 = p['cand'][fi - 2]
+            b2 = oracle_idx(pv2, p['t_gt'][fi - 2])
+            x_prev2 = float(pv2[b2, 0])
+            if p['frame'][fi - 1] >= 0:
+                dfr_prev = int(p['frame'][fi - 1] - p['frame'][fi - 2])
         dfr = int(p['frame'][fi] - p['frame'][fi - 1]) if p['frame'][fi] >= 0 else None
         feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
-                           ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj))
+                           ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
+                           x_prev2=x_prev2, dframes_prev=dfr_prev))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
         if featdim:
@@ -134,7 +143,8 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
     argmax hit, oracle hit) as percentages over every scored frame."""
     hit = arg = orc = n = 0
     for p in pieces:
-        x_prev = y_prev = None
+        x_prev = y_prev = x_prev2 = None
+        f_prev = f_prev2 = None
         for fi, c in enumerate(p['cand']):
             if len(c) == 0:
                 continue
@@ -144,8 +154,11 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
             orc += err.min() <= th
             dfr = (int(p['frame'][fi] - p['frame'][fi - 1])
                    if fi > 0 and p['frame'][fi] >= 0 else None)
+            dfr_prev = (int(f_prev - f_prev2)
+                        if f_prev is not None and f_prev2 is not None else None)
             f = build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
-                      ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj)
+                      ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
+                      x_prev2=x_prev2, dframes_prev=dfr_prev)
             zz = (torch.from_numpy(p['z'][fi]).unsqueeze(0)
                   if p['z'] is not None else None)
             ff = None
@@ -158,7 +171,9 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
             s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz, feat=ff)[0]
             j = int(s.argmax())
             hit += err[j] <= th
+            x_prev2, f_prev2 = x_prev, f_prev
             x_prev, y_prev = float(c[j, 0]), float(c[j, 1])
+            f_prev = int(p['frame'][fi])
     return (100.0 * hit / max(n, 1), 100.0 * arg / max(n, 1),
             100.0 * orc / max(n, 1), n)
 

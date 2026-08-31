@@ -434,10 +434,12 @@ class ScorerDecoder:
         xs = _np.array([_unroll(b, staff_coords, add_per_staff) for b in bnp])
 
         prev = self._state.get(piece)
-        x_prev, y_prev = (None, None) if prev is None else prev
-        pf = self._last_frame.get(piece)
-        self._last_frame[piece] = frame
-        dfr = None if (frame is None or pf is None or frame <= pf) else frame - pf
+        x_prev, y_prev, x_prev2, f_prev, f_prev2 = (
+            (None, None, None, None, None) if prev is None else prev)
+        dfr = None if (frame is None or f_prev is None or frame <= f_prev) else frame - f_prev
+        dfr_prev = (f_prev - f_prev2
+                    if f_prev is not None and f_prev2 is not None and f_prev > f_prev2
+                    else None)
 
         # cand layout must match the dump exactly: [xu, y, w, h, obj, t].
         # `t` (the onset coordinate) is a LABEL, never an input, so it is left
@@ -453,7 +455,17 @@ class ScorerDecoder:
                 box[0] = _unroll(box, staff_coords, add_per_staff)
 
         f = build(c, bar_u, sys_u, x_prev, y_prev, dfr, ntot=total,
-                  use_abs_obj=self.model.use_abs_obj)
+                  use_abs_obj=self.model.use_abs_obj,
+                  x_prev2=x_prev2, dframes_prev=dfr_prev)
+        # Checkpoints fitted before a feature was appended expect the old width.
+        # FEATURE_NAMES only ever grows at the end, so truncating is exact for
+        # them and a no-op for new ones -- without this every selector trained
+        # so far would silently mis-shape at inference.
+        if f.shape[1] != self.model.nf:
+            if f.shape[1] < self.model.nf:
+                raise RuntimeError(f'model wants {self.model.nf} features, '
+                                   f'build() gives {f.shape[1]}')
+            f = f[:, :self.model.nf]
         zz = None
         if self.model.zenc is not None and z is not None:
             zz = self._t.from_numpy(_np.asarray(z, _np.float32)).unsqueeze(0)
@@ -470,5 +482,5 @@ class ScorerDecoder:
             s = self.blend * s + (1.0 - self.blend) * hand
 
         j = int(_np.argmax(s))
-        self._state[piece] = (float(xs[j]), float(bnp[j, 1]))
+        self._state[piece] = (float(xs[j]), float(bnp[j, 1]), x_prev, frame, f_prev)
         return boxes[j]

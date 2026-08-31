@@ -43,6 +43,20 @@ FEATURE_NAMES = (
     'bar_off',            # same for the predicted bar box, a much tighter region
     'bar_in',
     'bar_obj',
+    # SHORT-HORIZON MOTION. Everything above sees exactly one past position, so
+    # the ranker has no notion of how fast the music is moving -- only where it
+    # was. 60.8% of remaining errors are timing drift within two bars, which is
+    # what a velocity estimate is for. These stay per-candidate (each box has
+    # its own offset from the extrapolation), which is the property that made
+    # backbone features work and z useless.
+    #
+    # This is NOT the constant-velocity decode that failed before: that blended
+    # an extrapolation into the observation on every frame, degrading precision
+    # everywhere. Here it is a feature the model may weight or ignore.
+    'd_extrap',           # offset from a constant-velocity prediction
+    'd_extrap_tanh',
+    'v_ratio',            # implied speed relative to the recent speed
+    'has_vel',            # whether a velocity estimate exists at all
 )
 NF = len(FEATURE_NAMES)
 
@@ -53,7 +67,8 @@ FWD_PX = 6.0              # shipped prior's expected travel per reference step
 MAXK = 256                # must match the dump's cap, or crowding features lie
 
 
-def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True):
+def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
+          x_prev2=None, dframes_prev=None):
     """cand: (K, 6) as dumped -- [xu, y, w, h, obj, t]. Returns (K, NF) float32.
 
     x_prev/y_prev may be None on the first scored frame of a piece, in which
@@ -90,6 +105,18 @@ def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True):
             dy = y - float(y_prev)
             f[:, 12] = np.tanh(dy / 20.0)
             f[:, 13] = (np.abs(dy) < 10.0).astype(np.float32)
+
+    # velocity from the two previous positions, projected forward over the gap
+    if (x_prev is not None and x_prev2 is not None and dframes_prev
+            and dframes_prev > 0):
+        v = (float(x_prev) - float(x_prev2)) / float(dframes_prev)
+        pred = float(x_prev) + v * dt
+        e = xu - pred
+        f[:, 20] = np.clip(e / max(FWD_PX * ratio, 1e-3), -20.0, 20.0)
+        f[:, 21] = np.tanh(e / 50.0)
+        if abs(v) > 1e-6:
+            f[:, 22] = np.clip((xu - float(x_prev)) / (v * dt), -5.0, 5.0)
+        f[:, 23] = 1.0
 
     for base, box in ((14, sys), (17, bar)):
         cx, _cy, bw, _bh, bobj = (float(box[0]), float(box[1]), float(box[2]),
