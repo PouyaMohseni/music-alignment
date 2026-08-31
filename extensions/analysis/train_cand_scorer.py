@@ -55,11 +55,18 @@ def load_dumps(paths):
                 continue
             flat = z[f'{nm}||cand']
             off = np.concatenate([[0], np.cumsum(lens)])
-            zk = f'{nm}||z'
+            zk, fk = f'{nm}||z', f'{nm}||feat'
+            fl = z[f'{nm}||flens'] if f'{nm}||flens' in z.files else None
+            if fl is not None:
+                foff = np.concatenate([[0], np.cumsum(fl)])
+                fflat = z[fk]
+                feats = [fflat[foff[i]:foff[i + 1]] for i in range(len(fl))]
+            else:
+                feats = None
             pieces.append(dict(
                 name=nm, frame=z[f'{nm}||frame'], t_gt=z[f'{nm}||t_gt'],
                 ntot=z[f'{nm}||ntot'], bar=z[f'{nm}||bar'], sys=z[f'{nm}||sys'],
-                z=(z[zk] if zk in z.files else None),
+                z=(z[zk] if zk in z.files else None), feat=feats,
                 cand=[flat[off[i]:off[i + 1]] for i in range(len(lens))]))
     return pieces
 
@@ -76,8 +83,9 @@ def oracle_idx(c, t_gt):
     return int(np.argmin(np.abs(c[:, 5] - t_gt))) if len(c) else -1
 
 
-def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True):
-    feats, labels, zs = [], [], []
+def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
+               featdim=0):
+    feats, labels, zs, fvs = [], [], [], []
     for pi, fi in items:
         p = pieces[pi]
         c = p['cand'][fi]
@@ -96,16 +104,28 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True)
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
+        if featdim:
+            fv = p['feat'][fi] if p['feat'] is not None else np.zeros((0, featdim), np.float16)
+            # the feature dump is capped tighter than the candidate list, so
+            # pad the tail rather than silently misaligning candidate k with
+            # feature k of a different candidate
+            if fv.shape[0] < c.shape[0]:
+                fv = np.vstack([fv, np.zeros((c.shape[0] - fv.shape[0], featdim), fv.dtype)])
+            fvs.append(fv[:c.shape[0]].astype(np.float32))
     K = max(f.shape[0] for f in feats)
     B = len(feats)
     X = np.zeros((B, K, NF), np.float32)
     E = np.full((B, K), 1e9, np.float32)
     M = np.zeros((B, K), bool)
+    F = np.zeros((B, K, featdim), np.float32) if featdim else None
     for i, (f, e) in enumerate(zip(feats, labels)):
         k = f.shape[0]
         X[i, :k], E[i, :k], M[i, :k] = f, e, True
+        if featdim:
+            F[i, :k] = fvs[i]
     return (torch.from_numpy(X), torch.from_numpy(E), torch.from_numpy(M),
-            torch.from_numpy(np.stack(zs)))
+            torch.from_numpy(np.stack(zs)),
+            torch.from_numpy(F) if featdim else None)
 
 
 @torch.no_grad()
@@ -128,7 +148,14 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
                       ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj)
             zz = (torch.from_numpy(p['z'][fi]).unsqueeze(0)
                   if p['z'] is not None else None)
-            s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz)[0]
+            ff = None
+            if model.fenc is not None and p['feat'] is not None:
+                fv = p['feat'][fi].astype(np.float32)
+                if fv.shape[0] < c.shape[0]:
+                    fv = np.vstack([fv, np.zeros((c.shape[0] - fv.shape[0],
+                                                  model.featdim), np.float32)])
+                ff = torch.from_numpy(fv[:c.shape[0]]).unsqueeze(0)
+            s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz, feat=ff)[0]
             j = int(s.argmax())
             hit += err[j] <= th
             x_prev, y_prev = float(c[j, 0]), float(c[j, 1])
@@ -153,6 +180,9 @@ def main():
     ap.add_argument('--sel_th', type=float, default=TH,
                     help='rollout threshold in FRAMES used to pick the best '
                          'epoch (10 = 0.5 s, 1 = 0.05 s)')
+    ap.add_argument('--use_feat', action='store_true',
+                    help='per-candidate backbone features, the 128 numbers the '
+                         '1,935-parameter Detect conv maps to objectness')
     ap.add_argument('--use_z', action='store_true',
                     help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
@@ -170,16 +200,22 @@ def main():
 
     # normalisation from a sample of the training features, no noise applied
     samp = [idx[i] for i in rng.choice(len(idx), min(4000, len(idx)), replace=False)]
-    Xs, _, Ms, Zs = make_batch(tr, samp, rng, use_abs_obj=use_abs)
+    fdim = 128 if (a.use_feat and tr[0]['feat'] is not None) else 0
+    if a.use_feat and not fdim:
+        raise SystemExit('--use_feat but the dump carries no features')
+    Xs, _, Ms, Zs, Fs = make_batch(tr, samp, rng, use_abs_obj=use_abs, featdim=fdim)
     flat = Xs[Ms]
     zdim = Zs.shape[1] if (a.use_z and tr[0]['z'] is not None) else 0
     if a.use_z and not zdim:
         raise SystemExit('--use_z but the dump carries no z; re-dump first')
     model = CandScorer(hidden=a.hidden, embed=a.embed, use_abs_obj=use_abs,
-                       zdim=zdim)
+                       zdim=zdim, featdim=fdim)
     model.set_norm(flat.mean(0).numpy(), flat.std(0).numpy())
     if zdim:
         model.set_znorm(Zs.mean(0).numpy(), Zs.std(0).numpy())
+    if fdim:
+        flat_f = Fs[Ms]
+        model.set_fnorm(flat_f.mean(0).numpy(), flat_f.std(0).numpy())
     print(f'model: {model.n_params} parameters', flush=True)
 
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
@@ -191,8 +227,9 @@ def main():
         tot = nb = 0.0
         for i in range(0, len(order), a.bs):
             items = [idx[j] for j in order[i:i + a.bs]]
-            X, E, M, Z = make_batch(tr, items, rng, a.noise_p, a.noise_px, use_abs)
-            s = model(X, M, z=(Z if model.zenc is not None else None))
+            X, E, M, Z, F = make_batch(tr, items, rng, a.noise_p, a.noise_px,
+                                       use_abs, featdim=fdim)
+            s = model(X, M, z=(Z if model.zenc is not None else None), feat=F)
             with torch.no_grad():                      # soft target on error
                 tgt = torch.softmax(torch.where(M, -E / a.tau, torch.full_like(E, -1e9)), -1)
             loss = -(tgt * torch.log_softmax(s, -1)).sum(-1).mean()

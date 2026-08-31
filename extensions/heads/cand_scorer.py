@@ -30,13 +30,24 @@ from extensions.heads.cand_features import NF
 
 class CandScorer(nn.Module):
     def __init__(self, nf: int = NF, hidden: int = 64, embed: int = 32,
-                 use_abs_obj: bool = True, zdim: int = 0, zproj: int = 16):
+                 use_abs_obj: bool = True, zdim: int = 0, zproj: int = 16,
+                 featdim: int = 0, featproj: int = 32):
         super().__init__()
         self.nf, self.use_abs_obj = nf, use_abs_obj
         self.zdim, self.zproj = zdim, zproj if zdim else 0
+        self.featdim, self.featproj = featdim, featproj if featdim else 0
+        # PER-CANDIDATE backbone features. Unlike z, which is one vector for
+        # the whole frame, these differ between candidates -- they are exactly
+        # the 128 numbers Detect.m[0] maps to objectness for that grid cell. If
+        # anything can separate two boxes the geometry cannot, it is this.
+        self.fenc = (nn.Sequential(nn.Linear(featdim, featproj), nn.ReLU())
+                     if featdim else None)
         self.enc = nn.Sequential(
-            nn.Linear(nf, hidden), nn.ReLU(),
+            nn.Linear(nf + self.featproj, hidden), nn.ReLU(),
             nn.Linear(hidden, embed), nn.ReLU())
+        if featdim:
+            self.register_buffer('fmu', torch.zeros(featdim))
+            self.register_buffer('fsd', torch.ones(featdim))
         # z is the detector's own audio representation, shared by every
         # candidate in a frame, so it belongs in the FRAME CONTEXT rather than
         # per candidate -- it says what the music is doing, not which box is
@@ -58,16 +69,27 @@ class CandScorer(nn.Module):
         self.mu.copy_(torch.as_tensor(mu, dtype=torch.float32))
         self.sd.copy_(torch.as_tensor(sd, dtype=torch.float32).clamp_min(1e-3))
 
+    def set_fnorm(self, mu, sd):
+        if self.fenc is None:
+            return
+        self.fmu.copy_(torch.as_tensor(mu, dtype=torch.float32))
+        self.fsd.copy_(torch.as_tensor(sd, dtype=torch.float32).clamp_min(1e-3))
+
     def set_znorm(self, mu, sd):
         if self.zenc is None:
             return
         self.zmu.copy_(torch.as_tensor(mu, dtype=torch.float32))
         self.zsd.copy_(torch.as_tensor(sd, dtype=torch.float32).clamp_min(1e-3))
 
-    def forward(self, x, mask=None, z=None):
+    def forward(self, x, mask=None, z=None, feat=None):
         """x: (B, K, nf). mask: (B, K) bool, True where the slot is a real
         candidate. Returns (B, K) scores with padded slots at -inf."""
-        h = self.enc((x - self.mu) / self.sd)
+        xin = (x - self.mu) / self.sd
+        if self.fenc is not None:
+            if feat is None:
+                feat = torch.zeros(*x.shape[:2], self.featdim, device=x.device)
+            xin = torch.cat([xin, self.fenc((feat - self.fmu) / self.fsd)], -1)
+        h = self.enc(xin)
         if mask is None:
             mask = torch.ones(h.shape[:2], dtype=torch.bool, device=h.device)
         m = mask.unsqueeze(-1)
@@ -94,14 +116,16 @@ def save(model, path, extra=None):
                 'hidden': model.enc[0].out_features,
                 'embed': model.enc[2].out_features,
                 'use_abs_obj': model.use_abs_obj, 'zdim': model.zdim,
-                'zproj': model.zproj or 16, 'extra': extra or {}}, path)
+                'zproj': model.zproj or 16, 'featdim': model.featdim,
+                'featproj': model.featproj or 32, 'extra': extra or {}}, path)
 
 
 def load(path, device='cpu'):
     ck = torch.load(path, map_location=device, weights_only=False)
     m = CandScorer(nf=ck['nf'], hidden=ck['hidden'], embed=ck['embed'],
                    use_abs_obj=ck['use_abs_obj'], zdim=ck.get('zdim', 0),
-                   zproj=ck.get('zproj', 16))
+                   zproj=ck.get('zproj', 16), featdim=ck.get('featdim', 0),
+                   featproj=ck.get('featproj', 32))
     m.load_state_dict(ck['state_dict'])
     m.eval()
     return m, ck.get('extra', {})
