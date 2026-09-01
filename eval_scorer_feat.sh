@@ -11,7 +11,8 @@ module load gcc python/3.10 opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
-export CYOLO_ROOT=$CY PYTHONPATH=$CY:/project/def-ichiro/pmohseni/music-alignment
+export CYOLO_ROOT=$CY
+export PYTHONPATH=$CY:/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=4
 unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 export SEARCH_KIND=scorer C2_TOPK=256 C2_LAM=1.0 C2_FWD=6.0 C2_SIGMA=18.0 C2_JUMP=-6.0

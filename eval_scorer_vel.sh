@@ -11,7 +11,8 @@ module load gcc python/3.10 opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
-export CYOLO_ROOT=$CY PYTHONPATH=$CY:/project/def-ichiro/pmohseni/music-alignment
+export CYOLO_ROOT=$CY
+export PYTHONPATH=$CY:/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=4
 unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 python - <<'PY' || { echo "ENVIRONMENT BROKEN, aborting"; exit 1; }
@@ -22,7 +23,7 @@ export SEARCH_KIND=scorer C2_TOPK=256 C2_LAM=1.0 C2_FWD=6.0 C2_SIGMA=18.0 C2_JUM
 export TIME_MU_POW=1 TIME_SIG_POW=0 TIME_REF=5 CLUSTER_PX=0
 export ANCHOR=start WINDOW=0 Z_MASK=none ORACLE=0
 M=/scratch/pmohseni/omr/scorer; R=/scratch/pmohseni/omr/velval; mkdir -p "$R"
-for V in ir_only vel_only vel_feat feat_base; do
+for V in ir_only noz_only feat_base feat_small feat_wide vel_only vel_feat; do
     [ -f "$M/$V.pt" ] || { echo ""; echo "##### $V missing"; continue; }
     export SCORER_PATH=$M/$V.pt SCORER_BLEND=0.7 REC_OUT="$R/${V}_room.npz"
     echo ""; echo "##### $V blend=0.7 room"
