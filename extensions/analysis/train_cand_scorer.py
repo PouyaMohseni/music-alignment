@@ -168,7 +168,8 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
                     fv = np.vstack([fv, np.zeros((c.shape[0] - fv.shape[0],
                                                   model.featdim), np.float32)])
                 ff = torch.from_numpy(fv[:c.shape[0]]).unsqueeze(0)
-            s = model(torch.from_numpy(f).unsqueeze(0).to(device), z=zz, feat=ff)[0]
+            s = model(torch.from_numpy(f[:, :model.nf]).unsqueeze(0).to(device),
+                      z=zz, feat=ff)[0]
             j = int(s.argmax())
             hit += err[j] <= th
             x_prev2, f_prev2 = x_prev, f_prev
@@ -195,6 +196,9 @@ def main():
     ap.add_argument('--sel_th', type=float, default=TH,
                     help='rollout threshold in FRAMES used to pick the best '
                          'epoch (10 = 0.5 s, 1 = 0.05 s)')
+    ap.add_argument('--no_vel', action='store_true',
+                    help='drop the 4 velocity features, so projection width '
+                         'and velocity can be separated in the grid')
     ap.add_argument('--featproj', type=int, default=32,
                     help='width of the per-candidate feature projection')
     ap.add_argument('--use_feat', action='store_true',
@@ -221,12 +225,17 @@ def main():
     if a.use_feat and not fdim:
         raise SystemExit('--use_feat but the dump carries no features')
     Xs, _, Ms, Zs, Fs = make_batch(tr, samp, rng, use_abs_obj=use_abs, featdim=fdim)
+    # FEATURE_NAMES only ever grows at the end, so truncation is exactly the
+    # older feature set rather than an approximation of it
+    nf_use = NF - 4 if a.no_vel else NF
+    Xs = Xs[:, :, :nf_use]
     flat = Xs[Ms]
     zdim = Zs.shape[1] if (a.use_z and tr[0]['z'] is not None) else 0
     if a.use_z and not zdim:
         raise SystemExit('--use_z but the dump carries no z; re-dump first')
-    model = CandScorer(hidden=a.hidden, embed=a.embed, use_abs_obj=use_abs,
-                       zdim=zdim, featdim=fdim, featproj=a.featproj)
+    model = CandScorer(nf=nf_use, hidden=a.hidden, embed=a.embed,
+                       use_abs_obj=use_abs, zdim=zdim, featdim=fdim,
+                       featproj=a.featproj)
     model.set_norm(flat.mean(0).numpy(), flat.std(0).numpy())
     if zdim:
         model.set_znorm(Zs.mean(0).numpy(), Zs.std(0).numpy())
@@ -246,7 +255,8 @@ def main():
             items = [idx[j] for j in order[i:i + a.bs]]
             X, E, M, Z, F = make_batch(tr, items, rng, a.noise_p, a.noise_px,
                                        use_abs, featdim=fdim)
-            s = model(X, M, z=(Z if model.zenc is not None else None), feat=F)
+            s = model(X[:, :, :nf_use], M,
+                      z=(Z if model.zenc is not None else None), feat=F)
             with torch.no_grad():                      # soft target on error
                 tgt = torch.softmax(torch.where(M, -E / a.tau, torch.full_like(E, -1e9)), -1)
             loss = -(tgt * torch.log_softmax(s, -1)).sum(-1).mean()

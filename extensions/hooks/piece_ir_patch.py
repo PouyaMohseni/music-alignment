@@ -35,8 +35,22 @@ import os
 import random
 import zlib
 
+import numpy as np
 
-def patch_piece_ir(seed: int = 0, prob: float = 1.0):
+
+def patch_piece_ir(seed: int = 0, prob: float = 1.0, snr_db: float = 0.0):
+    """snr_db > 0 adds noise after the room, to make a HARDER validation set.
+
+    The reverberant validation split has a detector argmax of 90.7 where room
+    has 80.0, so it is a much easier problem, and a higher-capacity selector can
+    win there by fitting slack real audio does not have. Measured over seven
+    variants, validation rank is ANTI-correlated with room rank (Spearman
+    -0.39): it picks vel_feat, worth 90.0, over feat_wide, worth 94.0.
+
+    A validation set is only a proxy if it is as hard as the target. Noise at a
+    fixed SNR, deterministic per piece like the room, is the cheapest knob that
+    moves the argmax toward 80 without touching the labels.
+    """
     from scipy.signal import convolve
 
     from cyolo_score_following.augmentations.impulse_response import ImpulseResponse
@@ -50,12 +64,19 @@ def patch_piece_ir(seed: int = 0, prob: float = 1.0):
         if ir.shape[0] < 2:
             return sample
         p = sample['performance']
-        sample['performance'] = convolve(p, ir, 'full')[:-(ir.shape[0] - 1)]
+        out = convolve(p, ir, 'full')[:-(ir.shape[0] - 1)]
+        if snr_db > 0 and out.size:
+            rms = float(np.sqrt(np.mean(out.astype(np.float64) ** 2)))
+            if rms > 0:
+                n = rng.normal(0.0, rms * 10 ** (-snr_db / 20.0), out.shape)
+                out = out + n.astype(out.dtype)
+        sample['performance'] = out
         return sample
 
     ImpulseResponse.__call__ = __call__
     ImpulseResponse._piece_ir = True
-    print(f'[IR] one room per piece (seed={seed}, prob={prob})', flush=True)
+    print(f'[IR] one room per piece (seed={seed}, prob={prob}, '
+          f'snr={snr_db or "off"} dB)', flush=True)
 
 
 def patch_loader_ir(ir_path):

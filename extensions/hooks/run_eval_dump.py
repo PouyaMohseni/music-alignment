@@ -32,7 +32,8 @@ _ir = os.environ.get('IR_PATH', '')
 if _ir:
     from extensions.hooks.piece_ir_patch import patch_loader_ir, patch_piece_ir
     patch_piece_ir(seed=int(os.environ.get('IR_SEED', '0')),
-                   prob=float(os.environ.get('IR_PROB', '1.0')))
+                   prob=float(os.environ.get('IR_PROB', '1.0')),
+                   snr_db=float(os.environ.get('IR_SNR', '0')))
     patch_loader_ir(_ir.split(','))
     if not getattr(_d, '_ir_loader_patched', False):
         raise RuntimeError('IR loader patch did not take')
