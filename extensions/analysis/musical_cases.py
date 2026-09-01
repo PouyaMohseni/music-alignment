@@ -29,9 +29,26 @@ DATA = '/scratch/pmohseni/datasets/cyolo_data/msmd/msmd_rp'
 
 
 def load_piece(name, tier='room'):
+    """Also returns `pad`, the horizontal offset the loader introduces.
+
+    data_utils.load_piece pads every page to a SQUARE on the width axis and then
+    adds pad1 to every x it hands the model:
+
+        n_pages, h, w = scores.shape          # 1181 x 835
+        pad1 = abs(h - w) // 2                # 173
+        coords[i]['note_x'] += pad1
+
+    So predicted positions live in the padded frame while `sheets`, `bars` and
+    `systems` read straight from the npz live in the raw frame. Mixing the two
+    puts every marker 173 px to the right, off the page near the margin, and
+    silently mis-assigns bars.
+    """
     d = np.load(os.path.join(DATA, f'{name}_{tier}.npz'), allow_pickle=True)
-    return dict(sheets=d['sheets'], bars=list(d['bars']),
+    sheets = d['sheets']
+    _, h, w = sheets.shape
+    return dict(sheets=sheets, bars=list(d['bars']),
                 systems=list(d['systems']), coords=list(d['coords']),
+                pad=abs(h - w) // 2,
                 wav=os.path.join(DATA, f'{name}_{tier}.wav'))
 
 
@@ -114,7 +131,7 @@ def repeat_groups(sig, min_notes=3):
 def classify(tr, piece):
     """Per scored frame: error in seconds and, where it exceeds the threshold,
     which musical failure it is."""
-    bars, coords = piece['bars'], piece['coords']
+    bars, coords, pad = piece['bars'], piece['coords'], piece['pad']
     sig = bar_signatures(coords, bars)
     groups, _ = repeat_groups(sig)
     # bar_idx in coords indexes the same list as `bars`
@@ -125,8 +142,9 @@ def classify(tr, piece):
     bar_p = np.full(n, -1, np.int32)
     bar_g = np.full(n, -1, np.int32)
     for i in range(n):
-        bar_p[i] = assign_bar(tr['page'][i], tr['x_pred'][i], tr['y_pred'][i], bars)
-        bar_g[i] = assign_bar(tr['page'][i], tr['x_gt'][i], tr['y_gt'][i], bars)
+        # trajectory x is in the PADDED frame; bar boxes are in the raw frame
+        bar_p[i] = assign_bar(tr['page'][i], tr['x_pred'][i] - pad, tr['y_pred'][i], bars)
+        bar_g[i] = assign_bar(tr['page'][i], tr['x_gt'][i] - pad, tr['y_gt'][i], bars)
         if err[i] <= TH_SEC:
             continue
         bp, bg = int(bar_p[i]), int(bar_g[i])

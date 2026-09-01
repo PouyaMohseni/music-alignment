@@ -83,10 +83,22 @@ class _TransitionPrior:
     """
 
     def __init__(self, fwd_px=6.0, sigma_px=18.0, jump_logp=-6.0,
-                 mu_pow=0.0, sig_pow=0.0, ref_frames=5.0, clip=(0.2, 8.0)):
+                 mu_pow=0.0, sig_pow=0.0, ref_frames=5.0, clip=(0.2, 8.0),
+                 back_logp=None):
         self.fwd_px, self.sigma_px, self.jump_logp = fwd_px, sigma_px, jump_logp
         self.mu_pow, self.sig_pow = mu_pow, sig_pow
         self.ref_frames, self.clip = ref_frames, clip
+        # ASYMMETRY. The jump floor is what a displacement costs once it is far
+        # enough from the mean for the Gaussian to stop mattering, and it was
+        # the SAME number in both directions -- a 400 px leap backwards priced
+        # exactly like a 400 px leap forwards. Music does not do that. Measured
+        # on the room set, ground truth steps backwards on 0.73% of onsets while
+        # the decoder does so on 4.50%, six times too often, and those steps are
+        # its least accurate: 35.7% correct in the 50-200 px band against 88.3%
+        # for a normal forward step.
+        #
+        # None keeps the old symmetric floor, so the control is bit-identical.
+        self.back_logp = jump_logp if back_logp is None else back_logp
 
     @property
     def time_aware(self):
@@ -101,7 +113,10 @@ class _TransitionPrior:
         mu = self.fwd_px * s ** self.mu_pow
         sg = self.sigma_px * s ** self.sig_pow
         near = -0.5 * ((d - mu) / sg) ** 2
-        return np.maximum(near, self.jump_logp)
+        if self.back_logp == self.jump_logp:
+            return np.maximum(near, self.jump_logp)
+        floor = np.where(d < 0.0, self.back_logp, self.jump_logp)
+        return np.maximum(near, floor)
 
 
 class BeamDecoder:
@@ -112,7 +127,8 @@ class BeamDecoder:
                  topk: int = 32, warmup: int = 3, discount: float = 1.0,
                  cluster_px: float = 0.0, mu_pow: float = 0.0,
                  sig_pow: float = 0.0, ref_frames: float = 5.0,
-                 reanchor_k: int = 0, reanchor_px: float = 200.0):
+                 reanchor_k: int = 0, reanchor_px: float = 200.0,
+                 back_logp: float = None):
         """
         cluster_px  radius for EVIDENCE POOLING (0 = off, decoder unchanged).
         discount  fading memory on the accumulated path score, in [0, 1].
@@ -136,7 +152,7 @@ class BeamDecoder:
         self.discount, self.cluster_px = discount, cluster_px
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
                                       mu_pow=mu_pow, sig_pow=sig_pow,
-                                      ref_frames=ref_frames)
+                                      ref_frames=ref_frames, back_logp=back_logp)
         self.reanchor_k, self.reanchor_px = reanchor_k, reanchor_px
         self._state = {}          # piece -> (scores, xs, boxes, n_seen)
         self._last_frame = {}     # piece -> spectrogram frame of the last step
@@ -395,7 +411,8 @@ class ScorerDecoder:
     def __init__(self, scorer_path: str, topk: int = 256, blend: float = 1.0,
                  lam: float = 1.0, fwd_px: float = 6.0, sigma_px: float = 18.0,
                  jump_logp: float = -6.0, mu_pow: float = 1.0,
-                 sig_pow: float = 0.0, ref_frames: float = 5.0):
+                 sig_pow: float = 0.0, ref_frames: float = 5.0,
+                 back_logp: float = None):
         import torch as _t
 
         from extensions.heads.cand_scorer import load
@@ -405,7 +422,7 @@ class ScorerDecoder:
         self.lam = lam
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
                                       mu_pow=mu_pow, sig_pow=sig_pow,
-                                      ref_frames=ref_frames)
+                                      ref_frames=ref_frames, back_logp=back_logp)
         self._state = {}          # piece -> (x_prev, y_prev)
         self._last_frame = {}
         print(f'[SCORER] {scorer_path}: {self.model.n_params} params, '

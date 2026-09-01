@@ -73,6 +73,7 @@ def page_figure(piece_name, tr, piece, page, out, label='ours'):
     if not m.any():
         return None
     sheet = piece['sheets'][page]
+    pad = piece['pad']          # predicted x lives in the padded square
     err = np.abs(tr['t_pred'] - tr['t_gt'])[m] / FPS
     fig, ax = plt.subplots(figsize=(9, 9 * sheet.shape[0] / sheet.shape[1]))
     ax.imshow(sheet, cmap='gray', vmin=0, vmax=255)
@@ -81,12 +82,15 @@ def page_figure(piece_name, tr, piece, page, out, label='ours'):
             ax.add_patch(plt.Rectangle((b['x'] - b['w'] / 2, b['y'] - b['h'] / 2),
                                        b['w'], b['h'], fill=False,
                                        edgecolor='#3498db', lw=.5, alpha=.35))
-    ax.plot(tr['x_gt'][m], tr['y_gt'][m], '.', ms=3.5, color='#111',
+    # x from the trajectory is in the loader's PADDED square; the sheet and the
+    # bar boxes are raw npz coordinates. Without this every marker sits pad px
+    # to the right and 19.8% of them fall off the page entirely.
+    ax.plot(tr['x_gt'][m] - pad, tr['y_gt'][m], '.', ms=3.5, color='#111',
             label='ground truth', zorder=3)
     good = err <= TH_SEC
-    ax.plot(tr['x_pred'][m][good], tr['y_pred'][m][good], '.', ms=3.5,
+    ax.plot(tr['x_pred'][m][good] - pad, tr['y_pred'][m][good], '.', ms=3.5,
             color='#27ae60', alpha=.85, label=f'{label}: within 0.5 s')
-    ax.plot(tr['x_pred'][m][~good], tr['y_pred'][m][~good], 'x', ms=5,
+    ax.plot(tr['x_pred'][m][~good] - pad, tr['y_pred'][m][~good], 'x', ms=5,
             color='#c0392b', mew=1.2, label=f'{label}: outside 0.5 s')
     ax.set_xticks([])
     ax.set_yticks([])

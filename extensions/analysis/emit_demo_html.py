@@ -189,7 +189,7 @@ const fmt = s => (s<0?0:s).toFixed(1).padStart(4,'0') + 's';
 function lower(arr, x){let lo=0,hi=arr.length-1,r=-1;
   while(lo<=hi){const m=(lo+hi)>>1; if(arr[m]<=x){r=m;lo=m+1;}else hi=m-1;} return r;}
 
-DATA.cases.forEach(c => {
+DATA.cases.forEach(c => { try {
   const el = document.createElement('article');
   el.className = 'case';
   el.innerHTML = `
@@ -221,11 +221,17 @@ DATA.cases.forEach(c => {
   const clock = el.querySelector('[data-clock]');
   const g = cv.getContext('2d'); let showBase = false;
 
+  const off = document.createElement('canvas');
+  // The strip is static except when the baseline toggles or the panel resizes,
+  // so it is rendered once into an offscreen canvas and blitted each frame.
+  // Rebuilding it inside the animation loop meant resizing four canvases sixty
+  // times a second, which is what locked the page up.
   function drawStrip(){
     const r = strip.getBoundingClientRect();
-    strip.width = Math.max(1, Math.round(r.width * devicePixelRatio));
-    strip.height = Math.max(1, Math.round(r.height * devicePixelRatio));
-    const s = strip.getContext('2d'), W = strip.width, H = strip.height, col = C();
+    const w = Math.max(1, Math.round(r.width * devicePixelRatio));
+    const h = Math.max(1, Math.round(r.height * devicePixelRatio));
+    strip.width = off.width = w; strip.height = off.height = h;
+    const s = off.getContext('2d'), W = w, H = h, col = C();
     s.clearRect(0,0,W,H);
     const t0 = c.t[0], t1 = c.t[c.t.length-1], span = Math.max(t1-t0, 1e-6);
     const cap = 3, y = e => H - Math.min(e, cap)/cap * (H-8) - 4;
@@ -267,8 +273,8 @@ DATA.cases.forEach(c => {
     }
     if (stripGeom){
       const s = strip.getContext('2d');
-      // redraw strip then overlay the playhead
-      stripGeom = drawStrip();
+      s.clearRect(0, 0, strip.width, strip.height);
+      s.drawImage(off, 0, 0);
       const x = (t - stripGeom.t0) / stripGeom.span * strip.width;
       s.strokeStyle = col.ink; s.lineWidth = devicePixelRatio;
       s.beginPath(); s.moveTo(x,0); s.lineTo(x,strip.height); s.stroke();
@@ -276,10 +282,11 @@ DATA.cases.forEach(c => {
     clock.textContent = fmt(t - c.t[0]) + (i>=0 ? `   err ${c.e[i].toFixed(2)}s` : '');
     if (!audio.paused) requestAnimationFrame(draw);
   }
+  const safeDraw = () => { try { draw(); } catch (e) { console.error('draw', e); } };
 
   btn.addEventListener('click', () => {
     document.querySelectorAll('audio').forEach(a => { if (a !== audio) a.pause(); });
-    if (audio.paused){ audio.play(); btn.textContent = 'Pause'; requestAnimationFrame(draw); }
+    if (audio.paused){ audio.play(); btn.textContent = 'Pause'; requestAnimationFrame(safeDraw); }
     else { audio.pause(); btn.textContent = 'Play'; }
   });
   audio.addEventListener('pause', () => btn.textContent = 'Play');
@@ -288,18 +295,20 @@ DATA.cases.forEach(c => {
   bbtn.addEventListener('click', () => {
     showBase = !showBase; bbtn.setAttribute('aria-pressed', showBase);
     bbtn.textContent = showBase ? 'Hide baseline' : 'Show baseline';
-    stripGeom = drawStrip(); draw();
+    stripGeom = drawStrip(); safeDraw();
   });
   el.querySelector('.strip').addEventListener('click', ev => {
     const r = ev.currentTarget.getBoundingClientRect();
     const f = (ev.clientX - r.left) / r.width;
     audio.currentTime = Math.max(0, Math.min(audio.duration || 0,
       f * (c.t[c.t.length-1] - c.t[0]) + (c.t[0] - c.t0)));
-    draw();
+    safeDraw();
   });
-  const boot = () => { stripGeom = drawStrip(); draw(); };
+  const boot = () => { try { stripGeom = drawStrip(); safeDraw(); } catch (e) { console.error('boot', e); } };
   if (img.complete) boot(); else img.addEventListener('load', boot);
-  addEventListener('resize', () => { stripGeom = drawStrip(); draw(); });
+  } catch (e) { console.error('case', c && c.id, e); }
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { stripGeom = drawStrip(); safeDraw(); }, 120); });
 });
 </script>'''
 

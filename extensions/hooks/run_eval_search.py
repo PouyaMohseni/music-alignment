@@ -25,7 +25,9 @@ common = dict(lam=float(os.environ.get('C2_LAM', '1.0')),
               topk=int(os.environ.get('C2_TOPK', '32')),
               mu_pow=float(os.environ.get('TIME_MU_POW', '0')),
               sig_pow=float(os.environ.get('TIME_SIG_POW', '0')),
-              ref_frames=float(os.environ.get('TIME_REF', '5')))
+              ref_frames=float(os.environ.get('TIME_REF', '5')),
+              back_logp=(float(os.environ['C2_BACK'])
+                         if os.environ.get('C2_BACK') else None))
 if KIND == 'scorer':
     # the learned selector supplies its own scoring function, so the prior's
     # constants only matter through `blend`
@@ -35,7 +37,8 @@ if KIND == 'scorer':
                   lam=common['lam'], fwd_px=common['fwd_px'],
                   sigma_px=common['sigma_px'], jump_logp=common['jump_logp'],
                   mu_pow=common['mu_pow'], sig_pow=common['sig_pow'],
-                  ref_frames=common['ref_frames'])
+                  ref_frames=common['ref_frames'],
+                  back_logp=common['back_logp'])
 elif KIND == 'beam':
     common['beam'] = int(os.environ.get('BEAM', '8'))
     common['cluster_px'] = float(os.environ.get('CLUSTER_PX', '0'))

@@ -73,6 +73,7 @@ def main():
         sheet = pc['sheets'][pg]
         img, w, h = png_b64(sheet, 1000)
         sc = w / sheet.shape[1]
+        pad = pc['pad']     # the loader pads pages to a square and shifts x
         cases.append(dict(
             id=stem, title=title, why=why, page=pg, img=img, w=w, h=h,
             audio=b64(mp3, 'audio/mpeg'), t0=max(t0 - .5, 0),
@@ -81,11 +82,11 @@ def main():
             page_ours=round(100 * float((co['err'][m] <= .5).mean()), 1),
             page_base=round(100 * float((cb['err'][mb] <= .5).mean()), 1),
             t=[round(float(v), 3) for v in to['frame'][m] / FPS],
-            px=[round(float(v) * sc, 1) for v in to['x_pred'][m]],
+            px=[round(float(v) * sc, 1) for v in to['x_pred'][m] - pad],
             py=[round(float(v) * sc, 1) for v in to['y_pred'][m]],
-            gx=[round(float(v) * sc, 1) for v in to['x_gt'][m]],
+            gx=[round(float(v) * sc, 1) for v in to['x_gt'][m] - pad],
             gy=[round(float(v) * sc, 1) for v in to['y_gt'][m]],
-            bx=[round(float(v) * sc, 1) for v in tb['x_pred'][mb]],
+            bx=[round(float(v) * sc, 1) for v in tb['x_pred'][mb] - pad],
             by=[round(float(v) * sc, 1) for v in tb['y_pred'][mb]],
             bt=[round(float(v), 3) for v in tb['frame'][mb] / FPS],
             e=[round(float(v), 3) for v in co['err'][m]],
