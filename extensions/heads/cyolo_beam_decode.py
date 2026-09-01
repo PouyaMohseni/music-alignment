@@ -219,7 +219,7 @@ class BeamDecoder:
         return np.stack(gb), np.array(go), np.array(gx)
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None, bar=None, sys=None, ntot=None):
+               frame=None, bar=None, sys=None, ntot=None, z=None):
         # bar/sys/ntot are accepted and ignored: the caller passes the same
         # kwargs to every decoder so they stay interchangeable, and only the
         # learned scorer reads them.
@@ -342,7 +342,7 @@ class BandedViterbi:
         return e
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None, bar=None, sys=None, ntot=None):
+               frame=None, bar=None, sys=None, ntot=None, z=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
         s = self._step_scale(piece, frame)
