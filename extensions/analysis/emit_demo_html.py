@@ -99,10 +99,11 @@ BODY = r'''<div class="wrap">
   <h1>Following the Score</h1>
   <p class="lede">A frozen detector proposes candidate positions on the page; a decoder
   picks one per onset. Press play on any excerpt below and watch where it thinks it is.
-  Nothing here is retrained &mdash; the released checkpoint is untouched.</p>
+  Nothing here is retrained &mdash; the released checkpoint is untouched, and the
+  9,697-parameter selector on top of it never saw these recordings.</p>
   <div class="figures">
     <div class="fig"><b class="plain">79.9</b><span>cyolo_sb baseline<br>pct@0.5&nbsp;s, room</span></div>
-    <div class="fig"><b>89.7</b><span>ours<br>+9.8, 24/25 pages improved</span></div>
+    <div class="fig"><b>91.4</b><span>ours<br>+11.5, 14 of 16 pieces improved</span></div>
     <div class="fig"><b class="plain">96.0</b><span>ceiling for any causal tracker<br>over these candidates</span></div>
     <div class="fig"><b class="plain">7.3%</b><span>of errors are musically ambiguous<br>the rest are simply wrong</span></div>
   </div>
@@ -113,7 +114,10 @@ BODY = r'''<div class="wrap">
   <h2>What the tracker actually does</h2>
   <p class="lede">Each panel is one page of one performance. The hollow ring is the true
   position, the filled dot is our prediction &mdash; teal inside the half-second
-  threshold, red outside. The strip below the score is the error over time.</p>
+  threshold, red outside. The strip below the score is the error over time. These four
+  are not a highlight reel: they are the biggest gain, the best final result, the worst
+  piece in the set, and a piece where our learned selector is beaten by the simpler
+  hand-written rule.</p>
   <div id="cases" style="display:flex;flex-direction:column;gap:26px"></div>
 </section>
 
@@ -127,11 +131,11 @@ BODY = r'''<div class="wrap">
   <div class="scroll"><table>
     <thead><tr><th>Failure</th><th class="n">Frames</th><th class="n">Share</th><th>What it is</th></tr></thead>
     <tbody>
-      <tr><td>Timing drift</td><td class="n">341</td><td class="n">60.8%</td>
+      <tr><td>Timing drift</td><td class="n">337</td><td class="n">60.1%</td>
         <td>right staff, within two bars, the clock slipped</td></tr>
       <tr><td>Wrong staff line</td><td class="n">213</td><td class="n">38.0%</td>
         <td>correct horizontally, jumped to a neighbouring system</td></tr>
-      <tr><td>Gross</td><td class="n">7</td><td class="n">1.2%</td>
+      <tr><td>Gross</td><td class="n">11</td><td class="n">2.0%</td>
         <td>right staff, far away</td></tr>
       <tr class="hi"><td>Musically ambiguous</td><td class="n">41</td><td class="n">7.3%</td>
         <td>identical pitches at both positions &mdash; unfixable from one frame</td></tr>
@@ -146,27 +150,57 @@ BODY = r'''<div class="wrap">
 </section>
 
 <section>
-  <p class="eyebrow">Same decoder, three recordings of the same performances</p>
-  <h2>Where the numbers stand</h2>
+  <p class="eyebrow">Every piece in the test set &middot; real room microphone</p>
+  <h2>Where it wins and where it does not</h2>
   <div class="scroll"><table>
-    <thead><tr><th>Recording</th><th class="n">cyolo_sb</th><th class="n">+ decoder</th>
-      <th class="n">+ selector</th><th class="n">causal ceiling</th></tr></thead>
+    <thead><tr><th>Piece</th><th class="n">onsets</th><th class="n">cyolo_sb</th>
+      <th class="n">+ decoder</th><th class="n">+ selector</th><th class="n">&Delta;</th></tr></thead>
     <tbody>
-      <tr class="hi"><td>Room microphone</td><td class="n">79.9</td><td class="n">86.5</td>
-        <td class="n">89.7</td><td class="n">96.0</td></tr>
-      <tr><td>Direct pickup</td><td class="n">83.6</td><td class="n">89.1</td>
-        <td class="n">90.4</td><td class="n">&mdash;</td></tr>
-      <tr><td>Synthetic, same pieces</td><td class="n">87.2</td><td class="n">90.6</td>
-        <td class="n">91.5</td><td class="n">&mdash;</td></tr>
-      <tr><td>Synthetic, full 94-piece set</td><td class="n">89.3</td><td class="n">91.6</td>
-        <td class="n">&mdash;</td><td class="n">&mdash;</td></tr>
+      <tr class="hi"><td>Chopin, Nocturne Op.&thinsp;9 No.&thinsp;1</td><td class="n">1238</td><td class="n">63.7</td><td class="n">77.3</td><td class="n">87.5</td><td class="n">+23.8</td></tr>
+      <tr><td>Schumann, Pauvre Orpheline</td><td class="n">107</td><td class="n">66.4</td><td class="n">76.6</td><td class="n">81.3</td><td class="n">+15.0</td></tr>
+      <tr class="hi"><td>Schumann, Melodie Op.&thinsp;68 No.&thinsp;1</td><td class="n">175</td><td class="n">86.3</td><td class="n">91.4</td><td class="n">99.4</td><td class="n">+13.1</td></tr>
+      <tr><td>Schumann, Cavalier Sauvage</td><td class="n">154</td><td class="n">88.3</td><td class="n">93.5</td><td class="n">98.7</td><td class="n">+10.4</td></tr>
+      <tr><td>Bach, Prelude BWV&thinsp;924a</td><td class="n">212</td><td class="n">81.6</td><td class="n">87.3</td><td class="n">91.5</td><td class="n">+9.9</td></tr>
+      <tr><td>Bach, Sinfonia 11 BWV&thinsp;797</td><td class="n">386</td><td class="n">83.2</td><td class="n">87.3</td><td class="n">91.2</td><td class="n">+8.0</td></tr>
+      <tr><td>Mozart, KV&thinsp;331 Var.&thinsp;1</td><td class="n">214</td><td class="n">86.9</td><td class="n">86.4</td><td class="n">94.9</td><td class="n">+7.9</td></tr>
+      <tr><td>Bach, BWV&thinsp;117a</td><td class="n">157</td><td class="n">86.6</td><td class="n">93.6</td><td class="n">93.6</td><td class="n">+7.0</td></tr>
+      <tr><td>Schumann, Sans Titre</td><td class="n">179</td><td class="n">85.5</td><td class="n">87.2</td><td class="n">91.6</td><td class="n">+6.1</td></tr>
+      <tr><td>Bach, Anna Magdalena 3</td><td class="n">195</td><td class="n">93.3</td><td class="n">93.8</td><td class="n">99.0</td><td class="n">+5.6</td></tr>
+      <tr><td>Bach, Anna Magdalena 7</td><td class="n">221</td><td class="n">94.1</td><td class="n">98.2</td><td class="n">98.2</td><td class="n">+4.1</td></tr>
+      <tr><td>Bach, BWV&thinsp;120</td><td class="n">113</td><td class="n">94.7</td><td class="n">97.3</td><td class="n">98.2</td><td class="n">+3.5</td></tr>
+      <tr><td>Bach, Partita BWV&thinsp;830</td><td class="n">472</td><td class="n">91.3</td><td class="n">93.9</td><td class="n">94.1</td><td class="n">+2.8</td></tr>
+      <tr><td>Bach, French Suite 6 Menuet</td><td class="n">140</td><td class="n">97.9</td><td class="n">97.1</td><td class="n">100.0</td><td class="n">+2.1</td></tr>
+      <tr class="hi"><td>Schumann, Premier Chagrin</td><td class="n">130</td><td class="n">85.4</td><td class="n">92.3</td><td class="n">84.6</td><td class="n">&minus;0.8</td></tr>
+      <tr class="hi"><td>Mussorgsky, Promenade 3</td><td class="n">56</td><td class="n">46.4</td><td class="n">46.4</td><td class="n">39.3</td><td class="n">&minus;7.1</td></tr>
+      <tr><td><b>All onsets (micro)</b></td><td class="n"><b>4149</b></td><td class="n"><b>79.9</b></td><td class="n"><b>86.5</b></td><td class="n"><b>91.4</b></td><td class="n"><b>+11.5</b></td></tr>
     </tbody>
   </table></div>
-  <p class="note">Every column is the same frozen checkpoint. The decoder adds no
-  parameters at all; the selector adds 9,697, fitted on the training split and never on
-  any of these recordings. The gain against the baseline is +9.8 on room, 95% CI
-  [+0.57,&nbsp;+4.99] against the decoder alone, p&nbsp;=&nbsp;0.009 over a bootstrap
-  clustered by piece.</p>
+  <p class="note">Fourteen of sixteen pieces improve. The two that do not are worth more
+  than the fourteen that do: on <b>Premier Chagrin</b> the learned selector is beaten by
+  the hand-written rule it was meant to replace, and on <b>Promenade 3</b> &mdash; 56
+  onsets, the shortest and hardest piece &mdash; it makes a bad result worse. Both are in
+  the panels above.</p>
+</section>
+
+<section>
+  <p class="eyebrow">Same configuration, three recordings of the same performances</p>
+  <h2>It holds across recording conditions</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Recording</th><th class="n">cyolo_sb</th><th class="n">+ decoder</th>
+      <th class="n">+ selector</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>Room microphone</td><td class="n">79.9</td><td class="n">86.5</td><td class="n">91.4</td></tr>
+      <tr><td>Direct pickup</td><td class="n">83.6</td><td class="n">89.1</td><td class="n">93.3</td></tr>
+      <tr><td>Synthetic, same pieces</td><td class="n">87.2</td><td class="n">90.6</td><td class="n">93.4</td></tr>
+      <tr><td>Synthetic, full 94-piece set</td><td class="n">89.3</td><td class="n">91.6</td><td class="n">&mdash;</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">One frozen checkpoint throughout. The decoder adds no parameters; the
+  selector adds 9,697, fitted on the training split and selected on held-out validation
+  &mdash; none of these recordings informed either choice. Against the baseline the gain
+  is +11.5 on room, resolvable under a bootstrap clustered by piece
+  (p&nbsp;&lt;&nbsp;0.001). For reference, the published variant that reaches 86.5 on room
+  needs augmentation data that was never released.</p>
 </section>
 
 <footer>Positions, ground truth and thresholds are the evaluation harness&rsquo;s own,

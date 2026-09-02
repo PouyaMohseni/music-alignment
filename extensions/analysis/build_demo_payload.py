@@ -21,15 +21,24 @@ from extensions.analysis.musical_cases import FPS, classify, load_piece, load_tr
 
 T = '/scratch/pmohseni/omr/traj'
 OUT = '/scratch/pmohseni/omr/demo'
+# Chosen from the per-piece table for the SHIPPED 91.4 model, one case per
+# distinct behaviour rather than four wins:
+#
+#   piece                         base   hand   ours   delta
+#   Chopin Nocturne Op.9          63.7   77.3   87.5  +23.8   biggest gain
+#   Schumann op.68 no.1           86.3   91.4   99.4  +13.1   near-perfect result
+#   Mussorgsky Promenade 3        46.4   46.4   39.3   -7.1   worst, and we hurt it
+#   Schumann op.68 no.16          85.4   92.3   84.6   -0.8   hand decode beats ours
 CASES = [
     ('ChopinFF__O9__nocturne_in_b-flat_minor_room', 'Chopin, Nocturne Op. 9 No. 1',
-     'the largest gain in the set'),
-    ('BachJS__BWV797__bwv797_room', 'Bach, Sinfonia 11 BWV 797',
-     'where the wrong-staff failures cluster'),
+     'biggest gain in the set: 63.7 to 87.5'),
+    ('SchumannR__O68__schumann-op68-01-melodie_room', 'Schumann, Melodie Op. 68 No. 1',
+     'near-perfect: 86.3 to 99.4'),
     ('MussorgskyM__pictures-at-an-exhibition__promenade-3_room',
-     'Mussorgsky, Promenade 3', 'the hardest piece: neither decoder helps'),
-    ('BachJS__BWVAnh116__anna-magdalena-07_room', 'Bach, Anna Magdalena 7',
-     'a clean success'),
+     'Mussorgsky, Promenade 3', 'worst piece, and we make it worse: 46.4 to 39.3'),
+    ('SchumannR__O68__schumann-op68-16-premier-chagrin_room',
+     'Schumann, Premier Chagrin Op. 68 No. 16',
+     'the learned selector loses here: hand decode 92.3, ours 84.6'),
 ]
 
 
@@ -50,7 +59,8 @@ def png_b64(arr, max_w=1000):
 
 def main():
     base = load_traj(f'{T}/baseline_room.traj.npz')
-    ours = load_traj(f'{T}/ours_room.traj.npz')
+    # the shipped 91.4 model, not the 86.5 hand decoder the demo first showed
+    ours = load_traj(f'{T}/selected_room.traj.npz')
     cases = []
     for pn, title, why in CASES:
         short = pn.replace('_room', '')

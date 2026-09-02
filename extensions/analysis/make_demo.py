@@ -15,10 +15,12 @@ from extensions.analysis.render_cases import page_figure, path_figure, taxonomy_
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/scratch/pmohseni/omr/demo'
 T = '/scratch/pmohseni/omr/traj'
 CASES = [
-    ('ChopinFF__O9__nocturne_in_b-flat_minor_room', 'biggest gain: 63.7 -> 77.3'),
-    ('MussorgskyM__pictures-at-an-exhibition__promenade-3_room', 'hardest: 46.4, no gain'),
-    ('BachJS__BWV797__bwv797_room', 'wrong-staff failures: 83.2 -> 87.3'),
-    ('BachJS__BWVAnh116__anna-magdalena-07_room', 'clean success: 94.1 -> 98.2'),
+    ('ChopinFF__O9__nocturne_in_b-flat_minor_room', 'biggest gain: 63.7 -> 87.5'),
+    ('SchumannR__O68__schumann-op68-01-melodie_room', 'near-perfect: 86.3 -> 99.4'),
+    ('MussorgskyM__pictures-at-an-exhibition__promenade-3_room',
+     'worst piece, and we make it worse: 46.4 -> 39.3'),
+    ('SchumannR__O68__schumann-op68-16-premier-chagrin_room',
+     'the selector loses: hand 92.3, ours 84.6'),
 ]
 
 
@@ -33,7 +35,7 @@ def mp3(wav, dst):
 def main():
     os.makedirs(OUT, exist_ok=True)
     base = load_traj(f'{T}/baseline_room.traj.npz')
-    ours = load_traj(f'{T}/ours_room.traj.npz')
+    ours = load_traj(f'{T}/selected_room.traj.npz')
     tiers = {t: load_traj(f'{T}/ours_{t}.traj.npz') for t in ('room', 'do', 'rp_synth')}
     manifest, allcats = [], []
 
