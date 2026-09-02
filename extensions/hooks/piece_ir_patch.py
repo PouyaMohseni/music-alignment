@@ -68,7 +68,12 @@ def patch_piece_ir(seed: int = 0, prob: float = 1.0, snr_db: float = 0.0):
         if snr_db > 0 and out.size:
             rms = float(np.sqrt(np.mean(out.astype(np.float64) ** 2)))
             if rms > 0:
-                n = rng.normal(0.0, rms * 10 ** (-snr_db / 20.0), out.shape)
+                # `rng` is a stdlib random.Random, which has no .normal --
+                # that is numpy's API. Seed a numpy generator from the SAME
+                # per-piece key so the noise stays deterministic per piece,
+                # like the room choice above.
+                nrng = np.random.default_rng(rng.getrandbits(64))
+                n = nrng.normal(0.0, rms * 10 ** (-snr_db / 20.0), out.shape)
                 out = out + n.astype(out.dtype)
         sample['performance'] = out
         return sample
