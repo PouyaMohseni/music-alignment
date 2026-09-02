@@ -105,7 +105,7 @@ BODY = r'''<div class="wrap">
     <div class="fig"><b class="plain">79.9</b><span>cyolo_sb baseline<br>pct@0.5&nbsp;s, room</span></div>
     <div class="fig"><b>91.4</b><span>ours<br>+11.5, 14 of 16 pieces improved</span></div>
     <div class="fig"><b class="plain">96.0</b><span>ceiling for any causal tracker<br>over these candidates</span></div>
-    <div class="fig"><b class="plain">7.3%</b><span>of errors are musically ambiguous<br>the rest are simply wrong</span></div>
+    <div class="fig"><b class="plain">5.1%</b><span>of errors are musically ambiguous<br>the rest are simply wrong</span></div>
   </div>
 </header>
 
@@ -122,7 +122,7 @@ BODY = r'''<div class="wrap">
 </section>
 
 <section>
-  <p class="eyebrow">Failure analysis &middot; 4,149 onsets, 561 outside threshold</p>
+  <p class="eyebrow">Failure analysis &middot; 4,149 onsets, 355 outside threshold</p>
   <h2>The errors are not ambiguity</h2>
   <p class="lede">The obvious hypothesis is that a tracker fails where the music repeats,
   because the image genuinely cannot say which repeat you are in. We tested it directly:
@@ -131,18 +131,18 @@ BODY = r'''<div class="wrap">
   <div class="scroll"><table>
     <thead><tr><th>Failure</th><th class="n">Frames</th><th class="n">Share</th><th>What it is</th></tr></thead>
     <tbody>
-      <tr><td>Timing drift</td><td class="n">337</td><td class="n">60.1%</td>
+      <tr><td>Timing drift</td><td class="n">264</td><td class="n">74.4%</td>
         <td>right staff, within two bars, the clock slipped</td></tr>
-      <tr><td>Wrong staff line</td><td class="n">213</td><td class="n">38.0%</td>
+      <tr><td>Wrong staff line</td><td class="n">90</td><td class="n">25.4%</td>
         <td>correct horizontally, jumped to a neighbouring system</td></tr>
-      <tr><td>Gross</td><td class="n">11</td><td class="n">2.0%</td>
+      <tr><td>Gross</td><td class="n">1</td><td class="n">0.3%</td>
         <td>right staff, far away</td></tr>
-      <tr class="hi"><td>Musically ambiguous</td><td class="n">41</td><td class="n">7.3%</td>
+      <tr class="hi"><td>Musically ambiguous</td><td class="n">18</td><td class="n">5.1%</td>
         <td>identical pitches at both positions &mdash; unfixable from one frame</td></tr>
     </tbody>
   </table></div>
   <p class="note">Median pitch overlap between the chosen and true positions is
-  <b>0.000</b>, and 54.9% of errors land somewhere with <i>no notes in common</i> at all.
+  <b>0.000</b>, and 59.2% of errors land somewhere with <i>no notes in common</i> at all.
   So the tracker is not being fooled by a passage that sounds the same. It is simply
   landing in the wrong place, and 99% of the time that place is nearby &mdash; a slipped
   clock or the staff above. That argues against reaching for memory or a long-horizon
@@ -204,8 +204,11 @@ BODY = r'''<div class="wrap">
 </section>
 
 <footer>Positions, ground truth and thresholds are the evaluation harness&rsquo;s own,
-recorded frame by frame during the scored run. Audio is the original room-microphone
-recording, cut to the span the tracker spent on the page shown.</footer>
+recorded frame by frame during the scored run that produced 91.4. Audio is the original
+room-microphone recording, cut to the span the tracker spent on the page shown. Sixteen
+pieces is a small test set &mdash; a bootstrap clustered by piece gives an effective
+sample of 16, not 4,149 &mdash; so a claim much finer than a few points would not be
+supported by it.</footer>
 </div>
 
 <script id="payload" type="application/json">__PAYLOAD__</script>
