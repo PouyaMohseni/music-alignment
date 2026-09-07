@@ -171,6 +171,30 @@ def main():
         A, B = auc(v, ep), auc(v, wrong.astype(bool))
         order.append((abs(A - 0.5), k, A, B))
         print(f'{k:12s} {A:16.3f} {B:11.3f}')
+    # AUC IS THE WRONG STATISTIC AT THIS BASE RATE, and acting on it cost a
+    # whole experiment. In-episode onsets are ~5% of the total, so a detector
+    # can separate the states well and still fire mostly on healthy tracking.
+    # The costs are asymmetric: a true fire recovers a lock already lost, a
+    # false fire destroys a good one. Precision at the operating point, not
+    # AUC, is what decides whether a gate is worth acting on.
+    print(f'\n=== gate precision at the operating point (base rate '
+          f'{100.0 * ep.mean():.1f}%) ===')
+    print(f'{"tau":>6s} {"win":>4s} {"fires":>6s} {"true":>6s} {"prec":>6s} '
+          f'{"recall":>7s}   cost of firing')
+    obj = np.array([r['obj_chosen'] for r in rows])
+    for tau in (0.03, 0.05, 0.08, 0.12, 0.20, 0.30):
+        for win in (1, 3, 5):
+            roll = np.array([obj[max(0, i - win + 1):i + 1].mean()
+                             for i in range(len(obj))])
+            fire = roll < tau
+            if not fire.any():
+                continue
+            tp = int((fire & ep).sum())
+            prec, rec = tp / fire.sum(), tp / max(ep.sum(), 1)
+            print(f'{tau:6.2f} {win:4d} {int(fire.sum()):6d} {tp:6d} '
+                  f'{prec:6.2f} {rec:7.2f}   '
+                  f'{int(fire.sum()) - tp} good locks broken')
+
     order.sort(reverse=True)
     print(f'\nmost separating: ' +
           ', '.join(f'{k} ({A:.3f})' for _, k, A, _ in order[:4]))
