@@ -37,10 +37,13 @@ TWO DECODERS, ONE INTERFACE
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import torch
 
 NEG_INF = -1e9
+_FEAT_MAXK = int(os.environ.get('FEAT_MAXK', '0'))
 
 
 def _unroll(box, staff_coords, add_per_staff) -> float:
@@ -516,6 +519,15 @@ class ScorerDecoder:
                                    f'capture gives {fv.shape[1]}')
             ff = self._t.from_numpy(
                 fv[idx.detach().cpu().numpy()]).unsqueeze(0)
+            # DIAGNOSTIC. The training dumps were written with DUMP_FEATK=128
+            # under DUMP_MAXK=256, so the offline rollout zero-pads features for
+            # candidates 128..255 while this path supplies real ones for all
+            # 256. That is the whole of the constant +0.8 the two paths differ
+            # by (0.0 for featdim=0 models, +0.8 for both feature models).
+            # Setting FEAT_MAXK=128 reproduces the rollout's handicap exactly,
+            # which turns that explanation into something falsifiable.
+            if _FEAT_MAXK and ff.shape[1] > _FEAT_MAXK:
+                ff[:, _FEAT_MAXK:] = 0.0
         with self._t.no_grad():
             s = self.model(self._t.from_numpy(f).unsqueeze(0), z=zz,
                            feat=ff)[0].numpy()
