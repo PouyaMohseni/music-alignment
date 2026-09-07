@@ -47,10 +47,17 @@ run () {   # name  checkpoint
       | stdbuf -oL grep --line-buffered -vE "it/s\]|it\]|^\s*$" \
       | grep -E "^<= |^Average|rror|Traceback|FEAT|SCORER"
     # an npz with zero arrays is still a valid, non-empty file, so `-s` once let
-    # silently-skipped arms look like successful ones
-    if [ ! -f "$R/${V}_room.npz" ] || [ "$(stat -c%s "$R/${V}_room.npz")" -lt 1000000 ]; then
-        echo "!!!!! $V produced no usable dump"
-    fi
+    # silently-skipped arms look like successful ones. The first version of this
+    # guard demanded >1MB and cried wolf on every arm: an --only_onsets dump of
+    # all 16 room pieces is ~26KB, because it holds 4149 onsets and not frames.
+    # Count the actual rows instead of guessing from the file size.
+    python - "$R/${V}_room.npz" <<'PY' || echo "!!!!! $V produced no usable dump"
+import sys, numpy as np
+d = np.load(sys.argv[1])
+n = sum(d[k].size for k in d.files if k.endswith('frame_diff'))
+print(f'[DUMP] {len(d.files)} arrays, {n} onsets')
+sys.exit(0 if n > 1000 else 1)
+PY
 }
 
 run ir_only   "$M/ir_only.pt"
