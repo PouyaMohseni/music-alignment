@@ -219,7 +219,7 @@ class BeamDecoder:
         return np.stack(gb), np.array(go), np.array(gx)
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None, bar=None, sys=None, ntot=None, z=None):
+               frame=None, bar=None, sys=None, ntot=None, z=None, feat=None):
         # bar/sys/ntot are accepted and ignored: the caller passes the same
         # kwargs to every decoder so they stay interchangeable, and only the
         # learned scorer reads them.
@@ -342,7 +342,7 @@ class BandedViterbi:
         return e
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None, add_per_staff=None,
-               frame=None, bar=None, sys=None, ntot=None, z=None):
+               frame=None, bar=None, sys=None, ntot=None, z=None, feat=None):
         if cand_obj.numel() == 0:
             return cand_xywh.new_zeros(4)
         s = self._step_scale(piece, frame)
@@ -437,7 +437,7 @@ class ScorerDecoder:
 
     def decode(self, cand_xywh, cand_obj, piece, staff_coords=None,
                add_per_staff=None, frame=None, bar=None, sys=None, ntot=None,
-               z=None):
+               z=None, feat=None):
         import numpy as _np
 
         from extensions.heads.cand_features import build
@@ -486,8 +486,39 @@ class ScorerDecoder:
         zz = None
         if self.model.zenc is not None and z is not None:
             zz = self._t.from_numpy(_np.asarray(z, _np.float32)).unsqueeze(0)
+        # PER-CANDIDATE BACKBONE FEATURES.
+        #
+        # These were simply never passed. CandScorer.forward substitutes a zero
+        # tensor when feat is None, so every feature model evaluated through the
+        # harness ran with its feature branch wired to zeros -- that is where
+        # feat_wide's "94.0" came from, against 91.9 once the features arrive.
+        # The offline rollout always passed them, which is why the two disagreed.
+        #
+        # `feat` arrives with ONE ROW PER CANDIDATE, in the caller's row order,
+        # and is indexed here by `idx` -- the decoder's own topk. Alignment is
+        # therefore structural. The earlier version had the caller re-derive the
+        # topk order with np.argsort, which breaks ties differently from
+        # torch.topk and silently mismatched rows whenever a sys/bar filter
+        # dropped a candidate: the same class of bug, one layer up.
+        ff = None
+        if self.model.fenc is not None:
+            if feat is None:
+                raise RuntimeError(
+                    f'scorer declares featdim={self.model.featdim} but got no '
+                    'features; install the capture hook or it runs on zeros')
+            fv = _np.asarray(feat, _np.float32)
+            if fv.shape[0] != int(cand_obj.shape[0]):
+                raise RuntimeError(
+                    f'{fv.shape[0]} feature rows for {int(cand_obj.shape[0])} '
+                    'candidates; rows must correspond one to one')
+            if fv.shape[1] != self.model.featdim:
+                raise RuntimeError(f'model wants featdim={self.model.featdim}, '
+                                   f'capture gives {fv.shape[1]}')
+            ff = self._t.from_numpy(
+                fv[idx.detach().cpu().numpy()]).unsqueeze(0)
         with self._t.no_grad():
-            s = self.model(self._t.from_numpy(f).unsqueeze(0), z=zz)[0].numpy()
+            s = self.model(self._t.from_numpy(f).unsqueeze(0), z=zz,
+                           feat=ff)[0].numpy()
 
         if self.blend < 1.0:
             lo = _np.log(_np.clip(c[:, 4], 1e-8, None))

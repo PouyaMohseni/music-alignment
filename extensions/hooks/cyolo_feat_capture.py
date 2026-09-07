@@ -69,6 +69,15 @@ def gather(batch_idx, cand_idx):
         return None
     na, ny, nx = LAST_FEAT['shape']
     j = np.asarray(cand_idx, np.int64)
+    # The cell arithmetic below is only valid if every index really lands in
+    # scale 0's own block. That held because class-0 candidates all come from
+    # P3 and P3 is first in the concatenation -- an assumption worth checking
+    # rather than trusting, since violating it returns plausible WRONG features
+    # instead of failing.
+    if j.size and (j.max() >= na * ny * nx or j.min() < 0):
+        raise RuntimeError(
+            f'candidate index {j.min()}..{j.max()} outside scale-0 block '
+            f'(na*ny*nx = {na * ny * nx}); features would be silently wrong')
     gy, gx = (j % (ny * nx)) // nx, j % nx
     v = f[batch_idx, :, gy, gx]                          # (C, n) -> transpose
     return v.t().cpu().numpy().astype(np.float16)

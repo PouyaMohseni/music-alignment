@@ -70,6 +70,14 @@ def patch_cyolo_search(kind='beam', **kw):
     else:
         raise ValueError(f'unknown decoder {kind!r}')
 
+    _WANT_FEAT = getattr(dec, 'model', None) is not None and \
+        getattr(dec.model, 'fenc', None) is not None
+    if _WANT_FEAT:
+        from extensions.hooks.cyolo_feat_capture import gather, patch_capture_feat
+        patch_capture_feat(scale=0)
+        print('[SEARCH] scorer needs backbone features; capture installed',
+              flush=True)
+
     def _best_of_class(x, cls, sf):
         rows = x[x[:, -1] == cls]
         if rows.shape[0] == 0:
@@ -87,11 +95,21 @@ def patch_cyolo_search(kind='beam', **kw):
         aps, sfs = _BATCH['add_per_staff'], _BATCH['scale_factors']
         out = []
         for xi, x in enumerate(prediction):
-            sel = x[x[:, -1] == class_id]
+            m_cls = x[:, -1] == class_id
+            sel = x[m_cls]
             if sel.shape[0] == 0:
                 out.append(x.new_zeros(4))
                 continue
             sf = float(sfs[xi]) if sfs is not None else 1.0
+            ncol = sel.shape[1]
+            if _WANT_FEAT and class_id == 0:
+                # carry each candidate's FLAT index through the filters, so the
+                # feature rows cannot drift out of step with the rows the
+                # decoder ends up scoring. system_filter/bar_filter return
+                # filtered ROWS rather than a mask, and neither reads the last
+                # column of sel, so an appended index column rides along.
+                fi = torch.nonzero(m_cls).squeeze(-1).to(sel.dtype)
+                sel = torch.cat([sel, fi.unsqueeze(1)], 1)
             staff_coords, add_per_staff = (aps[xi] if aps is not None else (None, None))
             if class_id == 0 and _SYS_SLACK > 0:
                 from extensions.hooks.cyolo_probe_patch import system_filter
@@ -99,6 +117,13 @@ def patch_cyolo_search(kind='beam', **kw):
             if class_id == 0 and _BAR_SLACK > 0:
                 from extensions.hooks.cyolo_probe_patch import bar_filter
                 sel = bar_filter(sel, x, _BAR_SLACK)
+            fv = None
+            if _WANT_FEAT and class_id == 0:
+                fv = gather(xi, sel[:, -1].long().cpu().numpy())
+                sel = sel[:, :ncol]
+                if fv is None:
+                    raise RuntimeError('feature capture returned nothing; '
+                                       'Detect.forward hook did not fire')
             frames = _BATCH['frames']
             # the learned scorer uses the frame's bar and system boxes as
             # features; the hand-tuned decoders ignore them
@@ -109,7 +134,8 @@ def patch_cyolo_search(kind='beam', **kw):
                                 sys=_best_of_class(x, 2, sf),
                                 ntot=int(sel.shape[0]),
                                 z=(_Z['z'][xi] if _Z.get('z') is not None
-                                   and xi < len(_Z['z']) else None))
+                                   and xi < len(_Z['z']) else None),
+                                feat=fv)
             out.append(chosen / sf)
         return torch.stack(out)
 
