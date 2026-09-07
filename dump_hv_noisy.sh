@@ -34,7 +34,12 @@ unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 O=/scratch/pmohseni/omr/candhv; mkdir -p "$O"
 for SNR in 12 6 3 0.5; do
     T="$O/valid_snr$SNR.npz"
-    [ -s "$T" ] && { echo "##### snr$SNR present"; continue; }
+    # -s alone is not enough: a dump that failed mid-run leaves a VALID but
+    # empty npz of 22 bytes, which passes -s and silently skips the arm. That
+    # is how the 12 and 6 dB arms were lost. Require a plausible size.
+    if [ -f "$T" ] && [ "$(stat -c %s "$T")" -gt 1000000 ]; then
+        echo "##### snr$SNR present ($(stat -c %s "$T") bytes)"; continue
+    fi
     export IR_SNR=$SNR DUMP_OUT="$T"
     echo ""; echo "##### held-out 80 pieces, room + noise at ${SNR} dB"
     python extensions/hooks/run_eval_dump.py \
