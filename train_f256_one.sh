@@ -2,8 +2,8 @@
 #SBATCH --job-name=f256s
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=5:00:00
+#SBATCH --mem=32G
+#SBATCH --time=4:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/f256s%a-%A.log
 #SBATCH --array=1-4
 # One seed per array task. Four seeds in a single 8h job needed ~10-12h on the

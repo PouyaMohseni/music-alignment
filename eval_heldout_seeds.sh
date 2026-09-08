@@ -2,8 +2,8 @@
 #SBATCH --job-name=hseeds
 #SBATCH --account=def-ichiro
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=96G
-#SBATCH --time=3:00:00
+#SBATCH --mem=16G
+#SBATCH --time=1:00:00
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/hseeds-%j.log
 set -uo pipefail
 cd /project/def-ichiro/pmohseni/music-alignment
