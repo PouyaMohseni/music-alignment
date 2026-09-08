@@ -29,16 +29,22 @@ OUT = '/scratch/pmohseni/omr/demo'
 #   Schumann op.68 no.1           86.3   91.4   99.4  +13.1   near-perfect result
 #   Mussorgsky Promenade 3        46.4   46.4   39.3   -7.1   worst, and we hurt it
 #   Schumann op.68 no.16          85.4   92.3   84.6   -0.8   hand decode beats ours
+# Chosen against the SHIPPED model's own per-piece table, not the previous
+# one's. Premier Chagrin used to sit here as the case where the learned
+# selector lost to the hand rule; with velocity features it now improves
+# (84.6 -> 88.5), so keeping it would have illustrated a failure we no longer
+# have. Pauvre Orpheline replaces it, and is a sharper example anyway: the
+# image features actively cost 11 points there.
 CASES = [
     ('ChopinFF__O9__nocturne_in_b-flat_minor_room', 'Chopin, Nocturne Op. 9 No. 1',
-     'biggest gain in the set: 63.7 to 87.5'),
-    ('SchumannR__O68__schumann-op68-01-melodie_room', 'Schumann, Melodie Op. 68 No. 1',
-     'near-perfect: 86.3 to 99.4'),
+     'biggest gain in the set: 63.7 to 92.6'),
+    ('BachJS__BWV797__bwv797_room', 'Bach, Sinfonia 11 BWV 797',
+     'second biggest, and near-perfect after: 83.2 to 97.9'),
     ('MussorgskyM__pictures-at-an-exhibition__promenade-3_room',
-     'Mussorgsky, Promenade 3', 'worst piece, and we make it worse: 46.4 to 39.3'),
-    ('SchumannR__O68__schumann-op68-16-premier-chagrin_room',
-     'Schumann, Premier Chagrin Op. 68 No. 16',
-     'the learned selector loses here: hand decode 92.3, ours 84.6'),
+     'Mussorgsky, Promenade 3', 'worst piece, and we make it worse: 46.4 to 33.9'),
+    ('SchumannR__O68__schumann-op68-06-pauvre-orpheline_room',
+     'Schumann, Pauvre Orpheline Op. 68 No. 6',
+     'image features cost us here: featureless 81.3, ours 70.1'),
 ]
 
 
@@ -59,8 +65,10 @@ def png_b64(arr, max_w=1000):
 
 def main():
     base = load_traj(f'{T}/baseline_room.traj.npz')
-    # the shipped 91.4 model, not the 86.5 hand decoder the demo first showed
-    ours = load_traj(f'{T}/selected_room.traj.npz')
+    # the shipped model: vel_p8 at 93.4, not the featureless 91.4 selector the
+    # demo was first built from. Overridable so the panels can be regenerated
+    # for a different checkpoint without editing this file.
+    ours = load_traj(os.environ.get('OURS_TRAJ', f'{T}/velp8_room.traj.npz'))
     cases = []
     for pn, title, why in CASES:
         short = pn.replace('_room', '')
