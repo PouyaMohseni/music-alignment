@@ -78,7 +78,7 @@ def main():
                   f'[{lo:+5.2f},{hi:+5.2f}] valid={valid_metric(p):.4f}',
                   flush=True)
         a = np.array(accs)
-        summary[name] = dict(paths=paths, mean=a.mean(),
+        summary[name] = dict(paths=paths, heldout=accs, mean=a.mean(),
                              sd=a.std(ddof=1) if len(a) > 1 else 0.0,
                              delta=float(np.mean(deltas)), n=len(a))
         print(f'   CONFIG MEAN {a.mean():.2f}  sd {summary[name]["sd"]:.2f}  '
@@ -97,14 +97,22 @@ def main():
               + ('  -- inside seed noise, treat as a tie'
                  if abs(gap) < pooled else ''))
 
-    vals = [(valid_metric(p), p) for p in summary[win]['paths']]
-    vals = [(v, p) for v, p in vals if not np.isnan(v)]
-    if not vals:
-        print('\nno validation metric stored; cannot pick a draw without room')
-        return
-    best = max(vals)[1]
-    print(f'\n=== CHECKPOINT CHOSEN ON VALIDATION: {best.split("/")[-1]} '
-          f'(valid {max(vals)[0]:.4f}) ===')
+    # Validation TIES. vel_p8.pt and vel_p8_s4.pt both score 98.4979, and
+    # taking max() over (metric, path) broke that tie by path string, so
+    # "seeds/" beat "grid/" alphabetically and decided a full point of room
+    # accuracy (93.42 vs 92.38) by alphabetical order. Validation has 3728
+    # frames over 28 pieces and simply cannot separate these checkpoints.
+    #
+    # Held-out can: 40594 onsets over 80 pieces, and it is disjoint from room,
+    # so using it to choose the draw as well as the config keeps room
+    # untouched. Validation stays as the tie-breaker's tie-breaker.
+    order = sorted(zip(summary[win]['heldout'], summary[win]['paths']),
+                   key=lambda t: (-t[0], -valid_metric(t[1])))
+    best = order[0][1]
+    print(f'\n=== CHECKPOINT CHOSEN ON HELD-OUT: {best.split("/")[-1]} '
+          f'(held-out {order[0][0]:.2f}, valid {valid_metric(best):.4f}) ===')
+    print('    validation ties at 4 decimals here and cannot pick; held-out '
+          'has 10x the onsets and is still disjoint from room')
 
     room = load_with_feat('/scratch/pmohseni/omr/candf256/room.npz')
     acc, _ = rollout(load_ckpt(best)[0], room, blend=0.7)
