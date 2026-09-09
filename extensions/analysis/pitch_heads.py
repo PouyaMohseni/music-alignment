@@ -198,3 +198,55 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# --------------------------------------------------------------------------
+# inference side: turn the two heads into a per-candidate agreement array
+# --------------------------------------------------------------------------
+
+def load_heads(path):
+    d = torch.load(path, map_location='cpu', weights_only=False)
+    sh, ah = Head(), Head()
+    sh.load_state_dict(d['score']); ah.load_state_dict(d['audio'])
+    sh.eval(); ah.eval()
+    return sh, ah
+
+
+def agree(sh, ah, feat, z, k=None):
+    """(K,2): [agreement with the sounding pitches, sharpness of this box's own
+    pitch prediction]. Nothing symbolic is read -- feat is image, z is audio."""
+    fv = np.asarray(feat, np.float32)
+    if fv.size == 0:
+        return np.zeros((0, 2), np.float32)
+    if k is not None:
+        fv = fv[:k]
+    with torch.no_grad():
+        ps = torch.softmax(sh(torch.from_numpy(fv)), -1).numpy()
+        pa = torch.sigmoid(ah(torch.from_numpy(
+            np.asarray(z, np.float32)[None]))).numpy()[0]
+    out = np.zeros((fv.shape[0], 2), np.float32)
+    out[:, 0] = ps @ pa
+    out[:, 1] = ps.max(1)
+    return out
+
+
+def annotate_pieces(pieces, path):
+    """Attach p['pitch'][i] to every frame, once, at load time."""
+    sh, ah = load_heads(path)
+    n = 0
+    for p in pieces:
+        if p.get('feat') is None or p.get('z') is None:
+            p['pitch'] = None
+            continue
+        out = []
+        for i, c in enumerate(p['cand']):
+            fv = p['feat'][i]
+            kk = min(c.shape[0], len(fv))
+            a = agree(sh, ah, fv, p['z'][i], k=kk)
+            if a.shape[0] < c.shape[0]:
+                a = np.vstack([a, np.zeros((c.shape[0] - a.shape[0], 2), np.float32)])
+            out.append(a)
+            n += 1
+        p['pitch'] = out
+    print(f'[PITCH] agreement attached to {n} frames from {path}', flush=True)
+    return pieces

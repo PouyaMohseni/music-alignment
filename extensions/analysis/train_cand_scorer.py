@@ -84,6 +84,11 @@ def oracle_idx(c, t_gt):
     return int(np.argmin(np.abs(c[:, 5] - t_gt))) if len(c) else -1
 
 
+def _pitch(p, fi):
+    v = p.get('pitch')
+    return None if v is None or fi >= len(v) else v[fi]
+
+
 def _vhat(p, fi):
     v = p.get('vhat')
     if v is None or fi >= len(v) or not np.isfinite(v[fi]):
@@ -139,7 +144,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
             feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                                ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                                x_prev2=x_prev2, dframes_prev=dfr_prev,
-                               v_hat=_vhat(p, fi)))
+                               v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
             labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
             zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
             if featdim:
@@ -170,7 +175,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
         feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                            x_prev2=x_prev2, dframes_prev=dfr_prev,
-                           v_hat=_vhat(p, fi)))
+                           v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
         if featdim:
@@ -220,7 +225,8 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
                         if f_prev is not None and f_prev2 is not None else None)
             f = build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
-                      x_prev2=x_prev2, dframes_prev=dfr_prev, v_hat=v_hat)
+                      x_prev2=x_prev2, dframes_prev=dfr_prev, v_hat=v_hat,
+                      pitch=(p['pitch'][fi] if p.get('pitch') is not None else None))
             zz = (torch.from_numpy(p['z'][fi]).unsqueeze(0)
                   if p['z'] is not None else None)
             ff = None
@@ -285,6 +291,9 @@ def main():
                          'visited histories replace the oracle ones')
     ap.add_argument('--dagger_frac', type=float, default=0.5,
                     help='fraction of training items drawn from rollout states')
+    ap.add_argument('--pitch_heads', default='',
+                    help='checkpoint of the two pitch heads; their per-candidate '
+                         'AGREEMENT becomes features 37..40')
     ap.add_argument('--recover_w', type=float, default=1.0,
                     help='loss weight for states where NO candidate is inside '
                          'the threshold (1.0 = current behaviour, 0 = drop)')
@@ -298,6 +307,10 @@ def main():
 
     tr = load_dumps(sorted(sum([glob.glob(p) for p in a.train], [])))
     va = load_dumps(sorted(sum([glob.glob(p) for p in a.valid], [])))
+    if a.pitch_heads:
+        from extensions.analysis.pitch_heads import annotate_pieces
+        annotate_pieces(tr, a.pitch_heads)
+        annotate_pieces(va, a.pitch_heads)
     for _p in tr + va:
         _p['vhat'] = oracle_tempo(_p, alpha=a.tempo_alpha)
     idx = index(tr)

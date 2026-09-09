@@ -34,6 +34,13 @@ CONFIGS = [
     ('nbr (33 feat)', sorted(glob.glob(f'{M}/nbr/nbr_s*.pt'))),
     ('tempo (37 feat)', sorted(glob.glob(f'{M}/tempo/tempo_s*.pt'))),
     ('dagger (33 feat, rollout states)', sorted(glob.glob(f'{M}/dagger/dagger_s*.pt'))),
+    # without these two entries both directions train and then produce no
+    # measurement at all, which is how an experiment quietly becomes a no-op
+    ('dagrec w=0 (unwinnable states dropped)',
+     sorted(glob.glob(f'{M}/dagrec/dagrec_w0.0_s*.pt'))),
+    ('dagrec w=0.25', sorted(glob.glob(f'{M}/dagrec/dagrec_w0.25_s*.pt'))),
+    ('crf (globally normalized)', sorted(glob.glob(f'{M}/crf/crf_s*.pt'))),
+    ('pitch agreement (41 feat)', sorted(glob.glob(f'{M}/pitchsc/pitchsc_s*.pt'))),
 ]
 
 

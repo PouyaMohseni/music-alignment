@@ -99,6 +99,24 @@ FEATURE_NAMES = (
     'd_tempo_tanh',
     'tempo_rel',          # this candidate's implied speed against tracked tempo
     'has_tempo',          # whether the estimate is established yet
+    # PITCH AGREEMENT. The only history-independent evidence in the feature
+    # set, and the reason it matters is that 76% of the remaining error is the
+    # tracker inheriting its own mistakes -- every other feature here is
+    # computed relative to a previous position that may already be wrong.
+    #
+    # An oracle probe puts agreement 4.70x higher on correct candidates than
+    # wrong ones (0.398 vs 0.085), against the 0.33-precision lostness signal
+    # that defeated four separate mechanisms.
+    #
+    # Supplied by two heads trained with MIDI and run on image and audio
+    # features alone: score head (feat -> the pitch of the notehead this box
+    # sits on) and audio head (z -> the pitches sounding now). The AGREEMENT is
+    # what varies per candidate; the audio estimate alone is identical across a
+    # frame and could rank nothing, which is why the z vector failed twice.
+    'pitch_agree',        # <p(pitch | this box), p(sounding | audio)>
+    'pitch_agree_rel',    # relative to the best candidate this frame
+    'pitch_conf',         # how sharp this box's own pitch prediction is
+    'has_pitch',
 )
 NF = len(FEATURE_NAMES)
 
@@ -110,7 +128,7 @@ MAXK = 256                # must match the dump's cap, or crowding features lie
 
 
 def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
-          x_prev2=None, dframes_prev=None, v_hat=None):
+          x_prev2=None, dframes_prev=None, v_hat=None, pitch=None):
     """cand: (K, 6) as dumped -- [xu, y, w, h, obj, t]. Returns (K, NF) float32.
 
     x_prev/y_prev may be None on the first scored frame of a piece, in which
@@ -191,6 +209,19 @@ def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
         f[:, 34] = np.tanh(e / 50.0)
         f[:, 35] = np.clip((xu - float(x_prev)) / max(travel, 1e-3), -5.0, 5.0)
         f[:, 36] = 1.0
+
+    # pitch agreement, precomputed per candidate by the two heads
+    if pitch is not None:
+        pa = np.asarray(pitch, np.float32)
+        if pa.ndim == 1:
+            pa = pa[:, None]
+        n = min(pa.shape[0], K)
+        f[:n, 33 + 4] = pa[:n, 0]
+        mx = float(pa[:n, 0].max()) if n else 0.0
+        f[:n, 33 + 5] = pa[:n, 0] - mx
+        if pa.shape[1] > 1:
+            f[:n, 33 + 6] = pa[:n, 1]
+        f[:n, 33 + 7] = 1.0
 
     for base, box in ((14, sys), (17, bar)):
         cx, _cy, bw, _bh, bobj = (float(box[0]), float(box[1]), float(box[2]),
