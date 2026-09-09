@@ -84,6 +84,39 @@ def oracle_idx(c, t_gt):
     return int(np.argmin(np.abs(c[:, 5] - t_gt))) if len(c) else -1
 
 
+def _vhat(p, fi):
+    v = p.get('vhat')
+    if v is None or fi >= len(v) or not np.isfinite(v[fi]):
+        return None
+    return float(v[fi])
+
+
+def oracle_tempo(p, alpha=0.2, vmax=40.0):
+    """Causal EMA of the TRUE px/frame, one value per frame.
+
+    Entry i is the estimate available BEFORE frame i is scored, so the feature
+    never sees its own answer. At inference the decoder keeps the same EMA over
+    its own choices; the estimate is smoothed over the piece, so the gap
+    between the two is far milder than for a raw previous position.
+    """
+    n = len(p['cand'])
+    out = np.full(n, np.nan, np.float32)
+    v = xp = fp = None
+    for i, c in enumerate(p['cand']):
+        if v is not None:
+            out[i] = v
+        if len(c) == 0:
+            continue
+        j = oracle_idx(c, p['t_gt'][i])
+        x, fr = float(c[j, 0]), int(p['frame'][i])
+        if xp is not None and fr > fp:
+            vo = (x - xp) / float(fr - fp)
+            if 0.0 < vo < vmax:
+                v = vo if v is None else (1 - alpha) * v + alpha * vo
+        xp, fp = x, fr
+    return out
+
+
 def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                featdim=0, states=None, dagger_frac=0.0):
     """states maps (piece, frame) -> the history the POLICY reached there.
@@ -105,7 +138,8 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
             x_prev, y_prev, x_prev2, dfr, dfr_prev = st
             feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                                ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
-                               x_prev2=x_prev2, dframes_prev=dfr_prev))
+                               x_prev2=x_prev2, dframes_prev=dfr_prev,
+                               v_hat=_vhat(p, fi)))
             labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
             zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
             if featdim:
@@ -135,7 +169,8 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
         dfr = int(p['frame'][fi] - p['frame'][fi - 1]) if p['frame'][fi] >= 0 else None
         feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
-                           x_prev2=x_prev2, dframes_prev=dfr_prev))
+                           x_prev2=x_prev2, dframes_prev=dfr_prev,
+                           v_hat=_vhat(p, fi)))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
         if featdim:
@@ -163,14 +198,16 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
 
 
 @torch.no_grad()
-def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
+def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
+            tempo_alpha=0.2, vmax=40.0):
     """Greedy decode, exactly the loop the decoder runs. Returns (rollout hit,
     argmax hit, oracle hit) as percentages over every scored frame."""
     hit = arg = orc = n = 0
     for p in pieces:
         x_prev = y_prev = x_prev2 = None
         f_prev = f_prev2 = None
-        for fi, c in enumerate(p['cand']):
+        v_hat = None            # tracked from the policy's own steps, as at
+        for fi, c in enumerate(p['cand']):   # inference -- never the oracle's
             if len(c) == 0:
                 continue
             n += 1
@@ -183,7 +220,7 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
                         if f_prev is not None and f_prev2 is not None else None)
             f = build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
-                      x_prev2=x_prev2, dframes_prev=dfr_prev)
+                      x_prev2=x_prev2, dframes_prev=dfr_prev, v_hat=v_hat)
             zz = (torch.from_numpy(p['z'][fi]).unsqueeze(0)
                   if p['z'] is not None else None)
             ff = None
@@ -197,8 +234,14 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH):
                       z=zz, feat=ff)[0]
             j = int(s.argmax())
             hit += err[j] <= th
+            xn = float(c[j, 0])
+            if x_prev is not None and dfr:
+                vo = (xn - x_prev) / float(dfr)
+                if 0.0 < vo < vmax:            # gated: a lost step must not
+                    v_hat = vo if v_hat is None else \
+                        (1 - tempo_alpha) * v_hat + tempo_alpha * vo
             x_prev2, f_prev2 = x_prev, f_prev
-            x_prev, y_prev = float(c[j, 0]), float(c[j, 1])
+            x_prev, y_prev = xn, float(c[j, 1])
             f_prev = int(p['frame'][fi])
     return (100.0 * hit / max(n, 1), 100.0 * arg / max(n, 1),
             100.0 * orc / max(n, 1), n)
@@ -221,6 +264,11 @@ def main():
     ap.add_argument('--sel_th', type=float, default=TH,
                     help='rollout threshold in FRAMES used to pick the best '
                          'epoch (10 = 0.5 s, 1 = 0.05 s)')
+    ap.add_argument('--no_tempo', action='store_true',
+                    help='drop the 4 tracked-tempo features (they are last, so '
+                         'truncation is exact for them)')
+    ap.add_argument('--tempo_alpha', type=float, default=0.2,
+                    help='EMA rate for the tracked tempo fed to the features')
     ap.add_argument('--no_vel', action='store_true',
                     help='drop the 4 velocity features, so projection width '
                          'and velocity can be separated in the grid')
@@ -247,6 +295,8 @@ def main():
 
     tr = load_dumps(sorted(sum([glob.glob(p) for p in a.train], [])))
     va = load_dumps(sorted(sum([glob.glob(p) for p in a.valid], [])))
+    for _p in tr + va:
+        _p['vhat'] = oracle_tempo(_p, alpha=a.tempo_alpha)
     idx = index(tr)
     print(f'train: {len(tr)} pieces, {len(idx)} usable frames', flush=True)
     print(f'valid: {len(va)} pieces, {sum(len(p["cand"]) for p in va)} frames', flush=True)
@@ -259,7 +309,19 @@ def main():
     Xs, _, Ms, Zs, Fs = make_batch(tr, samp, rng, use_abs_obj=use_abs, featdim=fdim)
     # FEATURE_NAMES only ever grows at the end, so truncation is exactly the
     # older feature set rather than an approximation of it
-    nf_use = NF - 4 if a.no_vel else NF
+    # --no_vel dropped the 4 velocity features by TRUNCATING to NF-4, which
+    # was correct only while velocity was last in FEATURE_NAMES. Nine
+    # neighbourhood features and four tempo features have been appended since,
+    # so NF-4 now removes TEMPO and keeps velocity -- the opposite of the flag's
+    # name, silently. The models it produced (novel_*) all lost anyway, 90.3 to
+    # 91.4 against 92.7 to 93.4 with velocity, so rather than reshuffle the
+    # feature order to rescue a losing ablation, refuse it.
+    if a.no_vel:
+        raise SystemExit(
+            '--no_vel is expressed as truncation to NF-4, which no longer '
+            'selects the velocity block: FEATURE_NAMES has grown past it. '
+            'Zero the columns explicitly if this ablation is needed again.')
+    nf_use = NF if not a.no_tempo else 33
     Xs = Xs[:, :, :nf_use]
     flat = Xs[Ms]
     zdim = Zs.shape[1] if (a.use_z and tr[0]['z'] is not None) else 0

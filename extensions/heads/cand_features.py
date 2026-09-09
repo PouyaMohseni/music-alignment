@@ -81,6 +81,24 @@ FEATURE_NAMES = (
     'h_rel',
     'aspect',
     'bar_frac',           # how far through the predicted bar it sits
+    # TRACKED TEMPO (Cont 2010's coupled tempo agent, as features).
+    #
+    # Hard-wiring a tracked v_hat into the prior's mean LOSES: room 93.42 ->
+    # 90.62, because step sizes vary 6x within a piece (p10 1.59, p90 9.49
+    # px/frame) and centring a Gaussian on the median penalises the many short
+    # steps. The conservative fwd_px=6.0 wins by leaving the decision to
+    # objectness.
+    #
+    # That is exactly the shape of the velocity result: constant-velocity
+    # DECODE failed, the same quantity as a FEATURE worked, because a feature
+    # can be weighted per frame and a prior commits on every one. So the tempo
+    # estimate is offered here rather than imposed. It differs from d_extrap in
+    # having MEMORY -- an EMA over the piece rather than a two-point estimate,
+    # which is what makes it survive the frames either side of a bad step.
+    'd_tempo',            # offset from tempo dead reckoning, in expected steps
+    'd_tempo_tanh',
+    'tempo_rel',          # this candidate's implied speed against tracked tempo
+    'has_tempo',          # whether the estimate is established yet
 )
 NF = len(FEATURE_NAMES)
 
@@ -92,7 +110,7 @@ MAXK = 256                # must match the dump's cap, or crowding features lie
 
 
 def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
-          x_prev2=None, dframes_prev=None):
+          x_prev2=None, dframes_prev=None, v_hat=None):
     """cand: (K, 6) as dumped -- [xu, y, w, h, obj, t]. Returns (K, NF) float32.
 
     x_prev/y_prev may be None on the first scored frame of a piece, in which
@@ -164,6 +182,15 @@ def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
     if float(bar[4]) > 0:
         bw = max(float(bar[2]), 1e-3)
         f[:, 32] = np.clip((xu - (float(bar[0]) - bw / 2.0)) / bw, -2.0, 3.0)
+
+    # tracked tempo: a persistent px/frame estimate, not the two-point speed
+    if v_hat is not None and x_prev is not None and v_hat > 0:
+        travel = float(v_hat) * dt
+        e = xu - (float(x_prev) + travel)
+        f[:, 33] = np.clip(e / max(travel, 1e-3), -20.0, 20.0)
+        f[:, 34] = np.tanh(e / 50.0)
+        f[:, 35] = np.clip((xu - float(x_prev)) / max(travel, 1e-3), -5.0, 5.0)
+        f[:, 36] = 1.0
 
     for base, box in ((14, sys), (17, bar)):
         cx, _cy, bw, _bh, bobj = (float(box[0]), float(box[1]), float(box[2]),

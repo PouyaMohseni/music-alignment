@@ -423,6 +423,8 @@ class ScorerDecoder:
         self._t = _t
         self.topk, self.blend = topk, blend
         self.lam = lam
+        self.tempo_alpha = float(os.environ.get('TEMPO_ALPHA', '0.2'))
+        self.vmax = float(os.environ.get('TEMPO_VMAX', '40'))
         self.prior = _TransitionPrior(fwd_px, sigma_px, jump_logp,
                                       mu_pow=mu_pow, sig_pow=sig_pow,
                                       ref_frames=ref_frames, back_logp=back_logp)
@@ -454,8 +456,8 @@ class ScorerDecoder:
         xs = _np.array([_unroll(b, staff_coords, add_per_staff) for b in bnp])
 
         prev = self._state.get(piece)
-        x_prev, y_prev, x_prev2, f_prev, f_prev2 = (
-            (None, None, None, None, None) if prev is None else prev)
+        x_prev, y_prev, x_prev2, f_prev, f_prev2, v_hat = (
+            (None, None, None, None, None, None) if prev is None else prev)
         dfr = None if (frame is None or f_prev is None or frame <= f_prev) else frame - f_prev
         dfr_prev = (f_prev - f_prev2
                     if f_prev is not None and f_prev2 is not None and f_prev > f_prev2
@@ -476,7 +478,7 @@ class ScorerDecoder:
 
         f = build(c, bar_u, sys_u, x_prev, y_prev, dfr, ntot=total,
                   use_abs_obj=self.model.use_abs_obj,
-                  x_prev2=x_prev2, dframes_prev=dfr_prev)
+                  x_prev2=x_prev2, dframes_prev=dfr_prev, v_hat=v_hat)
         # Checkpoints fitted before a feature was appended expect the old width.
         # FEATURE_NAMES only ever grows at the end, so truncating is exact for
         # them and a no-op for new ones -- without this every selector trained
@@ -542,5 +544,14 @@ class ScorerDecoder:
             s = self.blend * s + (1.0 - self.blend) * hand
 
         j = int(_np.argmax(s))
-        self._state[piece] = (float(xs[j]), float(bnp[j, 1]), x_prev, frame, f_prev)
+        # tracked tempo, from this decoder's own steps and gated to forward,
+        # plausible ones: a lost tracker emits wild steps and must not be
+        # allowed to corrupt the estimate for the rest of the piece.
+        xn = float(xs[j])
+        if x_prev is not None and dfr:
+            vo = (xn - x_prev) / float(dfr)
+            if 0.0 < vo < self.vmax:
+                v_hat = vo if v_hat is None else \
+                    (1 - self.tempo_alpha) * v_hat + self.tempo_alpha * vo
+        self._state[piece] = (xn, float(bnp[j, 1]), x_prev, frame, f_prev, v_hat)
         return boxes[j]

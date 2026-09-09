@@ -24,10 +24,14 @@ from extensions.heads.cand_scorer import load as load_ckpt
 
 
 def rollout(model, pages, blend=0.7, lam=1.0, fwd=6.0, sigma=18.0, jump=-6.0,
-            ref=5.0, mu_pow=1.0, topk=256, back=None):
+            ref=5.0, mu_pow=1.0, topk=256, back=None, tempo_alpha=0.2,
+            vmax=40.0):
     hit = tot = 0
     for p in pages:
         x_prev = y_prev = x_prev2 = f_prev = f_prev2 = None
+        # tracked tempo, from this rollout's own choices. Models fitted before
+        # the tempo features exist have model.nf <= 33 and never see it.
+        v_hat = None
         feats = p.get('feat')
         for i, c in enumerate(p['cand']):
             if c.shape[0] == 0:
@@ -41,7 +45,7 @@ def rollout(model, pages, blend=0.7, lam=1.0, fwd=6.0, sigma=18.0, jump=-6.0,
                    else None)
             f = build(cs, p['bar'][i], p['sys'][i], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][i]), use_abs_obj=model.use_abs_obj,
-                      x_prev2=x_prev2, dframes_prev=dfp)
+                      x_prev2=x_prev2, dframes_prev=dfp, v_hat=v_hat)
             f = f[:, :model.nf]
             ff = None
             if model.fenc is not None and feats is not None:
@@ -67,8 +71,14 @@ def rollout(model, pages, blend=0.7, lam=1.0, fwd=6.0, sigma=18.0, jump=-6.0,
                 s = blend * s + (1.0 - blend) * hand
             j = int(np.argmax(s))
             hit += abs(float(cs[j, 5]) - float(p['t_gt'][i])) <= TH
+            xn = float(cs[j, 0])
+            if x_prev is not None and dfr:
+                vo = (xn - x_prev) / float(dfr)
+                if 0.0 < vo < vmax:
+                    v_hat = vo if v_hat is None else \
+                        (1 - tempo_alpha) * v_hat + tempo_alpha * vo
             x_prev2, f_prev2 = x_prev, f_prev
-            x_prev, y_prev, f_prev = float(cs[j, 0]), float(cs[j, 1]), fr
+            x_prev, y_prev, f_prev = xn, float(cs[j, 1]), fr
     return 100.0 * hit / max(tot, 1), tot
 
 
