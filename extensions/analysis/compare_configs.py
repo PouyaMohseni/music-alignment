@@ -33,7 +33,7 @@ CONFIGS = [
     ('vel_p8 (24 feat)', [f'{M}/grid/vel_p8.pt'] + sorted(glob.glob(f'{M}/seeds/vel_p8_s*.pt'))),
     ('nbr (33 feat)', sorted(glob.glob(f'{M}/nbr/nbr_s*.pt'))),
     ('tempo (37 feat)', sorted(glob.glob(f'{M}/tempo/tempo_s*.pt'))),
-    ('dagger (24 feat)', sorted(glob.glob(f'{M}/dagger/dagger_s*.pt'))),
+    ('dagger (33 feat, rollout states)', sorted(glob.glob(f'{M}/dagger/dagger_s*.pt'))),
 ]
 
 
