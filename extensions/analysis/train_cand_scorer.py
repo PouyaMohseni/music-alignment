@@ -290,9 +290,13 @@ def main():
     if a.dagger_init:
         from extensions.analysis.dagger import rollout_states
         init = load(a.dagger_init)[0] if a.dagger_init != 'self' else model
+        # The rollout policy has its OWN feature width, which need not be the
+        # trainee's: adding nine features today made nf_use 33 while vel_p8 is
+        # still 24, and truncating its input to 33 fed it nine columns it was
+        # never fitted with. Truncate to whatever the policy expects.
         t0 = time.time()
         st = rollout_states(init, tr, build, torch, use_abs_obj=use_abs,
-                            featdim=fdim, nf=nf_use)
+                            featdim=fdim, nf=init.nf)
         states = {(pi, fi): (xp, yp, xp2, d, dp) for pi, fi, xp, yp, xp2, d, dp in st}
         vis = sum(1 for v in states.values() if v[0] is not None)
         print(f'DAgger: {len(states)} visited states from '
@@ -310,7 +314,7 @@ def main():
             from extensions.analysis.dagger import rollout_states
             model.eval()
             st = rollout_states(model, tr, build, torch, use_abs_obj=use_abs,
-                                featdim=fdim, nf=nf_use)
+                                featdim=fdim, nf=model.nf)
             states = {(pi, fi): (xp, yp, xp2, d, dp)
                       for pi, fi, xp, yp, xp2, d, dp in st}
             print(f'  [ep {ep}] re-rolled: {len(states)} states', flush=True)

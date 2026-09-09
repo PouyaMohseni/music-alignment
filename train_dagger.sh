@@ -39,5 +39,8 @@ python extensions/analysis/train_cand_scorer.py --out "$T" \
     --train "$F/train_c*.npz" --valid "$F/valid.npz" \
     --use_feat --featproj 8 --seed $S \
     --dagger_init /scratch/pmohseni/omr/scorer/grid/vel_p8.pt \
-    --dagger_frac 0.5 --dagger_rounds 2 2>&1 | tail -6
+    --dagger_frac 0.5 --dagger_rounds 2 2>&1 | tail -25
+# `| tail` hid the traceback and the trailing echo returned 0, so the array
+# reported COMPLETED in 106 seconds having written nothing. Check the artefact.
+[ -f "$T" ] || { echo "!!!!! seed $S produced no checkpoint"; exit 1; }
 echo "##### seed $S done"
