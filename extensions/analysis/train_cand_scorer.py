@@ -406,9 +406,14 @@ def main():
                 # validation headroom. Down-weight them instead of pretending
                 # the least-bad box is a target.
                 with torch.no_grad():
-                    best = E.masked_fill(~M, 1e9).min(-1).values
-                    w = torch.where(best <= a.sel_th, torch.ones_like(best),
-                                    torch.full_like(best, a.recover_w))
+                    # NOT `best`: that name already holds the best validation
+                    # score in this function, and `with torch.no_grad()` is not
+                    # a scope, so binding it here clobbered a float with a
+                    # tensor and `if r > best` then raised.
+                    best_err = E.masked_fill(~M, 1e9).min(-1).values
+                    w = torch.where(best_err <= a.sel_th,
+                                    torch.ones_like(best_err),
+                                    torch.full_like(best_err, a.recover_w))
                 loss = (per * w).sum() / w.sum().clamp_min(1e-6)
             else:
                 loss = per.mean()

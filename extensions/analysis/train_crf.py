@@ -86,10 +86,21 @@ def pad(seq, K, dim):
 
 
 def crf_loss(emit, mask, xs, gold, lam=1.0):
-    """emit (T,K) unnormalized; xs (T,K) positions; gold (T,) indices."""
+    """emit (T,K) unnormalized; xs (T,K) positions; gold (T,) indices.
+
+    NUMERICS. The first version used -1e9 as the mask value, and a logsumexp
+    over a column that is entirely masked returns -1e9 rather than -inf, which
+    then accumulates across frames toward -inf until logZ - gold_s is inf - inf
+    = nan. It trained to nan by epoch 8. A mask of -1e4 stays finite through a
+    few hundred additions, the running alpha is re-centred every step so it
+    cannot drift, and the centring constant is carried in the partition term
+    where it belongs.
+    """
     T, K = emit.shape
-    NEG = -1e9
+    NEG = -1e4
     a = torch.where(mask[0], emit[0], torch.full_like(emit[0], NEG))
+    shift = a.max().detach()
+    a = a - shift
     gold_s = emit[0, gold[0]]
     for t in range(1, T):
         d = xs[t].unsqueeze(0) - xs[t - 1].unsqueeze(1)          # (K_prev, K_cur)
@@ -97,8 +108,10 @@ def crf_loss(emit, mask, xs, gold, lam=1.0):
         sc = a.unsqueeze(1) + tr + emit[t].unsqueeze(0)
         sc = torch.where(mask[t].unsqueeze(0), sc, torch.full_like(sc, NEG))
         a = torch.logsumexp(sc, dim=0)
+        m = a.max().detach()
+        a, shift = a - m, shift + m       # re-centre, keep the constant
         gold_s = gold_s + emit[t, gold[t]] + tr[gold[t - 1], gold[t]]
-    return torch.logsumexp(a, 0) - gold_s
+    return (torch.logsumexp(a, 0) + shift) - gold_s
 
 
 def main():
