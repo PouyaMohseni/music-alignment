@@ -57,6 +57,30 @@ FEATURE_NAMES = (
     'd_extrap_tanh',
     'v_ratio',            # implied speed relative to the recent speed
     'has_vel',            # whether a velocity estimate exists at all
+    # IS THIS A REAL NOTEHEAD, rather than is this where I expect one.
+    #
+    # Every feature above answers the second question. The first is unasked,
+    # and the failure analysis says it is the one that matters: 71% of lost
+    # onsets sit in contiguous episodes, and what gives an episode away is that
+    # the chosen box has low objectness (AUC 0.805) -- the tracker is pinned
+    # somewhere there is no music and must take whatever box is there. Position
+    # cannot reveal this (resid AUC 0.558) because each step is still a small
+    # plausible move from a wrong place.
+    #
+    # log_ncand already counts candidates, but it is identical for every
+    # candidate in a frame, and a value constant across a frame cannot rank
+    # anything. These are its per-candidate versions: a real notehead sits in a
+    # cluster of others at sane spacing and is the same size as its neighbours;
+    # a spurious box is isolated, or oddly shaped, or far from the bar.
+    'nbr_25',             # other candidates within 25 unrolled px
+    'nbr_100',
+    'gap_l',              # spacing to the nearest candidate either side
+    'gap_r',
+    'x_rank_frac',        # position in READING order, not objectness order
+    'w_rel',              # box size against this frame's median box
+    'h_rel',
+    'aspect',
+    'bar_frac',           # how far through the predicted bar it sits
 )
 NF = len(FEATURE_NAMES)
 
@@ -117,6 +141,29 @@ def build(cand, bar, sys, x_prev, y_prev, dframes, ntot=None, use_abs_obj=True,
         if abs(v) > 1e-6:
             f[:, 22] = np.clip((xu - float(x_prev)) / (v * dt), -5.0, 5.0)
         f[:, 23] = 1.0
+
+    # --- per-candidate neighbourhood, shape and bar position ---------------
+    dx = np.abs(xu[:, None] - xu[None, :])
+    f[:, 24] = np.log1p((dx <= 25.0).sum(1) - 1)
+    f[:, 25] = np.log1p((dx <= 100.0).sum(1) - 1)
+    order = np.argsort(xu)
+    xs = xu[order]
+    gl = np.full(K, 500.0, np.float32)
+    gr = np.full(K, 500.0, np.float32)
+    if K > 1:
+        step = np.diff(xs).astype(np.float32)
+        gl[order[1:]] = step
+        gr[order[:-1]] = step
+    f[:, 26] = np.tanh(gl / 50.0)
+    f[:, 27] = np.tanh(gr / 50.0)
+    f[:, 28] = np.argsort(order).astype(np.float32) / max(K - 1, 1)
+    wm, hm = float(np.median(w)), float(np.median(h))
+    f[:, 29] = np.log(np.clip(w, 1e-3, None) / max(wm, 1e-3))
+    f[:, 30] = np.log(np.clip(h, 1e-3, None) / max(hm, 1e-3))
+    f[:, 31] = np.log(np.clip(w, 1e-3, None) / np.clip(h, 1e-3, None))
+    if float(bar[4]) > 0:
+        bw = max(float(bar[2]), 1e-3)
+        f[:, 32] = np.clip((xu - (float(bar[0]) - bw / 2.0)) / bw, -2.0, 3.0)
 
     for base, box in ((14, sys), (17, bar)):
         cx, _cy, bw, _bh, bobj = (float(box[0]), float(box[1]), float(box[2]),
