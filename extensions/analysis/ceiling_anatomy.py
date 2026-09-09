@@ -61,6 +61,45 @@ def monotone_dp(page, slack=0.0, topk=256):
     return total
 
 
+def causal_oracle(page, window=None, topk=256):
+    """REAL-TIME ceiling: commit frame by frame, never revise, no future.
+
+    An oracle that knows which candidate is correct NOW but must choose one and
+    live with it. Two constraints make this less than 100%:
+
+      monotone   it may not go behind what it already committed, so an early
+                 correct choice can strand it when the next correct box is
+                 behind (ground truth does step backwards on 0.73% of onsets)
+      window     it may not teleport arbitrarily far ahead. An online tracker
+                 that has not heard the music yet cannot know to jump there, so
+                 an unbounded forward reach is not a real-time ability.
+
+    The offline DP is the counterpart: same candidates, but free to plan the
+    whole path, sacrificing one frame to be positioned for a later one.
+    """
+    x_prev, hit, n = None, 0, 0
+    for i, c in enumerate(page['cand']):
+        if c.shape[0] == 0:
+            continue
+        cs = c[:topk]
+        n += 1
+        ok = np.ones(cs.shape[0], bool)
+        if x_prev is not None:
+            ok &= cs[:, 0] >= x_prev
+            if window is not None:
+                ok &= cs[:, 0] <= x_prev + window
+        if not ok.any():
+            ok = cs[:, 0] >= x_prev if x_prev is not None else np.ones(cs.shape[0], bool)
+            if not ok.any():
+                continue
+        idx = np.flatnonzero(ok)
+        err = np.abs(cs[idx, 5] - page['t_gt'][i])
+        j = idx[int(np.argmin(err))]
+        hit += err.min() <= TH
+        x_prev = float(cs[j, 0])
+    return hit, n
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dump', default='/scratch/pmohseni/omr/candf/room.npz')
@@ -87,7 +126,25 @@ def main():
         tot = sum(monotone_dp(p, slack=slack) for p in pages)
         print(f'{lab:>20s} {100.0 * tot / n:8.2f}')
 
-    print(f'\nshipped decoder is at 93.42 on this dump.')
+    print('\n=== REAL-TIME vs NOT REAL-TIME ===')
+    print('  real-time: commit each frame, never revise, no future.')
+    print('  offline:   same candidates, free to plan the whole path.\n')
+    print(f'{"ceiling":>34s} {"value":>8s}')
+    for w, lab in ((None, 'real-time, unbounded reach'),
+                   (400.0, 'real-time, <=400 px forward'),
+                   (200.0, 'real-time, <=200 px forward'),
+                   (100.0, 'real-time, <=100 px forward'),
+                   (50.0, 'real-time, <=50 px forward')):
+        h = nn = 0
+        for p_ in pages:
+            a_, b_ = causal_oracle(p_, window=w)
+            h += a_; nn += b_
+        print(f'{lab:>34s} {100.0 * h / max(nn, 1):8.2f}')
+    off = sum(monotone_dp(p_, slack=0.0) for p_ in pages)
+    fre = sum(monotone_dp(p_, slack=1e9) for p_ in pages)
+    print(f'{"offline, monotone (plans ahead)":>34s} {100.0 * off / n:8.2f}')
+    print(f'{"offline, unconstrained":>34s} {100.0 * fre / n:8.2f}')
+    print(f'\nshipped decoder is at 93.42 on room.')
 
 
 if __name__ == '__main__':
