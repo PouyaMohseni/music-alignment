@@ -285,6 +285,9 @@ def main():
                          'visited histories replace the oracle ones')
     ap.add_argument('--dagger_frac', type=float, default=0.5,
                     help='fraction of training items drawn from rollout states')
+    ap.add_argument('--recover_w', type=float, default=1.0,
+                    help='loss weight for states where NO candidate is inside '
+                         'the threshold (1.0 = current behaviour, 0 = drop)')
     ap.add_argument('--dagger_rounds', type=int, default=1,
                     help='re-roll with the model being trained after each round')
     a = ap.parse_args()
@@ -392,7 +395,23 @@ def main():
                       z=(Z if model.zenc is not None else None), feat=F)
             with torch.no_grad():                      # soft target on error
                 tgt = torch.softmax(torch.where(M, -E / a.tau, torch.full_like(E, -1e9)), -1)
-            loss = -(tgt * torch.log_softmax(s, -1)).sum(-1).mean()
+            per = -(tgt * torch.log_softmax(s, -1)).sum(-1)
+            if a.recover_w < 1.0:
+                # UNWINNABLE STATES. The target is already soft, but at a state
+                # where NO candidate is inside the threshold the softmax still
+                # concentrates on the least-bad wrong one, so the model is
+                # taught to prefer a wrong answer. Teacher forcing almost never
+                # visits such states; DAgger's rollout states are full of them,
+                # which is the likeliest reason DAgger lost 8 points of
+                # validation headroom. Down-weight them instead of pretending
+                # the least-bad box is a target.
+                with torch.no_grad():
+                    best = E.masked_fill(~M, 1e9).min(-1).values
+                    w = torch.where(best <= a.sel_th, torch.ones_like(best),
+                                    torch.full_like(best, a.recover_w))
+                loss = (per * w).sum() / w.sum().clamp_min(1e-6)
+            else:
+                loss = per.mean()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
