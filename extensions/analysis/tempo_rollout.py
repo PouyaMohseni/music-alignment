@@ -13,6 +13,27 @@ too small pulls the decoder toward candidates BEHIND the true position, and the
 decoder steps backward on 4.50% of onsets where ground truth does so on 0.73%
 -- six times too often. Under-set expected travel predicts exactly that.
 
+RESULT: IT LOSES. Every configuration is worse -- room 93.42 -> 90.62 at
+blend 0.7, and 86.50 -> 86.26 for the hand decoder alone. v_hat converged
+correctly (median 3.34-3.69 against the measured 3.79), so the tracker worked
+and the idea still failed.
+
+The measurement was right and the inference from it was wrong. Step sizes vary
+6x WITHIN the pooled distribution (p10 1.59, p90 9.49 px/frame). With
+sigma_px=18 and a typical 5-frame gap, a prior centred at mu=6 sits ~13 px
+short of the median step, which is well inside sigma, so the true position is
+barely penalised. Centring on the correct median instead penalises the many
+SHORT steps. fwd_px=6.0 is not an under-set constant, it is a conservative one
+-- "expect little movement, let objectness decide" -- and given the variance,
+conservative beats accurate. The heavy tail does the real work.
+
+That also retracts the backward-step story: if mu being small were the cause of
+stepping backward six times too often, correcting it would have helped.
+
+Kept because the negative is informative, and because the same tempo estimate
+may still work as a FEATURE, where the model can weight it conditionally
+instead of the prior committing to it on every frame.
+
 WHAT THIS DOES
 --------------
 Cont (2010) couples a tempo agent to the position agent so the expected
@@ -141,12 +162,13 @@ def main():
     with Pool(a.procs, initializer=_init, initargs=(a.ckpt, dumps)) as pool:
         res = pool.map(_run, jobs)
 
-    for b, gate in ((0.0, 86.50), (0.7, None)):
+    # 86.50 and 91.44 are ROOM constants. Checking a `do` number against them
+    # printed a MISMATCH that meant nothing; the do controls are 89.06 and
+    # 95.01 and are only comparable to each other.
+    for b in (0.0, 0.7):
         ctrl = [r for r in res if r[1] == b and r[2] == 0.0][0]
-        tag = '' if gate is None else f'  (gate {gate}: ' + \
-            ('OK' if abs(ctrl[4] - gate) < 0.1 else 'MISMATCH') + ')'
         print(f'\n=== blend {b} === control (constant tempo) on do: '
-              f'{ctrl[4]:.2f}{tag}')
+              f'{ctrl[4]:.2f}  (do control, NOT the room gate)')
         print(f'{"alpha":>6s} {"min_n":>6s} {"do":>7s} {"delta":>7s} {"v_hat":>7s}')
         for _, _, al, mn, acc, v in sorted(
                 [r for r in res if r[1] == b and r[2] > 0], key=lambda r: -r[4]):
