@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import time
 import os
 import sys
 
@@ -32,7 +33,7 @@ import torch.nn.functional as F
 sys.path.insert(0, '/project/def-ichiro/pmohseni/music-alignment')
 
 from extensions.heads.cand_features import NF, build
-from extensions.heads.cand_scorer import CandScorer, save
+from extensions.heads.cand_scorer import CandScorer, load, save
 
 TH = 10.0          # 0.5 s at 20 fps, the reported threshold
 
@@ -84,11 +85,35 @@ def oracle_idx(c, t_gt):
 
 
 def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
-               featdim=0):
+               featdim=0, states=None, dagger_frac=0.0):
+    """states maps (piece, frame) -> the history the POLICY reached there.
+
+    Teacher forcing builds x_prev from the oracle, so the model is fitted on a
+    history it never sees at inference; noise_px is a guess at the shape of its
+    own mistakes. When a rollout state is available and sampled, it replaces
+    the oracle history entirely -- and the noise is skipped, because the
+    measured error distribution is what the guess was standing in for.
+    """
     feats, labels, zs, fvs = [], [], [], []
     for pi, fi in items:
         p = pieces[pi]
         c = p['cand'][fi]
+        st = None
+        if states is not None and dagger_frac > 0 and rng.random() < dagger_frac:
+            st = states.get((pi, fi))
+        if st is not None:
+            x_prev, y_prev, x_prev2, dfr, dfr_prev = st
+            feats.append(build(c, p['bar'][fi], p['sys'][fi], x_prev, y_prev, dfr,
+                               ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
+                               x_prev2=x_prev2, dframes_prev=dfr_prev))
+            labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
+            zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
+            if featdim:
+                fv = p['feat'][fi] if p['feat'] is not None else np.zeros((0, featdim), np.float16)
+                if fv.shape[0] < c.shape[0]:
+                    fv = np.vstack([fv, np.zeros((c.shape[0] - fv.shape[0], featdim), fv.dtype)])
+                fvs.append(fv[:c.shape[0]].astype(np.float32))
+            continue
         prev = p['cand'][fi - 1]
         if len(prev):
             b = oracle_idx(prev, p['t_gt'][fi - 1])
@@ -207,6 +232,13 @@ def main():
     ap.add_argument('--use_z', action='store_true',
                     help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--dagger_init', default='',
+                    help='checkpoint to roll out for DAgger states; its own '
+                         'visited histories replace the oracle ones')
+    ap.add_argument('--dagger_frac', type=float, default=0.5,
+                    help='fraction of training items drawn from rollout states')
+    ap.add_argument('--dagger_rounds', type=int, default=1,
+                    help='re-roll with the model being trained after each round')
     a = ap.parse_args()
 
     torch.manual_seed(a.seed)
@@ -244,17 +276,52 @@ def main():
         model.set_fnorm(flat_f.mean(0).numpy(), flat_f.std(0).numpy())
     print(f'model: {model.n_params} parameters', flush=True)
 
+    # ---- DAgger states ----------------------------------------------------
+    # The selector's input depends on its OWN previous position, so teacher
+    # forcing fits it on a history it never sees. The measured cost is not
+    # subtle: deleting the previous-position noise, the crude stand-in for that
+    # history, drops validation rollout from 95.33 to 92.38 -- below the
+    # detector's own argmax. Rather than guess the shape of the model's
+    # mistakes with a Laplace draw, roll a policy out and use the states it
+    # actually reaches. The oracle action is known at every one of them (the
+    # candidate nearest ground truth), which is why this is imitation learning
+    # and not RL.
+    states = None
+    if a.dagger_init:
+        from extensions.analysis.dagger import rollout_states
+        init = load(a.dagger_init)[0] if a.dagger_init != 'self' else model
+        t0 = time.time()
+        st = rollout_states(init, tr, build, torch, use_abs_obj=use_abs,
+                            featdim=fdim, nf=nf_use)
+        states = {(pi, fi): (xp, yp, xp2, d, dp) for pi, fi, xp, yp, xp2, d, dp in st}
+        vis = sum(1 for v in states.values() if v[0] is not None)
+        print(f'DAgger: {len(states)} visited states from '
+              f'{a.dagger_init} in {time.time() - t0:.0f}s '
+              f'({vis} with a history), frac={a.dagger_frac}', flush=True)
+
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.epochs)
     best, best_state = -1.0, None
+    every = max(a.epochs // max(a.dagger_rounds, 1), 1)
     for ep in range(a.epochs):
+        # later rounds re-roll with the model being trained, so the states keep
+        # matching the policy rather than its ancestor
+        if states is not None and a.dagger_rounds > 1 and ep and ep % every == 0:
+            from extensions.analysis.dagger import rollout_states
+            model.eval()
+            st = rollout_states(model, tr, build, torch, use_abs_obj=use_abs,
+                                featdim=fdim, nf=nf_use)
+            states = {(pi, fi): (xp, yp, xp2, d, dp)
+                      for pi, fi, xp, yp, xp2, d, dp in st}
+            print(f'  [ep {ep}] re-rolled: {len(states)} states', flush=True)
         model.train()
         order = rng.permutation(len(idx))
         tot = nb = 0.0
         for i in range(0, len(order), a.bs):
             items = [idx[j] for j in order[i:i + a.bs]]
             X, E, M, Z, F = make_batch(tr, items, rng, a.noise_p, a.noise_px,
-                                       use_abs, featdim=fdim)
+                                       use_abs, featdim=fdim,
+                                       states=states, dagger_frac=a.dagger_frac)
             s = model(X[:, :, :nf_use], M,
                       z=(Z if model.zenc is not None else None), feat=F)
             with torch.no_grad():                      # soft target on error
