@@ -31,7 +31,10 @@ from extensions.heads.cand_scorer import load as load_ckpt
 M = '/scratch/pmohseni/omr/scorer'
 CONFIGS = [
     ('vel_p8 (24 feat)', [f'{M}/grid/vel_p8.pt'] + sorted(glob.glob(f'{M}/seeds/vel_p8_s*.pt'))),
-    ('nbr (33 feat)', sorted(glob.glob(f'{M}/nbr/nbr_s*.pt'))),
+    ('nbr (33 feat, proj 8)', sorted(glob.glob(f'{M}/nbr/nbr_s*.pt'))),
+    # featproj was chosen at 8 when there were 24 features; never swept with 33
+    ('nbr proj 32', sorted(glob.glob(f'{M}/nbr/nbrp32_s*.pt'))),
+    ('nbr proj 64', sorted(glob.glob(f'{M}/nbr/nbrp64_s*.pt'))),
     ('tempo (37 feat)', sorted(glob.glob(f'{M}/tempo/tempo_s*.pt'))),
     ('dagger (33 feat, rollout states)', sorted(glob.glob(f'{M}/dagger/dagger_s*.pt'))),
     # without these two entries both directions train and then produce no
