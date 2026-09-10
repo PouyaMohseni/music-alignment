@@ -103,11 +103,18 @@ def load_with_feat(paths):
                 off = np.concatenate([[0], np.cumsum(fl)])
                 flat = z[fk]
                 for pg in pages:
-                    if pg['name'] == nm:
-                        pg['feat'] = [flat[off[i]:off[i + 1]] for i in range(len(fl))]
+                    if pg['name'] != nm:
+                        continue
+                    pg['feat'] = [flat[off[i]:off[i + 1]] for i in range(len(fl))]
                     # z as well: the pitch heads need the audio vector, and
-                    # without it annotate_pieces silently attaches nothing and
-                    # every nf>37 model gets skipped.
+                    # without it annotate_pieces silently attaches nothing.
+                    # This MUST sit under the name check -- at the outer level
+                    # it assigned the current piece's z to every page, so each
+                    # page carried another piece's audio and the length
+                    # mismatch was the only reason it was noticed.
                     if f'{nm}||z' in z.files:
                         pg['z'] = z[f'{nm}||z']
+                        assert len(pg['z']) == len(pg['cand']), (
+                            f"{nm}: {len(pg['z'])} z rows for "
+                            f"{len(pg['cand'])} frames")
     return pages
