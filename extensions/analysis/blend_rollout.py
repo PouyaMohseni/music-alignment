@@ -88,11 +88,16 @@ def load_with_feat(paths):
     for pat in np.atleast_1d(paths):
         for fp in sorted(glob.glob(pat)):
             z = np.load(fp, allow_pickle=False)
-            if not any(k.endswith('||feat') for k in z.files):
+            has_feat = any(k.endswith('||feat') for k in z.files)
+            has_z = any(k.endswith('||z') for k in z.files)
+            if not (has_feat or has_z):
                 continue
             for nm in sorted({k.split('||')[0] for k in z.files}):
                 fk, flk = f'{nm}||feat', f'{nm}||flens'
                 if flk not in z.files:
+                    for pg in pages:
+                        if pg['name'] == nm and f'{nm}||z' in z.files:
+                            pg['z'] = z[f'{nm}||z']
                     continue
                 fl = z[flk]
                 off = np.concatenate([[0], np.cumsum(fl)])
@@ -100,4 +105,9 @@ def load_with_feat(paths):
                 for pg in pages:
                     if pg['name'] == nm:
                         pg['feat'] = [flat[off[i]:off[i + 1]] for i in range(len(fl))]
+                    # z as well: the pitch heads need the audio vector, and
+                    # without it annotate_pieces silently attaches nothing and
+                    # every nf>37 model gets skipped.
+                    if f'{nm}||z' in z.files:
+                        pg['z'] = z[f'{nm}||z']
     return pages
