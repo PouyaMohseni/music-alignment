@@ -58,7 +58,9 @@ def rollout_hits(model, pages, blend=0.7, lam=1.0, fwd=6.0, sigma=18.0,
                    else None)
             f = build(cs, p['bar'][i], p['sys'][i], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][i]), use_abs_obj=model.use_abs_obj,
-                      x_prev2=x_prev2, dframes_prev=dfp)[:, :model.nf]
+                      x_prev2=x_prev2, dframes_prev=dfp,
+                      pitch=(p['pitch'][i] if p.get('pitch') is not None else None)
+                      )[:, :model.nf]
             ff = None
             if model.fenc is not None and feats is not None:
                 fv = feats[i].astype(np.float32)

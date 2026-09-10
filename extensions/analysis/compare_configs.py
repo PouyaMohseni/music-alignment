@@ -51,10 +51,19 @@ def main():
     ap.add_argument('--room', default='/scratch/pmohseni/omr/candf256/room.npz')
     a = ap.parse_args()
 
+    HEADS = '/scratch/pmohseni/omr/scorer/pitch/heads_s0.pt'
     hv = load_with_feat(a.heldout)
     hb, pg = rollout_hits(load_ckpt(f'{M}/ir_only.pt')[0], hv)
     cl = piece_of(pg)
     room = load_with_feat(a.room)
+    # A model trained with features 37..40 must be SCORED with them. Omitting
+    # them is the dead-feature-branch bug that once produced a fake 94.0, and
+    # it reappeared here: pitchsc reaches 98.52 validation rollout and was
+    # scored at 56.56 on room because the evaluation passed pitch=None.
+    if glob.glob(HEADS):
+        from extensions.analysis.pitch_heads import annotate_pieces
+        annotate_pieces(hv, HEADS)
+        annotate_pieces(room, HEADS)
     ir_room, _ = rollout(load_ckpt(f'{M}/ir_only.pt')[0], room, blend=0.7)
     print(f'held-out {len(hb)} onsets / {len(np.unique(cl))} pieces; '
           f'ir_only {100 * hb.mean():.2f}   room ir_only {ir_room:.2f}\n')
@@ -69,6 +78,10 @@ def main():
         hs, rs, ds = [], [], []
         for p in paths:
             m = load_ckpt(p)[0]
+            if m.nf > 37 and room[0].get('pitch') is None:
+                print(f'   {p.split("/")[-1]}: SKIPPED -- needs pitch features '
+                      f'(nf={m.nf}) and the heads are missing')
+                continue
             h, _ = rollout_hits(m, hv)
             d, lo, hi, _ = paired_bootstrap(hb, h, cl)
             r, _ = rollout(m, room, blend=0.7)

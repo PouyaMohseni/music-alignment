@@ -45,7 +45,8 @@ def rollout(model, pages, blend=0.7, lam=1.0, fwd=6.0, sigma=18.0, jump=-6.0,
                    else None)
             f = build(cs, p['bar'][i], p['sys'][i], x_prev, y_prev, dfr,
                       ntot=int(p['ntot'][i]), use_abs_obj=model.use_abs_obj,
-                      x_prev2=x_prev2, dframes_prev=dfp, v_hat=v_hat)
+                      x_prev2=x_prev2, dframes_prev=dfp, v_hat=v_hat,
+                      pitch=(p['pitch'][i] if p.get('pitch') is not None else None))
             f = f[:, :model.nf]
             ff = None
             if model.fenc is not None and feats is not None:
