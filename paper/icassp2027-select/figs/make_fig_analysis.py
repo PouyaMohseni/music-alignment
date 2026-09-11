@@ -64,9 +64,11 @@ def main():
     a.set_yticks(range(len(names)))
     a.set_yticklabels(names)
     a.invert_yaxis()
-    a.set_xlim(0, 7.8)
+    a.set_xlim(0, 11.5)
+    a.set_xticks([0, 2, 4, 6])
     a.set_xlabel('error at 0.5 s (points)')
-    a.legend(fontsize=5.8, frameon=False, loc='lower right', handlelength=1.0)
+    a.legend(fontsize=5.6, frameon=False, loc='center right', handlelength=1.0,
+             borderaxespad=0.2)
     a.set_title('(a) remaining error', fontsize=7)
 
     rows = ladder()
@@ -80,7 +82,8 @@ def main():
     b.set_xticklabels([f'{s}' for s in SNRS])
     b.set_xlabel('SNR (dB)')
     b.set_ylabel('onsets within 0.5 s (%)')
-    b.legend(fontsize=5.4, frameon=False, loc='lower left', handlelength=1.2)
+    b.legend(fontsize=5.2, frameon=False, loc='upper right', handlelength=1.2,
+             borderaxespad=0.2)
     b.grid(alpha=0.25, lw=0.4)
     b.set_title('(b) held-out, added noise', fontsize=7)
 
