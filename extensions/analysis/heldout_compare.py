@@ -111,6 +111,7 @@ def main():
     ap.add_argument('--base', default='/scratch/pmohseni/omr/scorer/ir_only.pt')
     ap.add_argument('--cand', default='/scratch/pmohseni/omr/scorer/grid/vel_p8.pt')
     ap.add_argument('--snrs', default='12,6,3,0.5')
+    ap.add_argument('--dir', default='/scratch/pmohseni/omr/candhv')
     a = ap.parse_args()
 
     mb = load_ckpt(a.base)[0]
@@ -120,7 +121,7 @@ def main():
           f'{"vel_p8":>7s} {"delta":>7s} {"95% CI":>18s} {"p":>7s}')
 
     for snr in a.snrs.split(','):
-        path = f'/scratch/pmohseni/omr/candhv/valid_snr{snr}.npz'
+        path = f'{a.dir}/valid_snr{snr}.npz'
         try:
             pages = load_with_feat(path)
         except Exception as e:

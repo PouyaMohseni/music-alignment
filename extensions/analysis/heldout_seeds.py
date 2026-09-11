@@ -41,17 +41,26 @@ M = '/scratch/pmohseni/omr/scorer'
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--tier', default='12')
+    # candhv256 is what the harness supplies at inference and what the config
+    # selection was scored on; candhv (FEATK=128) is the older supply
+    ap.add_argument('--dir', default='/scratch/pmohseni/omr/candhv')
+    ap.add_argument('--models', default='',
+                    help='glob of checkpoints; default is the vel_p8 seeds')
     a = ap.parse_args()
-    pages = load_with_feat(f'/scratch/pmohseni/omr/candhv/valid_snr{a.tier}.npz')
+    pages = load_with_feat(f'{a.dir}/valid_snr{a.tier}.npz')
 
     hb, pg = rollout_hits(load_ckpt(f'{M}/ir_only.pt')[0], pages)
     cl = piece_of(pg)
-    print(f'held-out snr{a.tier}: {len(hb)} onsets, {len(np.unique(cl))} pieces')
+    print(f'held-out snr{a.tier} ({a.dir}): {len(hb)} onsets, '
+          f'{len(np.unique(cl))} pieces')
     print(f'ir_only baseline {100.0 * hb.mean():.2f}\n')
 
-    cands = [('vel_p8(seed0)', f'{M}/grid/vel_p8.pt')] + [
-        (p.split('/')[-1][:-3], p)
-        for p in sorted(glob.glob(f'{M}/seeds/vel_p8_s*.pt'))]
+    if a.models:
+        cands = [(p.split('/')[-1][:-3], p) for p in sorted(glob.glob(a.models))]
+    else:
+        cands = [('vel_p8(seed0)', f'{M}/grid/vel_p8.pt')] + [
+            (p.split('/')[-1][:-3], p)
+            for p in sorted(glob.glob(f'{M}/seeds/vel_p8_s*.pt'))]
     print(f'{"model":14s} {"pct":>7s} {"delta":>7s} {"95% CI":>18s} {"p":>8s}')
     accs = []
     for n, p in cands:
