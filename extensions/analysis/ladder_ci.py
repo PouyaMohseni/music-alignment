@@ -76,14 +76,17 @@ def rollout_hand(pages, lam=1.0, fwd=6.0, sigma=18.0, jump=-6.0, ref=5.0,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dump', default='/scratch/pmohseni/omr/candf/room.npz')
+    # the top rung is whichever checkpoint the pages report
+    ap.add_argument('--ship', default='/scratch/pmohseni/omr/scorer/grid/vel_p8.pt')
     a = ap.parse_args()
     pages = load_with_feat(a.dump)
+    ship = a.ship.split('/')[-1][:-3]
 
     arms = {}
     arms['argmax'], pg = rollout_argmax(pages)
     arms['hand'], _ = rollout_hand(pages)
     arms['ir_only'], _ = rollout_hits(load_ckpt('/scratch/pmohseni/omr/scorer/ir_only.pt')[0], pages)
-    arms['vel_p8'], _ = rollout_hits(load_ckpt('/scratch/pmohseni/omr/scorer/grid/vel_p8.pt')[0], pages)
+    arms[ship], _ = rollout_hits(load_ckpt(a.ship)[0], pages)
     cl = piece_of(pg)
 
     print(f'{len(arms["argmax"])} onsets, {len(np.unique(pg))} pages, '
@@ -98,8 +101,8 @@ def main():
         print(f'{k:>9s} {got:9.2f}{note}')
 
     print(f'\n{"comparison":>22s} {"delta":>7s} {"95% CI":>18s} {"p":>8s}')
-    steps = [('argmax', 'hand'), ('hand', 'ir_only'), ('ir_only', 'vel_p8'),
-             ('argmax', 'ir_only'), ('argmax', 'vel_p8')]
+    steps = [('argmax', 'hand'), ('hand', 'ir_only'), ('ir_only', ship),
+             ('argmax', 'ir_only'), ('argmax', ship)]
     for b, c in steps:
         m, lo, hi, p = paired_bootstrap(arms[b], arms[c], cl)
         tag = '  RESOLVED' if lo > 0 or hi < 0 else '  n.s.'
