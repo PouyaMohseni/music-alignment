@@ -1,0 +1,9 @@
+refs/*.pdf
+refs/*.txt
+kit/kit.zip
+*.aux
+*.log
+*.blg
+*.out
+*.fls
+*.fdb_latexmk
