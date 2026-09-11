@@ -13,6 +13,10 @@ from extensions.hooks.numpy_compat import patch as _np_patch
 
 _np_patch()          # cyolo's loader uses np.float / np.int
 
+from extensions.hooks.h1_eval_patch import maybe_patch_h1
+
+maybe_patch_h1()     # MERT-audio detector, only when H1_EMB_MAP is set
+
 from extensions.hooks.cyolo_record_perframe import dump, patch_recorder
 
 patch_recorder()
