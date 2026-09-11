@@ -37,6 +37,28 @@ from extensions.heads.cand_scorer import CandScorer, load, save
 
 TH = 10.0          # 0.5 s at 20 fps, the reported threshold
 
+# --- the hand score, for --residual -----------------------------------------
+# Deployment blends the learned and hand scores, beta*s + (1-beta)*h, and beta
+# turned out to be the one constant no proxy can choose: on synthetic audio the
+# scorer is good enough that beta=1 wins, on the real recordings it is
+# overconfident and needs the prior to hold it back. --residual removes the
+# knob by training the scorer as a CORRECTION on top of the hand score, so the
+# prior always contributes: the fitted quantity is s = score - h, and decoding
+# is argmax(s + h), which is the existing blend formula at beta=0.5 up to a
+# factor of two. Such a checkpoint must therefore be decoded at beta=0.5.
+PRIOR_REF, PRIOR_FWD, PRIOR_SIG, PRIOR_JUMP = 5.0, 6.0, 18.0, -6.0
+
+
+def hand_score(cand, x_prev, dframes):
+    """log objectness plus the transition prior, per candidate."""
+    lo = np.log(np.clip(cand[:, 4], 1e-8, None)).astype(np.float32)
+    if x_prev is None:
+        return lo
+    k = float(np.clip((dframes or PRIOR_REF) / PRIOR_REF, 0.2, 8.0))
+    d = cand[:, 0] - float(x_prev)
+    return lo + np.maximum(-0.5 * ((d - PRIOR_FWD * k) / PRIOR_SIG) ** 2,
+                           PRIOR_JUMP).astype(np.float32)
+
 # Selection and the training target are separate knobs. The soft label
 # exp(-|dt|/tau) with tau=3 frames says "land within about 0.15 s", which is
 # what the 0.5 s column rewards. The 0.05 s column is a different objective and
@@ -132,7 +154,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
     the oracle history entirely -- and the noise is skipped, because the
     measured error distribution is what the guess was standing in for.
     """
-    feats, labels, zs, fvs = [], [], [], []
+    feats, labels, zs, fvs, hands = [], [], [], [], []
     for pi, fi in items:
         p = pieces[pi]
         c = p['cand'][fi]
@@ -145,6 +167,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                                ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                                x_prev2=x_prev2, dframes_prev=dfr_prev,
                                v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
+            hands.append(hand_score(c, x_prev, dfr))
             labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
             zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
             if featdim:
@@ -176,6 +199,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                            x_prev2=x_prev2, dframes_prev=dfr_prev,
                            v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
+        hands.append(hand_score(c, x_prev, dfr))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
         if featdim:
@@ -191,20 +215,21 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
     X = np.zeros((B, K, NF), np.float32)
     E = np.full((B, K), 1e9, np.float32)
     M = np.zeros((B, K), bool)
+    H = np.zeros((B, K), np.float32)
     F = np.zeros((B, K, featdim), np.float32) if featdim else None
     for i, (f, e) in enumerate(zip(feats, labels)):
         k = f.shape[0]
-        X[i, :k], E[i, :k], M[i, :k] = f, e, True
+        X[i, :k], E[i, :k], M[i, :k], H[i, :k] = f, e, True, hands[i]
         if featdim:
             F[i, :k] = fvs[i]
     return (torch.from_numpy(X), torch.from_numpy(E), torch.from_numpy(M),
             torch.from_numpy(np.stack(zs)),
-            torch.from_numpy(F) if featdim else None)
+            torch.from_numpy(F) if featdim else None, torch.from_numpy(H))
 
 
 @torch.no_grad()
 def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
-            tempo_alpha=0.2, vmax=40.0):
+            tempo_alpha=0.2, vmax=40.0, residual=False):
     """Greedy decode, exactly the loop the decoder runs. Returns (rollout hit,
     argmax hit, oracle hit) as percentages over every scored frame."""
     hit = arg = orc = n = 0
@@ -238,6 +263,8 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
                 ff = torch.from_numpy(fv[:c.shape[0]]).unsqueeze(0)
             s = model(torch.from_numpy(f[:, :model.nf]).unsqueeze(0).to(device),
                       z=zz, feat=ff)[0]
+            if residual:
+                s = s + torch.from_numpy(hand_score(c, x_prev, dfr)).to(device)
             j = int(s.argmax())
             hit += err[j] <= th
             xn = float(c[j, 0])
@@ -286,6 +313,10 @@ def main():
     ap.add_argument('--use_z', action='store_true',
                     help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--residual', action='store_true',
+                    help='fit a correction on top of the hand score, so the prior '
+                         'always contributes and no blend weight has to be chosen; '
+                         'decode such a checkpoint at blend 0.5')
     ap.add_argument('--dagger_init', default='',
                     help='checkpoint to roll out for DAgger states; its own '
                          'visited histories replace the oracle ones')
@@ -322,7 +353,7 @@ def main():
     fdim = 128 if (a.use_feat and tr[0]['feat'] is not None) else 0
     if a.use_feat and not fdim:
         raise SystemExit('--use_feat but the dump carries no features')
-    Xs, _, Ms, Zs, Fs = make_batch(tr, samp, rng, use_abs_obj=use_abs, featdim=fdim)
+    Xs, _, Ms, Zs, Fs, _ = make_batch(tr, samp, rng, use_abs_obj=use_abs, featdim=fdim)
     # FEATURE_NAMES only ever grows at the end, so truncation is exactly the
     # older feature set rather than an approximation of it
     # --no_vel dropped the 4 velocity features by TRUNCATING to NF-4, which
@@ -401,11 +432,13 @@ def main():
         tot = nb = 0.0
         for i in range(0, len(order), a.bs):
             items = [idx[j] for j in order[i:i + a.bs]]
-            X, E, M, Z, F = make_batch(tr, items, rng, a.noise_p, a.noise_px,
-                                       use_abs, featdim=fdim,
-                                       states=states, dagger_frac=a.dagger_frac)
+            X, E, M, Z, F, H = make_batch(tr, items, rng, a.noise_p, a.noise_px,
+                                          use_abs, featdim=fdim,
+                                          states=states, dagger_frac=a.dagger_frac)
             s = model(X[:, :, :nf_use], M,
                       z=(Z if model.zenc is not None else None), feat=F)
+            if a.residual:
+                s = s + H          # fit the correction, not the whole score
             with torch.no_grad():                      # soft target on error
                 tgt = torch.softmax(torch.where(M, -E / a.tau, torch.full_like(E, -1e9)), -1)
             per = -(tgt * torch.log_softmax(s, -1)).sum(-1)
@@ -438,7 +471,7 @@ def main():
             nb += 1
         sched.step()
         model.eval()
-        r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th)
+        r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual)
         flag = ''
         if r > best:
             best, best_state = r, {k: v.clone() for k, v in model.state_dict().items()}
@@ -447,8 +480,8 @@ def main():
               f'(argmax {arg:5.2f}  oracle {orc:5.2f}){flag}', flush=True)
 
     model.load_state_dict(best_state)
-    r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th)
-    r5, a5, o5, _ = rollout(model, va, use_abs, th=TH)
+    r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual)
+    r5, a5, o5, _ = rollout(model, va, use_abs, th=TH, residual=a.residual)
     print(f'  at 0.5 s: rollout {r5:.2f}  argmax {a5:.2f}  oracle {o5:.2f}')
     print(f'\nBEST valid rollout hit@0.5s = {r:.2f}   argmax {arg:.2f}   '
           f'oracle {orc:.2f}   over {n} frames')
@@ -456,7 +489,10 @@ def main():
           f'available headroom')
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     save(model, a.out, extra=dict(valid_rollout=r, valid_argmax=arg,
-                                  valid_oracle=orc, use_abs_obj=use_abs))
+                                  valid_oracle=orc, use_abs_obj=use_abs,
+                                  residual=a.residual))
+    if a.residual:
+        print('RESIDUAL checkpoint: decode at blend 0.5, which is argmax(s + h)')
     print(f'wrote {a.out}')
 
 
