@@ -11,6 +11,14 @@ common, median overlap 0.000) came from an ad-hoc pass over the 91.4 selector's
 trajectory that was never saved as a script. So pass that trajectory FIRST: if
 this definition does not reproduce those figures on it, it is not the same
 measurement and its output for a new model must not replace them.
+
+Outcome (2026-09-11): it does NOT reproduce them, and cannot. The msmd_rp
+annotation has exactly one note per onset (Chopin: 1315 notes, 1315 onsets),
+so this compares note against note and every overlap is 0 or 1 -- on the 91.4
+trajectory 56 of 355 errors (15.8%) hit the same pitch, 84.2% a different one.
+The old figures had partial overlaps, so they came from a chord-level
+definition (probably the performance MIDI) that was not kept. The pages now
+cite THIS measurement with its definition stated; the old ones are retired.
 """
 from __future__ import annotations
 
