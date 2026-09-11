@@ -82,8 +82,10 @@ def main():
     b.set_xticklabels([f'{s}' for s in SNRS])
     b.set_xlabel('SNR (dB)')
     b.set_ylabel('onsets within 0.5 s (%)')
-    b.legend(fontsize=5.2, frameon=False, loc='upper right', handlelength=1.2,
-             borderaxespad=0.2)
+    # every curve is above 78% at 12 dB and falls to the right, so the lower
+    # left corner is the only region no line crosses
+    b.legend(fontsize=5.0, frameon=False, loc='lower left', handlelength=1.2,
+             borderaxespad=0.2, labelspacing=0.25)
     b.grid(alpha=0.25, lw=0.4)
     b.set_title('(b) held-out, added noise', fontsize=7)
 
