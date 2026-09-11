@@ -12,9 +12,18 @@ the scorer's weights never see real audio at all.
 Per fold the prior is chosen with the hand decoder over the full grid, then
 beta for the reported scorer at that prior -- the same two-stage procedure the
 proxy tuning used -- and the pooled onset accuracy is reported for both.
+
+--macro scores each fold's candidate settings by the MEAN OVER THE TRAINING
+PIECES rather than over their pooled onsets. Piece lengths vary from 56 to 1238
+onsets, so pooling lets one piece decide: with micro selection the fold that
+holds out the Chopin Nocturne (1238 of 4149 onsets) picks beta 1.0, which is
+the best setting for the other fifteen pooled and the worst for Chopin (64.6
+against 95.6 at 0.7). The piece is the independent unit everywhere else in this
+work, including the bootstrap, so it is the unit selection should use.
 """
 from __future__ import annotations
 
+import argparse
 import itertools
 import sys
 
@@ -38,17 +47,28 @@ GRID = list(itertools.product((3.0, 4.5, 6.0, 8.0, 10.0), (12.0, 18.0, 27.0),
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--macro', action='store_true',
+                    help='select on the mean over training PIECES, not pooled onsets')
+    a = ap.parse_args()
+    print(f'selection unit: {"piece (macro)" if a.macro else "onset (micro)"}', flush=True)
     room = load_with_feat(ROOM)
     arg, pg = rollout_argmax(room)
     pieces = piece_of(pg)
     names = sorted(set(pieces))
     print(f'{len(arg)} onsets, {len(names)} pieces; argmax {100 * arg.mean():.2f}', flush=True)
 
+    def score(hits, held):
+        """Quality of a setting on the fifteen training pieces of this fold."""
+        if a.macro:
+            return np.mean([hits[pieces == q].mean() for q in names if q != held])
+        return hits[pieces != held].mean()
+
     hand = {}
     for pr in GRID:
         h, _ = rollout_hand(room, fwd=pr[0], sigma=pr[1], jump=pr[2])
         hand[pr] = h
-    fold_prior = {p: max(GRID, key=lambda k: hand[k][pieces != p].mean()) for p in names}
+    fold_prior = {p: max(GRID, key=lambda k: score(hand[k], p)) for p in names}
 
     m = load_ckpt(SHIP)[0]
     full = {}
@@ -64,14 +84,18 @@ def main():
     for p in names:
         held = pieces == p
         pr = fold_prior[p]
-        b = max(BLENDS, key=lambda v: full[(pr, v)][~held].mean())
+        b = max(BLENDS, key=lambda v: score(full[(pr, v)], p))
         lo_hand[held] = hand[pr][held]
         lo_full[held] = full[(pr, b)][held]
         print(f'{p[:52]:52s} {str(pr):>16s} {b:5.1f}')
 
-    print(f'\nleave-one-piece-out, pooled over {len(pieces)} onsets:')
-    print(f'  prior only   {100 * lo_hand.mean():6.2f}')
-    print(f'  full decoder {100 * lo_full.mean():6.2f}')
+    def macro(h):
+        return np.mean([100 * h[pieces == q].mean() for q in names])
+
+    print(f'\nleave-one-piece-out over {len(pieces)} onsets / {len(names)} pieces:')
+    print(f'{"":15s} {"pooled":>7s} {"per piece":>10s}')
+    for tag, h in (('argmax', arg), ('prior only', lo_hand), ('full decoder', lo_full)):
+        print(f'  {tag:13s} {100 * h.mean():7.2f} {macro(h):10.2f}')
     for tag, h in (('argmax -> prior', lo_hand), ('argmax -> full', lo_full)):
         mu, lo, hi, pv = paired_bootstrap(arg, h, pieces)
         print(f'  {tag:16s} {mu:+6.2f} [{lo:+6.2f}, {hi:+6.2f}]  p={pv:.4f}')
