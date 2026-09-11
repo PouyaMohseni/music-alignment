@@ -37,13 +37,15 @@ def ladder():
             m = re.match(r'\s*([\d.]+)\s+\d+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)', line)
             if m and m.group(1) in SNRS:
                 rows[m.group(1)] = tuple(float(v) for v in m.groups()[1:])
+    # short labels: the panel is ~1.5 in wide, and long ones made the legend
+    # wider than any empty region of the plot
     if len(rows) == len(SNRS):
-        return {'detector argmax': [rows[s][0] for s in SNRS],
-                'prior only': [rows[s][1] for s in SNRS],
-                'featureless scorer': [rows[s][2] for s in SNRS],
-                'full scorer': [rows[s][3] for s in SNRS]}
-    return {'featureless scorer': [86.79, 75.78, 55.68, 36.41],
-            'full scorer': [90.69, 81.48, 64.12, 43.01]}
+        return {'argmax': [rows[s][0] for s in SNRS],
+                'prior': [rows[s][1] for s in SNRS],
+                'featureless': [rows[s][2] for s in SNRS],
+                'full': [rows[s][3] for s in SNRS]}
+    return {'featureless': [86.79, 75.78, 55.68, 36.41],
+            'full': [90.69, 81.48, 64.12, 43.01]}
 
 
 def main():
@@ -72,8 +74,8 @@ def main():
     a.set_title('(a) remaining error', fontsize=7)
 
     rows = ladder()
-    style = {'detector argmax': ('0.6', 'o'), 'prior only': ('#7F8C8D', 's'),
-             'featureless scorer': ('#2E86C1', '^'), 'full scorer': ('#138D90', 'D')}
+    style = {'argmax': ('0.6', 'o'), 'prior': ('#7F8C8D', 's'),
+             'featureless': ('#2E86C1', '^'), 'full': ('#138D90', 'D')}
     xs = range(len(SNRS))
     for n, v in rows.items():
         c, m = style[n]
