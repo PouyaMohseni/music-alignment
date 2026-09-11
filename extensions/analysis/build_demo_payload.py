@@ -17,35 +17,77 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, '/project/def-ichiro/pmohseni/music-alignment')
-from extensions.analysis.musical_cases import FPS, classify, load_piece, load_traj, merge_pages
+from extensions.analysis.musical_cases import (FPS, classify, load_piece, load_traj,
+                                               merge_pages, summarize)
 
 T = '/scratch/pmohseni/omr/traj'
-OUT = '/scratch/pmohseni/omr/demo'
-# Chosen from the per-piece table for the SHIPPED 91.4 model, one case per
-# distinct behaviour rather than four wins:
-#
-#   piece                         base   hand   ours   delta
-#   Chopin Nocturne Op.9          63.7   77.3   87.5  +23.8   biggest gain
-#   Schumann op.68 no.1           86.3   91.4   99.4  +13.1   near-perfect result
-#   Mussorgsky Promenade 3        46.4   46.4   39.3   -7.1   worst, and we hurt it
-#   Schumann op.68 no.16          85.4   92.3   84.6   -0.8   hand decode beats ours
-# Chosen against the SHIPPED model's own per-piece table, not the previous
-# one's. Premier Chagrin used to sit here as the case where the learned
-# selector lost to the hand rule; with velocity features it now improves
-# (84.6 -> 88.5), so keeping it would have illustrated a failure we no longer
-# have. Pauvre Orpheline replaces it, and is a sharper example anyway: the
-# image features actively cost 11 points there.
-CASES = [
-    ('ChopinFF__O9__nocturne_in_b-flat_minor_room', 'Chopin, Nocturne Op. 9 No. 1',
-     'biggest gain in the set: 63.7 to 92.6'),
-    ('BachJS__BWV797__bwv797_room', 'Bach, Sinfonia 11 BWV 797',
-     'second biggest, and near-perfect after: 83.2 to 97.9'),
-    ('MussorgskyM__pictures-at-an-exhibition__promenade-3_room',
-     'Mussorgsky, Promenade 3', 'worst piece, and we make it worse: 46.4 to 33.9'),
-    ('SchumannR__O68__schumann-op68-06-pauvre-orpheline_room',
-     'Schumann, Pauvre Orpheline Op. 68 No. 6',
-     'image features cost us here: featureless 81.3, ours 70.1'),
-]
+OUT = os.environ.get('DEMO_OUT', '/scratch/pmohseni/omr/demo')
+TITLES = {
+    'BachJS__BWV797__bwv797_room': 'Bach, Sinfonia 11 BWV 797',
+    'BachJS__BWV117a__BWV-117a_room': 'Bach, BWV 117a',
+    'BachJS__BWV830__BWV-830-2_room': 'Bach, Partita BWV 830',
+    'BachJS__BWVAnh120__BWV-120_room': 'Bach, BWV 120',
+    'MozartWA__KV331__KV331_1_2_var1_room': 'Mozart, KV 331 Var. 1',
+    'BachJS__BWVAnh113__anna-magdalena-03_room': 'Bach, Anna Magdalena 3',
+    'BachJS__BWVAnh116__anna-magdalena-07_room': 'Bach, Anna Magdalena 7',
+    'BachJS__BWV924a__bach-prelude-bwv924a_room': 'Bach, Prelude BWV 924a',
+    'ChopinFF__O9__nocturne_in_b-flat_minor_room': 'Chopin, Nocturne Op. 9 No. 1',
+    'BachJS__BWV817__bach-french-suite-6-menuet_room': 'Bach, French Suite 6 Menuet',
+    'MussorgskyM__pictures-at-an-exhibition__promenade-3_room': 'Mussorgsky, Promenade 3',
+    'SchumannR__O68__schumann-op68-01-melodie_room': 'Schumann, Melodie Op. 68 No. 1',
+    'SchumannR__O68__schumann-op68-06-pauvre-orpheline_room':
+        'Schumann, Pauvre Orpheline Op. 68 No. 6',
+    'SchumannR__O68__schumann-op68-08-cavalier-sauvage_room':
+        'Schumann, Cavalier Sauvage Op. 68 No. 8',
+    'SchumannR__O68__schumann-op68-16-premier-chagrin_room':
+        'Schumann, Premier Chagrin Op. 68 No. 16',
+    'SchumannR__O68__schumann-op68-26-sans-titre_room': 'Schumann, Sans Titre Op. 68 No. 26',
+}
+
+
+def acc(traj, pn):
+    t = merge_pages(traj, pn)
+    return 100.0 * float((np.abs(t['t_pred'] - t['t_gt']) / FPS <= .5).mean())
+
+
+def pick_cases(base, flat, ours):
+    """One case per distinct behaviour, chosen by RULE from the trajectories.
+
+    The list used to be typed in from a per-piece table, with its numbers in
+    the captions, and went stale every time the shipped checkpoint changed
+    (it still quoted the 91.4 model's numbers after vel_p8 replaced it). Now
+    the four roles are fixed and the pieces filling them are recomputed:
+
+      the biggest gain over the baseline, the second biggest, the worst piece
+      after decoding, and the piece where the image features cost most
+      against the featureless selector (or, if they cost nothing anywhere,
+      where they help most).
+    """
+    names = sorted({p.rsplit('_page_', 1)[0] for p in ours})
+    b = {n: acc(base, n) for n in names}
+    f = {n: acc(flat, n) for n in names}
+    o = {n: acc(ours, n) for n in names}
+    print(f'{"piece":52s} {"base":>6s} {"flat":>6s} {"ours":>6s}')
+    for n in sorted(names, key=lambda n: b[n] - o[n]):
+        print(f'{n[:52]:52s} {b[n]:6.1f} {f[n]:6.1f} {o[n]:6.1f}')
+    g1, g2 = sorted(names, key=lambda n: o[n] - b[n], reverse=True)[:2]
+    rest = [n for n in names if n not in (g1, g2)]
+    w = min(rest, key=lambda n: o[n])
+    rest = [n for n in rest if n != w]
+    c = max(rest, key=lambda n: f[n] - o[n])
+    if f[c] - o[c] > 0.5:
+        why4 = f'image features cost us here: featureless {f[c]:.1f}, ours {o[c]:.1f}'
+    else:
+        c = max(rest, key=lambda n: o[n] - f[n])
+        why4 = f'where image features help most: featureless {f[c]:.1f}, ours {o[c]:.1f}'
+    near = ', and near-perfect after' if o[g2] >= 97 else ''
+    worse = ', and we make it worse' if o[w] < b[w] else ''
+    return [
+        (g1, TITLES.get(g1, g1), f'biggest gain in the set: {b[g1]:.1f} to {o[g1]:.1f}'),
+        (g2, TITLES.get(g2, g2), f'second biggest{near}: {b[g2]:.1f} to {o[g2]:.1f}'),
+        (w, TITLES.get(w, w), f'worst piece{worse}: {b[w]:.1f} to {o[w]:.1f}'),
+        (c, TITLES.get(c, c), why4),
+    ]
 
 
 def b64(path, mime):
@@ -69,8 +111,11 @@ def main():
     # demo was first built from. Overridable so the panels can be regenerated
     # for a different checkpoint without editing this file.
     ours = load_traj(os.environ.get('OURS_TRAJ', f'{T}/velp8_room.traj.npz'))
+    # the featureless selector at the same blend, for the fourth role
+    flat = load_traj(os.environ.get('FLAT_TRAJ', f'{T}/selected_room.traj.npz'))
+    os.makedirs(OUT, exist_ok=True)
     cases = []
-    for pn, title, why in CASES:
+    for pn, title, why in pick_cases(base, flat, ours):
         short = pn.replace('_room', '')
         pc = load_piece(short, 'room')
         tb, to = merge_pages(base, pn), merge_pages(ours, pn)
@@ -111,6 +156,16 @@ def main():
             be=[round(float(v), 3) for v in cb['err'][mb]]))
         print(f'  {stem:<34} page {pg}  {t1 - t0:5.1f}s  '
               f'{len(cases[-1]["t"]):>4} frames  page acc {cases[-1]["page_ours"]:.1f}%')
+    # failure taxonomy over EVERY scored onset of the model the panels show;
+    # the page's table was last computed for the 91.4 featureless model
+    allcats = []
+    for pn in sorted({p.rsplit('_page_', 1)[0] for p in ours}):
+        pc = load_piece(pn.replace('_room', ''), 'room')
+        allcats.extend(classify(merge_pages(ours, pn), pc)['cat'])
+    n, bad, share = summarize(allcats)
+    print(f'\ntaxonomy: {n} onsets, {bad} outside threshold ({100.0 * (n - bad) / n:.2f}%)')
+    for k, (v, pct) in sorted(share.items(), key=lambda t: -t[1][0]):
+        print(f'  {k:14s} {v:5d}  {pct:5.1f}%')
     payload = dict(cases=cases)
     p = f'{OUT}/payload.json'
     json.dump(payload, open(p, 'w'))
