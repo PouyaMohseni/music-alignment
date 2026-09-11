@@ -50,7 +50,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--macro', action='store_true',
                     help='select on the mean over training PIECES, not pooled onsets')
+    ap.add_argument('--ckpt', default=SHIP,
+                    help='scorer to evaluate; the protocol is unchanged, so running '
+                         'every seed of a configuration gives its mean under selection')
     a = ap.parse_args()
+    print(f'scorer: {a.ckpt}', flush=True)
     print(f'selection unit: {"piece (macro)" if a.macro else "onset (micro)"}', flush=True)
     room = load_with_feat(ROOM)
     arg, pg = rollout_argmax(room)
@@ -70,7 +74,7 @@ def main():
         hand[pr] = h
     fold_prior = {p: max(GRID, key=lambda k: score(hand[k], p)) for p in names}
 
-    m = load_ckpt(SHIP)[0]
+    m = load_ckpt(a.ckpt)[0]
     full = {}
     for pr in sorted(set(fold_prior.values()) | {SHIPPED}):
         for b in BLENDS:
