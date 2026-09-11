@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=6:00:00
-#SBATCH --array=0-2
+#SBATCH --array=0-5
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/resid_%a-%A.log
 # The scorer as a CORRECTION on top of the hand score, so no blend weight has
 # to be chosen. The blend weight is the one constant no proxy could select:
@@ -19,11 +19,15 @@ export PYTHONPATH=/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=8
 F=/scratch/pmohseni/omr/candf
 M=/scratch/pmohseni/omr/scorer/resid; mkdir -p "$M"
-S=${SLURM_ARRAY_TASK_ID}
-T="$M/resid_s$S.pt"
+# tasks 0-2: the prior every clean selection picks. 3-5: the shipped
+# constants, kept only to show what the contaminated choice was worth.
+I=${SLURM_ARRAY_TASK_ID}
+S=$((I % 3))
+if [ "$I" -lt 3 ]; then P=10,18,-8; TAG=resid; else P=6,18,-6; TAG=residold; fi
+T="$M/${TAG}_s$S.pt"
 [ -f "$T" ] && { echo "present: $T"; exit 0; }
 python extensions/analysis/train_cand_scorer.py --out "$T" \
     --train "$F/train_c*.npz" --valid "$F/valid.npz" \
-    --use_feat --featproj 64 --seed "$S" --no_tempo --residual 2>&1 \
+    --use_feat --featproj 64 --seed "$S" --no_tempo --residual --prior "$P" 2>&1 \
   | grep -E "RESIDUAL|BEST|wrote|rror|Traceback" | tail -5
 [ -f "$T" ] || { echo "NO CHECKPOINT"; exit 1; }

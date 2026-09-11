@@ -46,18 +46,24 @@ TH = 10.0          # 0.5 s at 20 fps, the reported threshold
 # prior always contributes: the fitted quantity is s = score - h, and decoding
 # is argmax(s + h), which is the existing blend formula at beta=0.5 up to a
 # factor of two. Such a checkpoint must therefore be decoded at beta=0.5.
-PRIOR_REF, PRIOR_FWD, PRIOR_SIG, PRIOR_JUMP = 5.0, 6.0, 18.0, -6.0
+#
+# The prior baked in here becomes part of the model, so it must NOT be the
+# 6/18/-6 the project shipped: those constants were swept on the room test
+# recordings. Validation, held-out and leave-one-piece-out selection all
+# independently pick 10/18/-8, so that is the default, and --prior overrides it.
+PRIOR_REF = 5.0
+PRIOR = (10.0, 18.0, -8.0)
 
 
-def hand_score(cand, x_prev, dframes):
+def hand_score(cand, x_prev, dframes, prior=None):
     """log objectness plus the transition prior, per candidate."""
+    fwd, sig, jump = prior or PRIOR
     lo = np.log(np.clip(cand[:, 4], 1e-8, None)).astype(np.float32)
     if x_prev is None:
         return lo
     k = float(np.clip((dframes or PRIOR_REF) / PRIOR_REF, 0.2, 8.0))
     d = cand[:, 0] - float(x_prev)
-    return lo + np.maximum(-0.5 * ((d - PRIOR_FWD * k) / PRIOR_SIG) ** 2,
-                           PRIOR_JUMP).astype(np.float32)
+    return lo + np.maximum(-0.5 * ((d - fwd * k) / sig) ** 2, jump).astype(np.float32)
 
 # Selection and the training target are separate knobs. The soft label
 # exp(-|dt|/tau) with tau=3 frames says "land within about 0.15 s", which is
@@ -145,7 +151,7 @@ def oracle_tempo(p, alpha=0.2, vmax=40.0):
 
 
 def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
-               featdim=0, states=None, dagger_frac=0.0):
+               featdim=0, states=None, dagger_frac=0.0, prior=None):
     """states maps (piece, frame) -> the history the POLICY reached there.
 
     Teacher forcing builds x_prev from the oracle, so the model is fitted on a
@@ -167,7 +173,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                                ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                                x_prev2=x_prev2, dframes_prev=dfr_prev,
                                v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
-            hands.append(hand_score(c, x_prev, dfr))
+            hands.append(hand_score(c, x_prev, dfr, prior))
             labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
             zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
             if featdim:
@@ -199,7 +205,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
                            ntot=int(p['ntot'][fi]), use_abs_obj=use_abs_obj,
                            x_prev2=x_prev2, dframes_prev=dfr_prev,
                            v_hat=_vhat(p, fi), pitch=_pitch(p, fi)))
-        hands.append(hand_score(c, x_prev, dfr))
+        hands.append(hand_score(c, x_prev, dfr, prior))
         labels.append(np.abs(c[:, 5] - p['t_gt'][fi]))
         zs.append(p['z'][fi] if p['z'] is not None else np.zeros(128, np.float32))
         if featdim:
@@ -229,7 +235,7 @@ def make_batch(pieces, items, rng, noise_p=0.0, noise_px=30.0, use_abs_obj=True,
 
 @torch.no_grad()
 def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
-            tempo_alpha=0.2, vmax=40.0, residual=False):
+            tempo_alpha=0.2, vmax=40.0, residual=False, prior=None):
     """Greedy decode, exactly the loop the decoder runs. Returns (rollout hit,
     argmax hit, oracle hit) as percentages over every scored frame."""
     hit = arg = orc = n = 0
@@ -264,7 +270,7 @@ def rollout(model, pieces, use_abs_obj=True, device='cpu', th=TH,
             s = model(torch.from_numpy(f[:, :model.nf]).unsqueeze(0).to(device),
                       z=zz, feat=ff)[0]
             if residual:
-                s = s + torch.from_numpy(hand_score(c, x_prev, dfr)).to(device)
+                s = s + torch.from_numpy(hand_score(c, x_prev, dfr, prior)).to(device)
             j = int(s.argmax())
             hit += err[j] <= th
             xn = float(c[j, 0])
@@ -313,6 +319,8 @@ def main():
     ap.add_argument('--use_z', action='store_true',
                     help="give the selector the detector's own audio vector")
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--prior', default=','.join(str(v) for v in PRIOR),
+                    help='fwd,sigma,jump for the hand score baked in by --residual')
     ap.add_argument('--residual', action='store_true',
                     help='fit a correction on top of the hand score, so the prior '
                          'always contributes and no blend weight has to be chosen; '
@@ -331,6 +339,10 @@ def main():
     ap.add_argument('--dagger_rounds', type=int, default=1,
                     help='re-roll with the model being trained after each round')
     a = ap.parse_args()
+    prior = tuple(float(v) for v in a.prior.split(','))
+    if a.residual:
+        print(f'RESIDUAL: fitting a correction on the hand score, prior {prior}',
+              flush=True)
 
     torch.manual_seed(a.seed)
     rng = np.random.default_rng(a.seed)
@@ -434,7 +446,8 @@ def main():
             items = [idx[j] for j in order[i:i + a.bs]]
             X, E, M, Z, F, H = make_batch(tr, items, rng, a.noise_p, a.noise_px,
                                           use_abs, featdim=fdim,
-                                          states=states, dagger_frac=a.dagger_frac)
+                                          states=states, dagger_frac=a.dagger_frac,
+                                          prior=prior)
             s = model(X[:, :, :nf_use], M,
                       z=(Z if model.zenc is not None else None), feat=F)
             if a.residual:
@@ -471,7 +484,7 @@ def main():
             nb += 1
         sched.step()
         model.eval()
-        r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual)
+        r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual, prior=prior)
         flag = ''
         if r > best:
             best, best_state = r, {k: v.clone() for k, v in model.state_dict().items()}
@@ -480,8 +493,8 @@ def main():
               f'(argmax {arg:5.2f}  oracle {orc:5.2f}){flag}', flush=True)
 
     model.load_state_dict(best_state)
-    r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual)
-    r5, a5, o5, _ = rollout(model, va, use_abs, th=TH, residual=a.residual)
+    r, arg, orc, n = rollout(model, va, use_abs, th=a.sel_th, residual=a.residual, prior=prior)
+    r5, a5, o5, _ = rollout(model, va, use_abs, th=TH, residual=a.residual, prior=prior)
     print(f'  at 0.5 s: rollout {r5:.2f}  argmax {a5:.2f}  oracle {o5:.2f}')
     print(f'\nBEST valid rollout hit@0.5s = {r:.2f}   argmax {arg:.2f}   '
           f'oracle {orc:.2f}   over {n} frames')
