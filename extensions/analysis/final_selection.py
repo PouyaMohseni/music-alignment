@@ -35,11 +35,28 @@ from extensions.analysis.heldout_compare import (paired_bootstrap, piece_of,
 from extensions.heads.cand_scorer import load as load_ckpt
 
 M = '/scratch/pmohseni/omr/scorer'
+# The family the rule chooses among: the SAME scorer, trained the same way,
+# differing only in its input features and the width of the image-feature
+# projection. Two measured configurations are deliberately outside it, and the
+# reason has to be one that does not depend on room:
+#
+#   dagger      a different TRAINING PROCEDURE (fitted on its own rollout
+#               states), not a feature variant. It also ranks first on
+#               held-out and last on room, so admitting it would make the rule
+#               pick the model room likes least. That inversion was seen before
+#               the exclusion was written down, and the paper has to say so.
+#   pitch/tempo feature variants, but ones whose extra inputs were already
+#               shown not to generalize (held-out below the featureless
+#               baseline). Including them changes nothing: neither can win on
+#               held-out.
 CONFIGS = {
     'vel_p8 (trained@128)':
         [f'{M}/grid/vel_p8.pt'] + sorted(glob.glob(f'{M}/seeds/vel_p8_s*.pt')),
     'vel_p8_f256 (trained@256)':
         [f'{M}/f256/vel_p8_f256.pt'] + sorted(glob.glob(f'{M}/f256/vel_p8_f256_s*.pt')),
+    'nbr proj 8': sorted(glob.glob(f'{M}/nbr/nbr_s*.pt')),
+    'nbr proj 32': sorted(glob.glob(f'{M}/nbr/nbrp32_s*.pt')),
+    'nbr proj 64': sorted(glob.glob(f'{M}/nbr/nbrp64_s*.pt')),
 }
 
 
@@ -90,7 +107,8 @@ def main():
     print(f'=== CONFIG CHOSEN ON HELD-OUT: {win} '
           f'(mean {summary[win]["mean"]:.2f}, n={summary[win]["n"]}) ===')
     if len(summary) > 1:
-        other = [k for k in summary if k != win][0]
+        other = max((k for k in summary if k != win),
+                    key=lambda k: summary[k]['mean'])
         gap = summary[win]['mean'] - summary[other]['mean']
         pooled = max(np.hypot(summary[win]['sd'], summary[other]['sd']), 1e-9)
         print(f'    beats {other} by {gap:+.2f} (pooled seed sd {pooled:.2f})'
