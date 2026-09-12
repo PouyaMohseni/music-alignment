@@ -37,7 +37,7 @@ JOBS = [
     ('residual (clean prior)', f'{M}/resid/resid_s*.pt', f'{O}/candf256/room.npz', (10.0, 18.0, -8.0)),
     ('residual (old prior)',   f'{M}/resid/residold_s*.pt', f'{O}/candf256/room.npz', (6.0, 18.0, -6.0)),
     ('history-free',           f'{M}/extra/nohist_s*.pt', f'{O}/candf256/room.npz', None),
-    ('detector: CYOLO',        f'{M}/extra/cyolo_s*.pt', f'{O}/cand_cyolo/room.npz', None),
+    ('detector: CYOLO',        f'{M}/extra/cyolo_s[0-9].pt', f'{O}/cand_cyolo/room.npz', None),
     ('detector: CYOLO-SB+A',   f'{M}/extra/cyolo_sb_a_s*.pt', f'{O}/cand_cyolo_sb_a/room.npz', None),
     ('image: DINOv2',          f'{M}/abl/dino_s*.pt', f'{O}/candf_dino/room.npz', None),
     ('audio: MERT',            f'{M}/abl/h1_s*.pt', f'{O}/candh1/room.npz', None),
