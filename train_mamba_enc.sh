@@ -9,8 +9,14 @@
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/mambaenc_%x-%j.log
 # CODA's Mamba against CYOLO-SB's LSTM, one module apart, budget matched.
 #
-#   sbatch train_mamba_enc.sh mamba      CODA's recurrence: 2 layers, d_state 16
-#   sbatch train_mamba_enc.sh lstm       the control, same everything else
+#   sbatch train_mamba_enc.sh lstm       the control: CNN + LSTM, our budget
+#   sbatch train_mamba_enc.sh mamba      CODA's: a 2-layer causal Mamba IS the
+#                                        audio tower, no CNN, 78-bin frames in
+#   sbatch train_mamba_enc.sh cnnmamba   CNN kept, only the LSTM replaced
+#
+# The third arm decomposes the second. CODA's design changes the frame encoder
+# and the recurrence at once, so on its own it cannot say which half matters;
+# with MERT (frame encoder only, LSTM kept) the four rows separate them.
 #
 # CODA's Table 3 ablates the cascade, cross-attention, beam search, the temporal
 # priors and scheduled sampling, and never the encoder, so nothing in their
@@ -19,8 +25,12 @@
 # compared with each other -- never against Henkel's converged release.
 set -uo pipefail
 ARM=${1:?usage: train_mamba_enc.sh mamba|lstm}
-case "$ARM" in mamba) export MAMBA_ENC=1 ;; lstm) export MAMBA_ENC=0 ;;
-  *) echo "FATAL: arm must be mamba or lstm"; exit 1 ;; esac
+case "$ARM" in
+  lstm)     export MAMBA_ENC=0 ;;
+  mamba)    export MAMBA_ENC=1 MAMBA_MODE=tower ;;
+  cnnmamba) export MAMBA_ENC=1 MAMBA_MODE=seq ;;
+  *) echo "FATAL: arm must be lstm, mamba or cnnmamba"; exit 1 ;;
+esac
 echo "Job started on $(hostname) at $(date), arm=$ARM"
 nvidia-smi | head -12
 CFG=${2:-cyolo_sb}
@@ -28,7 +38,7 @@ module load gcc python/3.10 opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 python -c "import torch,cv2;print('torch',torch.__version__,'cuda',torch.cuda.is_available())" \
   || { echo "FATAL: venv_cyolo broken"; exit 1; }
-[ "$ARM" = mamba ] && { python -c "import mamba_ssm" || { echo "FATAL: no mamba_ssm"; exit 1; }; }
+[ "$ARM" != lstm ] && { python -c "import mamba_ssm" || { echo "FATAL: no mamba_ssm"; exit 1; }; }
 
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd

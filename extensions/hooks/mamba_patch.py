@@ -105,7 +105,50 @@ class MambaAudioEncoder(nn.Module):
         raise NotImplementedError('the Mamba tower has no block structure')
 
 
-def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2, max_hist=0):
+class MambaSeq(nn.Module):
+    """Mamba in place of the LSTM ALONE, keeping CYOLO's convolutional front end.
+
+    This is not CODA's design. It exists to decompose the tower swap: the CODA
+    arm changes the frame encoder and the recurrence at once, so on its own it
+    cannot say which half matters. With this arm the pair reads
+
+        CNN   + LSTM     the released architecture
+        CNN   + Mamba    recurrence only
+        Mamba            CODA's, both at once
+        MERT  + LSTM     frame encoder only (H1)
+
+    and the two middle rows separate what the outer two confound.
+
+    The caller does `_, hidden = self.seq_model(packed, hidden)` and reads
+    `hidden[0][-1]`, so the return shape is what has to match, not the type.
+    """
+
+    def __init__(self, in_dim=32, hidden_size=64, n_layers=2, d_state=16,
+                 d_conv=4, expand=2):
+        super().__init__()
+        from mamba_ssm import Mamba
+        self.hidden_size = hidden_size
+        self.inp = nn.Linear(in_dim, hidden_size)
+        self.blocks = nn.ModuleList(
+            [Mamba(d_model=hidden_size, d_state=d_state, d_conv=d_conv,
+                   expand=expand) for _ in range(n_layers)])
+        self.norms = nn.ModuleList(
+            [nn.LayerNorm(hidden_size) for _ in range(n_layers)])
+
+    def forward(self, packed, hidden=None):
+        from torch.nn.utils.rnn import pad_packed_sequence
+        x, lengths = pad_packed_sequence(packed, batch_first=True)
+        h = self.inp(x)
+        for blk, nrm in zip(self.blocks, self.norms):
+            h = h + blk(nrm(h))
+        idx = (lengths - 1).clamp(min=0).to(h.device)
+        last = h[torch.arange(h.shape[0], device=h.device), idx]
+        s = last.unsqueeze(0)
+        return None, (s, s)
+
+
+def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2, max_hist=0,
+                mode='tower'):
     from cyolo_score_following.models.yolo import Model
 
     if getattr(Model, '_mamba_patched', False):
@@ -115,6 +158,18 @@ def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2, max_hist=0):
     def __init__(self, *a, **kw):
         prev_init(self, *a, **kw)
         old = self.conditioning_network
+        if mode == 'seq':
+            lstm = old.seq_model
+            old.seq_model = MambaSeq(in_dim=lstm.input_size,
+                                     hidden_size=lstm.hidden_size,
+                                     n_layers=n_layers, d_state=d_state,
+                                     d_conv=d_conv, expand=expand)
+            n_o = sum(p.numel() for p in lstm.parameters())
+            n_n = sum(p.numel() for p in old.seq_model.parameters())
+            print(f'[MAMBA] recurrence only: LSTM({lstm.input_size}->'
+                  f'{lstm.hidden_size}, {n_o} params) -> Mamba x{n_layers} '
+                  f'({n_n} params), CNN front end kept', flush=True)
+            return
         n_mels = getattr(old, 'kh', 78)
         hid = getattr(old.seq_model, 'hidden_size', 64)
         new = MambaAudioEncoder(n_mels=n_mels, hidden_size=hid,
@@ -139,5 +194,6 @@ def maybe_patch_mamba() -> bool:
                 d_state=int(os.environ.get('MAMBA_DSTATE', '16')),
                 d_conv=int(os.environ.get('MAMBA_DCONV', '4')),
                 expand=int(os.environ.get('MAMBA_EXPAND', '2')),
-                max_hist=int(os.environ.get('MAMBA_MAXHIST', '0')))
+                max_hist=int(os.environ.get('MAMBA_MAXHIST', '0')),
+                mode=os.environ.get('MAMBA_MODE', 'tower'))
     return True
