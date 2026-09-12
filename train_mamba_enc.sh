@@ -38,7 +38,7 @@ module load gcc python/3.10 opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 python -c "import torch,cv2;print('torch',torch.__version__,'cuda',torch.cuda.is_available())" \
   || { echo "FATAL: venv_cyolo broken"; exit 1; }
-[ "$ARM" != lstm ] && { python -c "from mamba_ssm.modules.mamba_simple import Mamba" || { echo "FATAL: no mamba_ssm"; exit 1; }; }
+[ "$ARM" != lstm ] && { python -c "from extensions.hooks.mamba_patch import _import_mamba; _import_mamba()" || { echo "FATAL: no mamba_ssm"; exit 1; }; }
 
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd

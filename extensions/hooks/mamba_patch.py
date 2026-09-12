@@ -54,6 +54,30 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def _import_mamba():
+    """Import the Mamba block past its own package init.
+
+    mamba_ssm 2.2.4's `__init__` imports MambaLMHeadModel, whose generation
+    utils do `from transformers.generation import GreedySearchDecoderOnlyOutput,
+    SampleDecoderOnlyOutput`. transformers removed both in v5 (5.3.0 here), so
+    the import fails. Reaching for the submodule directly does not help:
+    importing any `mamba_ssm.x` runs the package `__init__` first.
+
+    Downgrading transformers would fix it and would also silently change the
+    library the MERT banks were built against, so instead the two names are
+    stubbed. Nothing in the selective-scan block touches generation; the
+    symbols only have to exist for the import statement to bind them. This is
+    the same tactic as madmom_compat.patch() elsewhere in this repo.
+    """
+    import transformers.generation as tg
+    for name in ('GreedySearchDecoderOnlyOutput', 'SampleDecoderOnlyOutput',
+                 'GreedySearchEncoderDecoderOutput', 'SampleEncoderDecoderOutput'):
+        if not hasattr(tg, name):
+            setattr(tg, name, type(name, (), {}))
+    from mamba_ssm.modules.mamba_simple import Mamba
+    return Mamba
+
+
 class MambaAudioEncoder(nn.Module):
     """Drop-in for ContextConditioning: 78-bin frames in, a 128-d z out.
 
@@ -65,11 +89,7 @@ class MambaAudioEncoder(nn.Module):
     def __init__(self, n_mels=78, hidden_size=64, zdim=128, n_layers=2,
                  d_state=16, d_conv=4, expand=2, max_hist=0):
         super().__init__()
-        # not `from mamba_ssm import Mamba`: the package __init__ pulls in
-        # MambaLMHeadModel, whose generation utils import
-        # GreedySearchDecoderOnlyOutput, removed from transformers 4.4x. The
-        # block itself has no such dependency.
-        from mamba_ssm.modules.mamba_simple import Mamba
+        Mamba = _import_mamba()
         self.hidden_size, self.zdim, self.max_hist = hidden_size, zdim, max_hist
         self.inp = nn.Linear(n_mels, hidden_size)
         # named seq_model because iterate_dataset clips gradients on
@@ -130,11 +150,7 @@ class MambaSeq(nn.Module):
     def __init__(self, in_dim=32, hidden_size=64, n_layers=2, d_state=16,
                  d_conv=4, expand=2):
         super().__init__()
-        # not `from mamba_ssm import Mamba`: the package __init__ pulls in
-        # MambaLMHeadModel, whose generation utils import
-        # GreedySearchDecoderOnlyOutput, removed from transformers 4.4x. The
-        # block itself has no such dependency.
-        from mamba_ssm.modules.mamba_simple import Mamba
+        Mamba = _import_mamba()
         self.hidden_size = hidden_size
         self.inp = nn.Linear(in_dim, hidden_size)
         self.blocks = nn.ModuleList(
