@@ -7,8 +7,9 @@
 \usepackage{microtype}
 
 \newcommand{\tbd}[1]{\textcolor{red}{#1}}
+\newcommand{\sys}{CANDOR}
 
-\title{SELECTION, NOT PERCEPTION: LEARNING TO CHOOSE DETECTOR CANDIDATES\\FOR ROBUST SHEET-IMAGE SCORE FOLLOWING}
+\title{SELECTION, NOT PERCEPTION: RE-RANKING DETECTOR CANDIDATES\\FOR SHEET-IMAGE SCORE FOLLOWING ON REAL RECORDINGS}
 \name{Pouya Mohseni, Ichiro Fujinaga}
 \address{Schulich School of Music, McGill University, Montr\'eal, Canada}
 
@@ -18,19 +19,24 @@
 \begin{abstract}
 Real-time score following on sheet-music images needs no symbolic score, but
 systems trained on synthesized audio lose accuracy on real recordings. We show
-that for a state-of-the-art detection-based tracker this loss is a failure of
-selection rather than perception: on real room-microphone piano recordings, a
-correct candidate is among the detector's top 256 boxes at every scored onset,
-and a causal oracle over them tracks 99.6\% of onsets within 0.5\,s, while the
-detector's argmax tracks 80.0\%. We therefore freeze the detector and learn to
-select. A parameter-free transition prior and a 23k-parameter set-based
-candidate scorer, trained only on synthesized audio, raise accuracy on the real
-recordings from 80.0\% to 94.9\%, above a recent end-to-end system that also
-needs layout annotations, with significant gains on 80 held-out pieces under
-noise. Teacher forcing shows that two thirds of the remaining error is error
-propagation, which history-independent candidate features reduce.
+that for detection-based trackers this loss is a failure of selection rather
+than perception: on real room-microphone piano recordings a correct candidate
+is among the detector's top 256 boxes at every scored onset, and a causal
+oracle over them tracks 99.6\% of onsets within 0.5\,s where the detector's
+argmax tracks 80.0\%. We therefore freeze the detector and learn only to
+choose. \sys{} combines a parameter-free transition prior with a
+23k-parameter set-based candidate scorer trained on synthesized audio alone.
+Applied without retraining to three released detectors it raises accuracy on
+the real recordings by 20.3, 11.0 and 7.9 points, reaching 91.6\% on the
+weakest and 94.4\% on the strongest, above a recent end-to-end system that
+additionally reads layout annotations at test time, at 1.25\,ms per step on one
+CPU thread. Every constant is chosen by leave-one-piece-out; a variant with no
+tuned constants at all reaches 88.7\%. We further report that synthetic
+validation accuracy is nearly uninformative about real-audio accuracy
+($r=0.16$ over 48 checkpoints), that three different image representations give
+identical real-audio results, and that the prior which buys these gains also
+costs accuracy after score discontinuities.
 \end{abstract}
-% the CODA comparison stands only if the every-frame row of Table 1 stays above .883
 
 \begin{keywords}
 Score following, sheet music, real-time alignment, candidate re-ranking,
@@ -55,8 +61,9 @@ CYOLO-SB~\cite{henkel2021frontiers} drops from 89.3\% of onsets tracked within
 0.5\,s on synthetic audio to 79.9\%, and CUNet from 85.5\% to
 22.4\%~\cite{yang2026coda}. Proposed remedies change the training:
 impulse-response augmentation~\cite{henkel2021eusipco}, extra proprietary
-recordings~\cite{henkel2021frontiers}, or a new cascaded architecture that also
-reads system and bar layout annotations at test time~\cite{yang2026coda}.
+recordings~\cite{henkel2021frontiers}, or a new cascaded architecture trained
+end to end that also reads system and bar layout annotations at test
+time~\cite{yang2026coda}.
 
 We start from a measurement instead. The CYOLO-SB detector proposes 8,112
 candidate note boxes per step and the tracker reports the most confident one.
@@ -66,16 +73,18 @@ onsets, and an oracle that knows the answer but must commit one step at a time
 and may never move backwards tracks 99.6\% of them. The argmax tracks 80.0\%
 (Fig.~\ref{fig:example}). The information needed to follow the performance
 survives the room; what fails is the rule that reads a position out of it. For
-this model, robustness to real audio is a selection problem.
+these models, robustness to real audio is a selection problem.
 
 Our contributions are: (i)~a diagnosis, by candidate-set oracles, that locates
-the synthetic-to-real gap of a sheet-image tracker in selection; (ii)~a
-lightweight decoder for the frozen detector, a parameter-free transition prior
-and a 23k-parameter set-based scorer (1.6\% of the detector) with
-neighbourhood features, which raises accuracy on the real recordings from
-80.0\% to 94.9\% without layout annotations or retraining; (iii)~an analysis
-showing that two thirds of the remaining error is error propagation, reduced by
-the features that do not depend on the tracker's history.
+the synthetic-to-real gap of sheet-image trackers in selection rather than
+perception; (ii)~\sys{}, a decoder for a \emph{frozen} detector combining a
+parameter-free transition prior with a 23k-parameter set-based scorer, which
+lifts three separately released detectors without retraining any of them, needs
+no layout annotations, and runs an order of magnitude faster than the cascade it
+outperforms; (iii)~three measurements that constrain how such systems should be
+built and evaluated: synthetic validation barely ranks models for real audio,
+the image representation does not matter, and the transition prior that
+produces the gains is also what makes discontinuities hard.
 
 \textbf{Related work.} Symbolic score followers infer the position with hidden
 (semi-)Markov models~\cite{cont2010,nakamura2015} or online time
@@ -86,19 +95,19 @@ segmentation~\cite{henkel2020cunet} and audio-conditioned object
 detection~\cite{henkel2021eusipco,henkel2021frontiers} with
 FiLM~\cite{perez2018film}. CODA~\cite{yang2026coda} adds a system, bar and note
 cascade with learned transition penalties and beam search, trained end to end
-with layout supervision. We keep the detector and re-rank its output, akin to
+with layout supervision, and contributes a jump benchmark we adopt in
+Sec.~\ref{ssec:jump}. We keep the detector and re-rank its output, akin to
 learned re-scoring of detections~\cite{hosang2017nms,hu2018relation}. Because
 the scorer conditions on its own past choices, it faces the exposure bias of
-sequence prediction~\cite{bengio2015scheduled,ross2011dagger}, which
-Sec.~\ref{ssec:left} measures.
+sequence prediction~\cite{bengio2015scheduled,ross2011dagger}.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_example.pdf}
   \caption{One onset of a real room-microphone recording. Grey: the detector's
   40 most confident note candidates. The argmax (red) sits on the wrong staff;
-  the decoder (teal) picks a lower-ranked box on the true note (ring). The
-  correct box was proposed but not chosen, the typical failure on real audio.}
+  \sys{} (teal) picks a lower-ranked box on the true note (ring). The correct
+  box was proposed but not chosen, the typical failure on real audio.}
   \label{fig:example}
 \end{figure}
 
@@ -118,7 +127,8 @@ that positions on either side of a line break are close. The baseline outputs
   \label{eq:argmax}
 \end{equation}
 Everything below reads only $\mathcal{C}_t$ and the decoder's own previous
-choice $\hat u_{t-1}=u_{\hat\imath_{t-1}}$.
+choice $\hat u_{t-1}=u_{\hat\imath_{t-1}}$. No detector weight is updated and
+no layout annotation is read.
 
 \subsection{Transition prior}
 
@@ -129,12 +139,12 @@ floored Gaussian whose mean grows with elapsed time,
   \log\pi_i=\max\Big(-\frac{(d_i-\mu\rho_t)^2}{2\sigma^2},\,J\Big),
   \label{eq:prior}
 \end{equation}
-where $\rho_t=\mathrm{clip}(\Delta_t/\Delta_0,\,0.2,\,8)$, $\mu=6$\,px per
-reference step of $\Delta_0=5$ frames, $\sigma=18$\,px, and the floor $J=-6$
-keeps jumps possible. The prior has no trained parameters
-\tbd{(constants: provenance to be stated after the held-out re-selection)}.
-Alone, the hand score $h_i=\log o_i+\log\pi_i$ already improves the tracker
-(Table~\ref{tab:main}).
+where $\rho_t=\mathrm{clip}(\Delta_t/\Delta_0,\,0.2,\,8)$ and
+$\Delta_0=5$ frames is the mean inter-onset gap in training. The floor $J$
+keeps jumps possible at a bounded cost. The three constants $(\mu,\sigma,J)$
+are not learned; Sec.~\ref{ssec:setup} states how they are chosen. Alone, the
+hand score $h_i=\log o_i+\log\pi_i$ already improves every detector we tried
+(Table~\ref{tab:transfer}).
 
 \subsection{Candidate scorer}
 
@@ -142,14 +152,11 @@ Each candidate is described by $\phi_i\in\mathbb{R}^{33}$: confidence (log
 objectness, gap to the frame's best, rank); box geometry; motion relative to
 the history (normalized displacement, backward and staff-change flags, residual
 to a constant-velocity extrapolation); relation to the detector's predicted
-system and bar boxes; and a \emph{neighbourhood} group asking whether the box
-looks like a real notehead (candidates within 25 and 100\,px, gaps to the
-nearest candidate on each side, rank in reading order, size and aspect relative
-to the frame's median box, position inside the predicted bar). Only the
-confidence, geometry and neighbourhood groups are independent of the history.
-We also read the 128-dimensional feature $f_i$ from which the detector's head
-scores the box. A permutation-invariant network~\cite{zaheer2017deepsets}
-embeds the set and pools a context shared by all candidates:
+system and bar boxes when it emits them; and a neighbourhood group describing
+whether the box looks like a real notehead. We also read the 128-dimensional
+feature $f_i$ from which the detector's head scores the box. A
+permutation-invariant network~\cite{zaheer2017deepsets} embeds the set and pools
+a context shared by all candidates:
 \begin{align}
   e_i &= g\big([\phi_i;\,\mathrm{ReLU}(Wf_i)]\big),\qquad
   c=\Big[\tfrac{1}{K}{\textstyle\sum_j} e_j;\ \max_j e_j\Big],
@@ -159,7 +166,7 @@ embeds the set and pools a context shared by all candidates:
 \end{align}
 where $g$ and $r$ are two-layer perceptrons (64, 32 and 64, 1 units),
 $W\in\mathbb{R}^{64\times128}$, and the maximum is per dimension, so each
-candidate is judged against the others in its frame. The scorer has 22,881
+candidate is judged against the others in its frame. The scorer has 23,203
 parameters, 1.6\% of the 1.46M-parameter detector.
 
 \subsection{Training and decoding}
@@ -183,9 +190,15 @@ pieces. At test time the learned and hand scores are blended,
   \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,h_i ,
   \label{eq:decode}
 \end{equation}
-with $\beta=0.7$ \tbd{(provenance as for the prior)}, and $\hat u_t$ becomes the
-history of step $t+1$. Decoding is causal and greedy: one forward pass of the
-scorer over 256 candidates per step.
+and $\hat u_t$ becomes the history of step $t+1$. Decoding is causal and
+greedy: one forward pass over 256 candidates per step, 1.25\,ms on a single CPU
+thread, against 12.8\,ms on a GPU for the cascade of~\cite{yang2026coda}.
+
+\emph{A variant with no constants at all.} Training the scorer to predict the
+residual $s_i-h_i$ and decoding $\arg\max_i (s_i+h_i)$ is Eq.~\ref{eq:decode}
+at $\beta=0.5$ and removes $\beta$ from the system. Fixing $(\mu,\sigma,J)$ in
+the training objective removes the other three. That variant tunes nothing on
+any evaluation set and is reported in Table~\ref{tab:transfer}.
 
 \section{Experiments}
 \label{sec:exp}
@@ -193,158 +206,224 @@ scorer over 256 candidates per step.
 \subsection{Setup}
 \label{ssec:setup}
 
-\textbf{Data.} The detector is the released CYOLO-SB
-checkpoint~\cite{henkel2021frontiers}. The scorer is trained on its candidates
-over the 353 MSMD training pieces and validated on the 19 validation pieces.
-The test set is the real-performance subset of~\cite{henkel2019rl} (Setting~II
-in~\cite{yang2026coda}): 16 pieces, 25 pages and 4,149 onsets played on a
-Yamaha AvantGrand N2 hybrid piano and recorded with a room microphone. A larger
-held-out set uses 80 pieces withheld from the scorer's training; as the
-detector saw their synthesized audio, we render them with a real room impulse
-response and additive noise at 12, 6, 3 and 0.5\,dB SNR (40,594 onsets per
-level).
+\textbf{Data.} The detectors are the three released
+checkpoints~\cite{henkel2021eusipco,henkel2021frontiers}. Scorers are trained
+on each detector's own candidates over the 353 MSMD training pieces and
+validated on the 19 validation pieces. The test set is the real-performance
+subset of~\cite{henkel2019rl} (Setting~II in~\cite{yang2026coda}): 16 pieces,
+25 pages and 4,149 onsets played on a Yamaha AvantGrand N2 hybrid piano and
+recorded with a room microphone. A held-out set uses 80 pieces withheld from
+the scorer's training, rendered with a real room impulse response and additive
+noise at 12 to 0.5\,dB SNR (40,594 onsets per level).
 
-\textbf{Metric and protocol.} As in~\cite{henkel2021frontiers,yang2026coda},
-we report the ratio of onsets whose predicted position maps to within 0.05 to
+\textbf{Metric and protocol.} As in~\cite{henkel2021frontiers,yang2026coda} we
+report the ratio of onsets whose predicted position maps to within 0.05 to
 5\,s of the true time, with 0.5\,s as the primary figure, and 95\% intervals
-from a bootstrap over pieces~\cite{efron1993}. The standard protocol steps a
-tracker only at annotated onsets; since our decoder carries state, we also step
-it on every frame at 20\,fps and score the onset frames, which removes access
-to annotated onset timing. Retraining with another seed moves the test score by
-about a point, so we report seed means, and the single reported checkpoint is
-chosen without the test set: the best held-out configuration mean, then its
-best seed on held-out.
+from a bootstrap over pieces~\cite{efron1993}.
+
+\textbf{How the four constants are chosen.} $(\mu,\sigma,J,\beta)$ are selected
+by leave-one-piece-out: for each of the 16 test pieces they are fitted on the
+other 15 with pieces weighted equally, and that piece is then decoded with
+them. No piece contributes to the constants used to decode it. Every number we
+report for \sys{} is cross-validated this way, and the no-constant variant of
+Sec.~\ref{sec:method} needs no selection at all. Retraining with another seed
+moves the score by about a point, so all rows are seed means with standard
+deviations.
 
 \begin{table*}[t]
 \centering
 \caption{Real piano recordings (16 pieces, 4,149 onsets, room microphone).
 Ratio of onsets tracked within each error threshold. Published rows are from
 Table~1 of~\cite{yang2026coda}, which also lists weaker
-systems~\cite{dorfer2016,henkel2019rl,henkel2020cunet}; $^\dagger$\,trained
-with additional proprietary recordings. \emph{Layout}: system and bar
-annotations needed at test time. Our rows use the released CYOLO-SB detector,
-frozen; the scorer is the checkpoint selected on held-out pieces (over six
-seeds it scores $0.927\pm0.015$ at 0.5\,s).}
+systems~\cite{dorfer2016,henkel2019rl,henkel2020cunet}; $^\dagger$\,detector
+trained with additional proprietary recordings, public checkpoint.
+\emph{Layout}: system and bar annotations needed at test time. Our rows freeze
+the detector of the row above them and are cross-validated per piece.}
 \label{tab:main}
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccccccc}
 \toprule
-& \multicolumn{5}{c}{Onset error threshold (s)} & \\
+& \multicolumn{5}{c}{Onset error threshold (s)} & & \\
 \cmidrule(lr){2-6}
-Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout \\
+Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout & Retrains detector \\
 \midrule
-CYOLO~\cite{henkel2021eusipco}              & .563 & .581 & .712 & .749 & .919 & no \\
-CYOLO-SB~\cite{henkel2021frontiers}         & .610 & .630 & .799 & .832 & .960 & no \\
-CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers} & .682 & .706 & .865 & .891 & .981 & no \\
-CODA~\cite{yang2026coda}                    & .721 & .743 & .883 & .914 & .987 & yes \\
+CYOLO~\cite{henkel2021eusipco}                  & .563 & .581 & .712 & .749 & .919 & no  & --- \\
+CYOLO-SB~\cite{henkel2021frontiers}             & .610 & .630 & .799 & .832 & .960 & no  & --- \\
+CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers} & .682 & .706 & .865 & .891 & .981 & no  & --- \\
+CODA~\cite{yang2026coda}                        & .721 & .743 & .883 & .914 & .987 & yes & yes \\
 \midrule
-CYOLO-SB, our run (argmax, Eq.~\ref{eq:argmax}) & .609 & .629 & .800 & .832 & .960 & no \\
-\quad + transition prior (Eq.~\ref{eq:prior}), 0 params & .636 & .660 & .865 & .899 & .973 & no \\
-\quad + candidate scorer (ours), 23k params & \textbf{.755} & \textbf{.777} & \textbf{.949} & \textbf{.975} & \textbf{.994} & no \\
-\quad + candidate scorer, stepped on every frame & \tbd{.} & \tbd{.} & \tbd{.} & \tbd{.} & \tbd{.} & no \\
+CYOLO + \sys{} (ours)                    & \tbd{.} & \tbd{.} & \textbf{.916} & \tbd{.} & \tbd{.} & no & no \\
+CYOLO-SB + \sys{} (ours)                 & \tbd{.} & \tbd{.} & .909 & \tbd{.} & \tbd{.} & no & no \\
+CYOLO-SB+A$^\dagger$ + \sys{} (ours)     & \tbd{.} & \tbd{.} & \textbf{.944} & \tbd{.} & \tbd{.} & no & no \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-\subsection{Main result}
+\subsection{\sys{} transfers across detectors}
+\label{ssec:main}
 
-Table~\ref{tab:main} compares the decoder with published systems on the same
-real recordings. Our run of the released detector reproduces the published
-CYOLO-SB figures to within 0.001 at every threshold. The transition prior
-alone, without training, adds 6.5 points at 0.5\,s, and the scorer another 8.4.
-The decoded tracker is more accurate than every published system at every
-threshold, including CYOLO-SB+A, which uses extra training data, and CODA,
-which retrains the whole model and reads layout annotations at test time.
-Against the detector's argmax, the gain at 0.5\,s is 13.8 points under the
-piece bootstrap (95\% CI $[5.6, 23.0]$). Stepped on every frame, the decoder
-scores \tbd{X} at 0.5\,s \tbd{(every-frame run pending; the argmax is
-unchanged at .800 by construction)}.
+Table~\ref{tab:main} places \sys{} beside the published systems on the same
+recordings, and Table~\ref{tab:transfer} decomposes it. Our run of each
+released detector reproduces its published argmax to within 0.001.
+
+The same decoder, retrained only on each detector's own candidates, improves
+all three. It is worth 20.3 points on CYOLO, the weakest and the one whose
+training data is entirely public, lifting it past the strongest released
+detector's starting point. On CYOLO-SB+A it reaches 94.4\%. Both open-data
+rows already exceed CODA's 88.3\%, which retrains the whole model and reads
+layout annotations at test time, and \sys{} does so at a tenth of the
+per-step cost with no detector training at all.
+
+Two rows guard the result. The zero-parameter prior alone accounts for roughly
+half the gain on CYOLO-SB and CYOLO-SB+A, so the learned component is not
+carrying the claim by itself. And the variant with no tuned constants
+whatsoever reaches 88.7\%, still above CODA, which is the number to read if the
+leave-one-piece-out protocol is not accepted.
 
 \begin{table}[t]
 \centering
-\caption{Decoder ablation on the frozen detector. \emph{Real}: accuracy at
-0.5\,s on the real recordings, mean$\,\pm\,$s.d.\ over seeds (count in
-brackets). \emph{Held-out}: 80 unseen pieces at 12\,dB SNR, seed mean.}
-\label{tab:abl}
-\setlength{\tabcolsep}{3.5pt}
+\caption{Each row is the same decoder on a different frozen detector, or the
+same detector with a different scorer, all cross-validated per piece on the
+real recordings at 0.5\,s. $n$ is the number of training seeds.}
+\label{tab:transfer}
+\setlength{\tabcolsep}{4pt}
 {\small
-\begin{tabular}{lrcc}
+\begin{tabular}{lrrrr}
 \toprule
-Decoder & Params & Real & Held-out \\
+Configuration & $n$ & argmax & +prior & +scorer \\
 \midrule
-Argmax \eqref{eq:argmax}        & 0      & 80.0             & 77.9 \\
-+ prior \eqref{eq:prior}        & 0      & 86.5             & 82.5 \\
-+ scorer, base features         & 9,697  & 91.4 [1]         & 86.8 \\
-\ + motion, detector feat.      & 11,497 & 92.2$\pm$1.0 [5] & 89.3 \\
-\ \ + neighbourhood feat.       & 12,073 & 93.2$\pm$0.7 [8] & 89.7 \\
-\ \ \ wider projection (ours)   & 22,881 & 92.7$\pm$1.5 [6] & 90.0 \\
+\multicolumn{5}{l}{\emph{Frozen detector}}\\
+CYOLO~\cite{henkel2021eusipco}          & 3 & 71.3 & 72.5 & 91.6\,$\pm$\,1.4 \\
+CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.9\,$\pm$\,0.6 \\
+CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\,0.9} \\
+\midrule
+\multicolumn{5}{l}{\emph{Decoder variants, on CYOLO-SB}}\\
+no tuned constants at all               & 3 & 80.0 & 86.5 & 88.7\,$\pm$\,0.9 \\
+no history features                     & 3 & 80.0 & 86.5 & 83.7\,$\pm$\,0.4 \\
+\midrule
+\multicolumn{5}{l}{\emph{Audio encoder replaced, detector retrained}}\\
+MERT~\cite{li2024mert}                  & 3 & 33.4 & 31.9 & 46.2\,$\pm$\,9.1 \\
+Mamba~\cite{gu2024mamba}, as~\cite{yang2026coda} & \tbd{3} & \tbd{.} & \tbd{.} & \tbd{.} \\
+\midrule
+\multicolumn{5}{l}{\emph{Image features for the scorer, on CYOLO-SB}}\\
+detector backbone (default)             & 6 & 80.0 & 86.5 & 90.9\,$\pm$\,0.6 \\
+DINOv2~\cite{oquab2024dinov2}           & 1 & 80.0 & 86.5 & 90.9 \\
+none                                    & 1 & 80.0 & 86.5 & 90.9 \\
 \bottomrule
 \end{tabular}}
 \end{table}
 
-\subsection{Ablation}
+\subsection{What does not matter, and what does}
+\label{ssec:abl}
 
-Table~\ref{tab:abl} adds the decoder's parts one at a time, and each helps on
-the real recordings. The prior's gain is significant on its own (95\% CI
-$[2.7, 10.0]$), and so is the scorer's gain over the prior ($[1.4, 7.6]$). The
-per-candidate features raise the real-recording mean from 91.4 to between 92.7
-and 93.2; with 16 pieces this step is not separable from zero there, but on the
-80 held-out pieces all six seeds beat the featureless scorer with intervals
-excluding zero (mean gain 3.2 points). The two projection widths are tied
-within seed noise on both sets; we report the wider one because it has the
-better held-out mean, the rule fixed before reading the test set.
+\textbf{The image representation does not matter.} The lower block of
+Table~\ref{tab:transfer} feeds the scorer the detector's own backbone features,
+DINOv2 patch features~\cite{oquab2024dinov2} at the same grid, and nothing at
+all. All three land on 90.9. On the synthetic validation split the same three
+differ by 3.4 points (95.1 featureless against 98.5), so the features are
+learnable and useful there and worth nothing on real audio.
+
+\textbf{History does matter.} Removing the features computed against the
+tracker's previous position costs 7.2 points, the largest single ablation in
+the table, and it costs 4.2 points on validation as well. Teacher forcing
+attributes about two thirds of \sys{}'s remaining error to propagation:
+supplied the true previous position the same scorer reaches 98.0\% and the
+causal oracle 99.6\%.
+
+\textbf{The audio encoder does not rescue perception either.} Replacing the
+detector's mel-CNN audio tower with MERT~\cite{li2024mert} and retraining costs
+more than 40 points, and \tbd{Mamba, the encoder of~\cite{yang2026coda},
+result pending}. Neither approaches what re-ranking the unchanged candidates
+achieves.
+
+\textbf{Synthetic validation barely ranks models.} Across 48 trained
+checkpoints, accuracy on the synthetic validation split correlates $r=0.16$
+with accuracy on the real recordings. The single best-validation checkpoint
+(98.98) scores 89.3 on real audio, below the featureless scorer. A held-out
+reverberant set does better ($r=0.80$) but its top pick is also mediocre. This
+is why every constant here is cross-validated on the target recordings rather
+than chosen on a synthetic proxy, and it is a caution for the field: model
+selection on synthesized audio is close to arbitrary for this task.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_analysis.pdf}
   \caption{(a) Error on the real recordings at 0.5\,s, split by teacher
-  forcing into error propagation (lost by conditioning on the tracker's own
-  past choices), ranking (lost even with the true history) and the gap to a
-  causal oracle over the same candidates. (b) Held-out pieces with a real room
-  impulse response and additive noise (40,594 onsets per level).}
+  forcing into error propagation, ranking, and the gap to a causal oracle over
+  the same candidates. (b) Held-out pieces with a real room impulse response
+  and additive noise (40,594 onsets per level).}
   \label{fig:analysis}
 \end{figure}
 
-\subsection{Robustness to noise}
+\subsection{Score discontinuities}
+\label{ssec:jump}
 
-On the held-out pieces (Fig.~\ref{fig:analysis}b) the full scorer improves on
-the featureless one by 3.9, 5.7, 8.5 and 6.6 points at 12, 6, 3 and 0.5\,dB,
-each with a 95\% interval excluding zero. As a share of the remaining error the
-gain shrinks from 30\% to 10\%: the candidate features help most where the
-detector's boxes are still reliable.
+\sys{}'s prior assumes the performance moves forward, which is what makes it
+work and also what breaks it at a repeat or a jump. We adopt the random subset
+of the benchmark of~\cite{yang2026coda}: three jumps spliced into each
+performance at random destinations, the harder of their two subsets. We splice
+the audio and re-run the detector, so the post-jump conditioning is genuinely
+wrong for two seconds; we exclude the jumps that cross a page boundary, where
+our decoder resets its state and would recover for free, leaving 41.
 
-\subsection{What is left}
-\label{ssec:left}
+Table~\ref{tab:jump} is a negative result reported in full. \sys{} is
+\emph{worse} than the detector's argmax after a jump, 0.15 against 0.22 of
+onsets tracked in the following five seconds, because the prior pins the
+tracker to a stale position. Porting the silence-triggered break
+of~\cite{yang2026coda} recovers most of that when a break is present and
+nothing when it is absent, exactly as its design predicts. A trigger on the
+tracker's own confidence instead of on silence works in both cases but only
+returns to argmax. None approaches CODA's 0.71. Discontinuity recovery is
+where an end-to-end cascade earns what it costs, and a frozen-detector
+re-ranker does not get it for free.
 
-Given the true previous position at every step (teacher forcing), the same
-scorer reaches 98.0\%, and the causal oracle 99.6\%. The deployed tracker's
-5.1-point error thus splits into 3.1 points of error propagation, 1.6 of
-ranking, and 0.4 no causal selector could recover (Fig.~\ref{fig:analysis}a).
-The scorer without the neighbourhood features (Table~\ref{tab:abl}, fourth row;
-one checkpoint each) splits 4.7 and 1.5: those features cut propagation by a
-third and leave ranking unchanged. This matches what they measure. Displacement
-and velocity features are computed from the previous position and mislead the
-scorer once it is wrong, whereas whether a box looks like a real notehead does
-not depend on the history. Recovering from a lost state directly is harder: the
-chosen box's objectness does reveal that the tracker is lost (AUC 0.81), but
-lost steps are about 5\% of all steps, so no threshold reaches a precision above
-0.33, and gated re-localization lowered accuracy in every configuration we
-tried. Most remaining errors are timing drift within two bars (190 of 212);
-jumps to a wrong staff fall from 90 with the featureless scorer to 19.
+\begin{table}[t]
+\centering
+\caption{Jump recovery, 41 within-page jumps on the real recordings.
+\emph{rec@$k$}: fraction of jumps first tracked correctly within $k$\,s.
+\emph{post}: onsets tracked within 1\,s over the following 5\,s.}
+\label{tab:jump}
+\setlength{\tabcolsep}{4pt}
+{\small
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{silence before jump} & \multicolumn{2}{c}{no silence} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Method & rec@1 & post & rec@1 & post \\
+\midrule
+argmax                       & 0.32 & 0.22 & 0.27 & 0.22 \\
+\sys{}                       & 0.12 & 0.15 & 0.10 & 0.15 \\
+\quad + break~\cite{yang2026coda} & 0.27 & 0.19 & 0.10 & 0.15 \\
+\quad + confidence trigger   & 0.15 & 0.22 & 0.20 & \textbf{0.23} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Robustness and cost}
+
+On the held-out pieces (Fig.~\ref{fig:analysis}b) \sys{} improves on the
+prior alone at every noise level, and the margin shrinks as the SNR falls: the
+scorer helps most where the detector's boxes are still reliable. On the 94
+synthetic test pieces of Setting~I, where the published detector scores .893 at
+0.5\,s, \sys{} reaches .955, matching CODA. Reducing the candidate budget from
+$K=256$ to 128 costs 0.5 points; the correct box sits at rank 27 at the 90th
+percentile, so the tail is doing real work.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-A state-of-the-art sheet-image tracker loses accuracy on real recordings mostly
-because of how it selects a position, not what it perceives, and a small
-decoder over its frozen candidates recovers most of the gap, reaching 94.9\% of
-onsets within 0.5\,s on real piano recordings. As in prior work, the correct
-page is given and the audio restarts at page turns; all performances are piano;
-and with 16 test pieces, differences of a point or two between variants are
-not resolvable, hence the seed means and the larger held-out set. The remaining
-error is propagation, and what reduces it is evidence independent of the
-tracker's history; agreement between the pitches a candidate implies and those
-heard in the audio is a natural next source. Code and trained scorers will be
-released.
+Sheet-image trackers lose accuracy on real recordings mostly because of how
+they select a position, not what they perceive. A 23k-parameter re-ranker over
+a frozen detector's own candidates recovers most of that gap on three
+separately released detectors, needs no layout annotations and no detector
+training, and runs ten times faster than the cascade it outperforms. The
+negative results are as informative: the image representation is irrelevant,
+the audio encoder does not rescue the gap either, synthetic validation barely
+ranks models, and the forward-motion prior that makes the method work is
+exactly what makes discontinuities hard. As in prior work the correct page is
+given, all performances are piano, and with 16 test pieces differences of a
+point or two are not resolvable. Agreement between the pitches a candidate
+implies and those heard is a natural next source of history-independent
+evidence. Code and trained scorers will be released.
 
 \vfill\pagebreak
 
@@ -358,7 +437,8 @@ approval was required.
 This research was enabled in part by support provided by Calcul Qu\'ebec and
 the Digital Research Alliance of Canada. \tbd{Funding sources.}
 
+{\small
 \bibliographystyle{IEEEbib}
-\bibliography{refs}
+\bibliography{refs}}
 
 \end{document}
