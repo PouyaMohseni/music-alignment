@@ -87,11 +87,18 @@ def main():
     img = padded[page]
     xs = [xb, xo, xg]
     ys = [yb, yo, yg]
-    x0, x1 = max(min(xs) - 150, 0), min(max(xs) + 150, img.shape[1])
-    y0, y1 = max(min(ys) - 55, 0), min(max(ys) + 55, img.shape[0])
+    # MSMD rasterises a page at 1181x835 and no higher-resolution source
+    # ships with it, so the only way to put enough pixels behind a 3.35 in
+    # figure is to crop wide: 300 px blown up to column width is 90 dpi and
+    # the noteheads turn to mush. ~700 px lands near 210 dpi.
+    cx = 0.5 * (min(xs) + max(xs))
+    x0, x1 = max(cx - 350, 0), min(cx + 350, img.shape[1])
+    if x1 - x0 < 700:
+        x0, x1 = max(x1 - 700, 0), min(x0 + 700, img.shape[1])
+    y0, y1 = max(min(ys) - 62, 0), min(max(ys) + 62, img.shape[0])
 
     fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)))
-    ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='lanczos')
+    ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='antialiased')
     # outlined boxes at this scale vanished into the staff lines; a translucent
     # fill is what makes "the answer was in the set" visible at column width
     for r in range(min(TOPN, len(x)))[::-1]:
@@ -103,7 +110,7 @@ def main():
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
                            lw=1.5, ec='#138D90', label=f'CANDOR, {eo:.2f}\u2009s off'))
     ax.add_patch(Circle((xg, yg), 14, fill=False, lw=1.2, ec='k', label='true position'))
-    ax.plot([], [], marker='s', ls='none', ms=4, color='#f2b705', alpha=0.7, label=f'{TOPN} of the hypotheses')
+    ax.plot([], [], marker='s', ls='none', ms=4, color='#f2b705', alpha=0.7, label=f'{TOPN} note candidates')
     ax.set_xlim(x0, x1)
     ax.set_ylim(y1, y0)
     ax.set_xticks([])
@@ -114,7 +121,7 @@ def main():
               frameon=False, handlelength=1.1, columnspacing=0.9,
               handletextpad=0.4, labelspacing=0.25, borderpad=0.0)
     fig.savefig(OUT + '.pdf', bbox_inches='tight', pad_inches=0.01)
-    fig.savefig(OUT + '.png', dpi=220, bbox_inches='tight', pad_inches=0.01)
+    fig.savefig(OUT + '.png', dpi=400, bbox_inches='tight', pad_inches=0.01)
     print('wrote', OUT + '.pdf')
 
 
