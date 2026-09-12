@@ -184,24 +184,44 @@ def rollout(model, page, rms, mode='none', blend=0.7, fwd=10.0, sigma=18.0,
     return pred
 
 
-def jump_metrics(pred, gt, onset, jumps, th=0.5, horizon=5.0):
-    """CODA's three, per jump: recovery at 1 s and 2 s, latency, post-jump."""
+def jump_metrics(pred, frames, gt, onset, jumps, th=0.5, horizon=5.0):
+    """CODA's three, per jump, for ONE page of a piece.
+
+    The sidecar is written per piece and the dump per page, so a page holds a
+    subsequence of the piece's spliced timeline: `frames` says which new-frame
+    index each scored row is. A jump belongs to this page when the page was
+    being tracked immediately before the gap and is still being tracked after
+    it. The 3 of 48 jumps that cross a page boundary are excluded rather than
+    counted, because our decoder resets its state at a page change and would
+    "recover" from those for free -- it never had a stale position to overcome.
+    """
     ok = np.abs(pred - gt) / FPS <= th
-    rec1, rec2, lat, post = [], [], [], []
     H = int(round(horizon * FPS))
-    for at, _src, _dst, _gap in jumps:
-        at = int(at)
-        seg = slice(at, min(at + H, len(ok)))
+    rows = []
+    for at, _src, _dst, gap in jumps:
+        at, gap = int(at), int(gap)
+        # the last frame before the silence, i.e. where the tracker was pinned
+        if not np.isin(at - gap - 1, frames):
+            continue
+        i0 = int(np.searchsorted(frames, at))
+        i1 = int(np.searchsorted(frames, at + H))
+        if i1 <= i0:
+            continue
+        seg = slice(i0, i1)
         w = np.flatnonzero(ok[seg])
-        first = w[0] / FPS if w.size else np.nan
-        rec1.append(bool(w.size and first <= 1.0))
-        rec2.append(bool(w.size and first <= 2.0))
-        lat.append(horizon if np.isnan(first) else first)
+        first = (frames[i0 + w[0]] - at) / FPS if w.size else np.nan
         m = onset[seg]
-        post.append(float(np.mean(np.abs(pred[seg][m] - gt[seg][m]) / FPS <= 1.0))
-                    if m.any() else np.nan)
-    return (np.array(rec1, float), np.array(rec2, float),
-            np.array(lat, float), np.array(post, float))
+        rows.append((
+            bool(w.size and first <= 1.0),
+            bool(w.size and first <= 2.0),
+            horizon if np.isnan(first) else float(first),
+            float(np.mean(np.abs(pred[seg][m] - gt[seg][m]) / FPS <= 1.0))
+            if m.any() else np.nan,
+        ))
+    if not rows:
+        return tuple(np.zeros(0) for _ in range(4))
+    a = np.array(rows, float)
+    return a[:, 0], a[:, 1], a[:, 2], a[:, 3]
 
 
 def main():
@@ -226,12 +246,30 @@ def main():
     pages = load_with_feat(a.dump)
     side = np.load(a.side, allow_pickle=False)
     have = {k.split('||')[0] for k in side.files}
-    pages = [p for p in pages if p['name'] in have]
-    njump = sum(len(side[p['name'] + '||jumps']) for p in pages)
-    print(f'{len(pages)} pages, {njump} jumps, dump {os.path.basename(a.dump)}\n',
+
+    def piece_of_page(nm):
+        return nm.rsplit('_page_', 1)[0]
+
+    pages = [p for p in pages if piece_of_page(p['name']) in have]
+    # per page: the sidecar slices this page's own scored frames out of the
+    # piece's spliced timeline
+    ctx = {}
+    for p in pages:
+        pc = piece_of_page(p['name'])
+        fr = np.asarray(p['frame'], np.int64)
+        ctx[p['name']] = (fr,
+                          side[pc + '||rms'][fr],
+                          side[pc + '||is_onset'][fr],
+                          side[pc + '||jumps'])
+    counted = sum(len(jump_metrics(np.zeros(len(c[0])), c[0], np.zeros(len(c[0])),
+                                   c[2], c[3])[0]) for c in ctx.values())
+    total = sum(len(side[q + '||jumps']) for q in have)
+    print(f'{len(pages)} pages / {len(have)} pieces, {counted} within-page jumps '
+          f'scored of {total} spliced, dump {os.path.basename(a.dump)}\n',
           flush=True)
 
     def report(label, per_page):
+        per_page = [x for x in per_page if len(x[0])]
         r1 = np.concatenate([x[0] for x in per_page])
         r2 = np.concatenate([x[1] for x in per_page])
         lt = np.concatenate([x[2] for x in per_page])
@@ -249,9 +287,9 @@ def main():
             for i, c in enumerate(p['cand']):
                 if c.shape[0]:
                     pred[i] = float(c[int(np.argmax(c[:, 4])), 5])
-            per.append(jump_metrics(pred, np.asarray(p['t_gt'], float),
-                                    side[p['name'] + '||is_onset'],
-                                    side[p['name'] + '||jumps'], a.th))
+            fr, _rms, ons, jmp = ctx[p['name']]
+            per.append(jump_metrics(pred, fr, np.asarray(p['t_gt'], float),
+                                    ons, jmp, a.th))
         report('argmax (detector only)', per)
 
     for ck in a.ckpt:
@@ -259,13 +297,12 @@ def main():
         for mode in a.modes:
             per = []
             for p in pages:
-                pred = rollout(model, p, side[p['name'] + '||rms'], mode=mode,
-                               blend=a.blend, fwd=a.fwd, sigma=a.sigma,
-                               jump=a.jump, win=a.win, delta=a.delta,
-                               grace=a.grace)
-                per.append(jump_metrics(pred, np.asarray(p['t_gt'], float),
-                                        side[p['name'] + '||is_onset'],
-                                        side[p['name'] + '||jumps'], a.th))
+                fr, rms, ons, jmp = ctx[p['name']]
+                pred = rollout(model, p, rms, mode=mode, blend=a.blend,
+                               fwd=a.fwd, sigma=a.sigma, jump=a.jump,
+                               win=a.win, delta=a.delta, grace=a.grace)
+                per.append(jump_metrics(pred, fr, np.asarray(p['t_gt'], float),
+                                        ons, jmp, a.th))
             report(f'{os.path.basename(ck)[:-3]} + {mode}', per)
 
 
