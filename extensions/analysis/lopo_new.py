@@ -39,6 +39,12 @@ JOBS = [
     ('history-free',           f'{M}/extra/nohist_s*.pt', f'{O}/candf256/room.npz', None),
     ('detector: CYOLO',        f'{M}/extra/cyolo_s[0-9].pt', f'{O}/cand_cyolo/room.npz', None),
     ('detector: CYOLO-SB+A',   f'{M}/extra/cyolo_sb_a_s*.pt', f'{O}/cand_cyolo_sb_a/room.npz', None),
+    # the same recipe minus --use_feat, on each detector's own candidates: the
+    # 128 backbone numbers are worth +3.4 on synthetic validation and nothing
+    # on room for cyolo_sb, and 94.38 was trained WITH them, so their
+    # contribution on the strongest detector was unmeasured until these ran
+    ('CYOLO, no image feats',  f'{M}/extra/cyolo_nofeat_s*.pt', f'{O}/cand_cyolo/room.npz', None),
+    ('CYOLO-SB+A, no image feats', f'{M}/extra/cyolo_sb_a_nofeat_s*.pt', f'{O}/cand_cyolo_sb_a/room.npz', None),
     ('image: DINOv2',          f'{M}/abl/dino_s*.pt', f'{O}/candf_dino/room.npz', None),
     ('audio: MERT',            f'{M}/abl/h1_s*.pt', f'{O}/candh1/room.npz', None),
     ('audio+image swap',       f'{M}/abl/h1dino_s*.pt', f'{O}/candh1_dino/room.npz', None),
