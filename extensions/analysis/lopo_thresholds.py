@@ -100,13 +100,22 @@ def main():
         print(f'{label:34s} ' + '  '.join(f'{np.mean(err <= t):.3f}' for t in TH),
               flush=True)
 
+    def hit_row(label, hits):
+        """rollout_argmax and rollout_hand return a hit/miss at 0.5 s only, so
+        the other four columns of these two rows would be that same number
+        wearing a different hat. Print it once and dash the rest rather than
+        four copies a reader would take for a threshold sweep."""
+        v = f'{hits.mean():.3f}'
+        print(f'{label:34s} ' + '  '.join(v if t == 0.5 else '  ---' for t in TH),
+              flush=True)
+
     print(f'{a.label or a.dump}   {len(arg)} onsets / {len(names)} pieces')
     print(f'{"":34s} ' + '  '.join(f'{t:>5}' for t in TH))
-    row('argmax', np.where(arg, 0.0, 9.9))
+    hit_row('argmax', arg)
     lo = np.zeros(len(pieces), bool)
     for p in names:
         lo[pieces == p] = hand[fold_prior[p]][pieces == p]
-    row('+ prior (cross-validated)', np.where(lo, 0.0, 9.9))
+    hit_row('+ prior (cross-validated)', lo)
 
     per_seed = []
     for ck in sorted(glob.glob(a.ckpt)):

@@ -266,9 +266,9 @@ in~\cite{yang2026coda}.}
 & Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout & Trains \\
 \midrule
 \multirow{3}{*}{\rotatebox{90}{\footnotesize ours}}
-& \sys{} over CYOLO candidates              & \tbd{.} & \tbd{.} & .916 & \tbd{.} & \tbd{.} & no & 23k selector \\
-& \sys{} over CYOLO-SB candidates           & \tbd{.} & \tbd{.} & .909 & \tbd{.} & \tbd{.} & no & 23k selector \\
-& \sys{} over CYOLO-SB+A$^\dagger$ candidates & \tbd{.} & \tbd{.} & \textbf{.944} & \tbd{.} & \tbd{.} & no & 23k selector \\
+& \sys{} over CYOLO candidates              & .726 & .747 & .916 & .950 & .991 & no & 23k selector \\
+& \sys{} over CYOLO-SB candidates           & .690 & .714 & .906 & .942 & .982 & no & 23k selector \\
+& \sys{} over CYOLO-SB+A$^\dagger$ candidates & \textbf{.760} & \textbf{.785} & \textbf{.944} & \textbf{.969} & \textbf{.996} & no & 23k selector \\
 \midrule
 \multirow{7}{*}{\rotatebox{90}{\footnotesize prior work}}
 & MM-Loc~\cite{dorfer2016}, dense                 & .364 & .406 & .585 & .611 & .735 & no  & 1.2M end to end \\
@@ -296,6 +296,12 @@ is entirely public, lifting it past where the strongest generator begins, and
 reaches 94.4\% on the strongest. A selector does not need the proposals to be
 good; it needs them to contain the answer, which the oracle says they do.
 
+The tightest thresholds qualify this. \sys{} over CYOLO-SB candidates reaches
+.690 and .714 at 0.05 and 0.1\,s, below CODA's .721 and .743, because a
+selector can only be as precise as the boxes it is given and that generator's
+are coarser; over CYOLO and CYOLO-SB+A candidates it is ahead at every
+threshold. Selection recovers which notehead, not where within it.
+
 Two rows keep the claim honest. The parameter-free prior alone accounts for
 roughly half the gain, so the learned component is not carrying the result by
 itself, and the residual variant, which fits no scalar to any evaluation data,
@@ -317,7 +323,7 @@ at 0.5\,s. \emph{argmax} is Eq.~\ref{eq:argmax} over the same candidates,
 \midrule
 \multicolumn{5}{l}{\emph{Candidate generator}}\\
 CYOLO~\cite{henkel2021eusipco}          & 3 & 71.3 & 72.5 & 91.6\,$\pm$\,1.4 \\
-CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.9\,$\pm$\,0.6 \\
+CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
 CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\,0.9} \\
 \midrule
 \multicolumn{5}{l}{\emph{Selector, on CYOLO-SB candidates}}\\
@@ -325,7 +331,7 @@ residual, no fitted scalars             & 3 & 80.0 & 86.5 & 88.7\,$\pm$\,0.9 \\
 without temporal history                & 3 & 80.0 & 86.5 & 83.7\,$\pm$\,0.4 \\
 \midrule
 \multicolumn{5}{l}{\emph{Image features $f_i$ the selector reads}}\\
-FiLM-conditioned backbone (default)     & 6 & 80.0 & 86.5 & 90.9\,$\pm$\,0.6 \\
+FiLM-conditioned backbone (default)     & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
 DINOv2~\cite{oquab2024dinov2}           & 1 & 80.0 & 86.5 & 90.9 \\
 none                                    & 1 & 80.0 & 86.5 & 90.9 \\
 \midrule
@@ -363,9 +369,10 @@ confidence only \eqref{eq:argmax} & 0.32 & 0.22 & 0.27 & 0.22 \\
 
 \textbf{Not the image features.} Feeding the selector the FiLM-conditioned
 backbone feature, DINOv2 patch features~\cite{oquab2024dinov2} at the same
-grid, or no image feature at all gives 90.9 in all three cases. On synthesized
-validation audio the same three differ by 3.4 points, so the features are
-learnable and useful there and worth nothing where it counts. Replacing the
+grid, or no image feature at all gives 90.6, 90.9 and 90.9, a spread well
+inside the 0.9-point seed deviation. On synthesized validation audio the same
+three differ by 3.4 points, so the features are learnable and useful there and
+worth nothing where it counts. Replacing the
 generator's audio encoder is no better: a MERT tower~\cite{li2024mert} costs
 more than 40 points, and \tbd{Mamba pending}. Perception is not the binding
 constraint, which is what the oracle predicted.
