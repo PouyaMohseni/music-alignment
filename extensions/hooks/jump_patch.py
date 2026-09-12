@@ -105,8 +105,15 @@ def load_sequences_jump(params):
     out = _PREV(params)
     (piece_idx, scores, signal, piece_name, seqs,
      interpol_c2o, staff_coords, add_per_staff) = out
-    if isinstance(signal, str) or not seqs:
-        raise RuntimeError('jump splice needs the audio loaded in memory')
+    if not seqs:
+        return out
+    if isinstance(signal, str):
+        # eval.py defaults to --load_audio off and hands back the wav path, so
+        # the splice loads it here rather than depending on a flag; downstream
+        # __getitem__ accepts either an array or a path
+        from cyolo_score_following.utils.data_utils import SAMPLE_RATE
+        from cyolo_score_following.utils.general import load_wav
+        signal = load_wav(signal, SAMPLE_RATE)
     n_jumps, gap = _CFG['n_jumps'], _CFG['gap']
     seed, min_seg = _CFG['seed'], _CFG['min_seg']
     n = len(seqs)
@@ -126,11 +133,23 @@ def load_sequences_jump(params):
         chunks[t, :c.shape[0]] = c
     new_sig = chunks.reshape(-1)
 
+    # start_frame is where the CURRENT PAGE's audio begins, and the encoder
+    # feeds the LSTM every 40-frame block from there to now, so it has to be
+    # renumbered into the spliced timeline or the conditioning buffer is read
+    # from the wrong place. A silent frame belongs to the page the performer
+    # just left, not to page 0.
     new_seqs = []
+    cur_page, start, last_real = None, 0, seqs[0]
     for t, o in enumerate(order):
-        base = seqs[int(o)] if o >= 0 else seqs[0]
+        base = seqs[int(o)] if o >= 0 else last_real
+        if o >= 0:
+            last_real = base
+        page = int(np.asarray(base['true_position'])[-1])
+        if page != cur_page:
+            cur_page, start = page, t
         e = dict(base)
         e['frame'] = t
+        e['start_frame'] = start
         e['is_onset'] = bool(base['is_onset']) if o >= 0 else False
         new_seqs.append(e)
 
