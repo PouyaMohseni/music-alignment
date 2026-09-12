@@ -95,66 +95,75 @@ def _plan(n_frames, n_jumps, gap, rng, min_seg):
     return np.asarray(order, np.int64), jumps
 
 
+_CFG = {'n_jumps': 3, 'gap': 8, 'seed': 0, 'min_seg': 100}
+_PREV = None
+
+
+def load_sequences_jump(params):
+    """Module level, not a closure: the loader runs through pool.imap_unordered,
+    which pickles the callable by reference and cannot pickle a nested one."""
+    out = _PREV(params)
+    (piece_idx, scores, signal, piece_name, seqs,
+     interpol_c2o, staff_coords, add_per_staff) = out
+    if isinstance(signal, str) or not seqs:
+        raise RuntimeError('jump splice needs the audio loaded in memory')
+    n_jumps, gap = _CFG['n_jumps'], _CFG['gap']
+    seed, min_seg = _CFG['seed'], _CFG['min_seg']
+    n = len(seqs)
+    if n < 2 * min_seg:
+        print(f'[JUMP] {piece_name}: {n} frames, too short to splice', flush=True)
+        return out
+    rng = np.random.default_rng(zlib.crc32(f'{piece_name}|{seed}'.encode()))
+    order, jumps = _plan(n, n_jumps, gap, rng, min_seg)
+
+    sig = np.asarray(signal)
+    chunks = np.zeros((len(order), HOP), sig.dtype)
+    for t, o in enumerate(order):
+        if o < 0:
+            continue
+        st = int(o) * HOP
+        c = sig[st:st + HOP]
+        chunks[t, :c.shape[0]] = c
+    new_sig = chunks.reshape(-1)
+
+    new_seqs = []
+    for t, o in enumerate(order):
+        base = seqs[int(o)] if o >= 0 else seqs[0]
+        e = dict(base)
+        e['frame'] = t
+        e['is_onset'] = bool(base['is_onset']) if o >= 0 else False
+        new_seqs.append(e)
+
+    side = {
+        'order': order,
+        'rms': np.sqrt((chunks.astype(np.float64) ** 2).mean(1)).astype(np.float32),
+        'is_onset': np.array([bool(q['is_onset']) for q in new_seqs]),
+        'jumps': np.array([[j['at'], j['src_old'], j['dst_old'], j['gap']]
+                           for j in jumps], np.int64).reshape(-1, 4),
+    }
+    SIDECAR[piece_name] = side
+    # this runs in a fork pool, so anything left in SIDECAR dies with the
+    # worker. One file per piece, merged by the parent at exit.
+    d = os.environ.get('JUMP_SIDECAR_DIR', '')
+    if d:
+        os.makedirs(d, exist_ok=True)
+        np.savez_compressed(os.path.join(d, piece_name + '.npz'), **side)
+    print(f'[JUMP] {piece_name}: {n} -> {len(order)} frames, '
+          f'{len(jumps)} jumps, gap {gap}', flush=True)
+    return (piece_idx, scores, new_sig, piece_name, new_seqs,
+            interpol_c2o, staff_coords, add_per_staff)
+
+
 def patch_jump(n_jumps=3, gap=8, seed=0, min_seg=100):
     """Rewrite every loaded piece into a jump-spliced version of itself."""
+    global _PREV
+    import cyolo_score_following.dataset as ds
     import cyolo_score_following.utils.data_utils as du
 
-    prev = du.load_sequences
-
-    def load_sequences(params):
-        out = prev(params)
-        (piece_idx, scores, signal, piece_name, seqs,
-         interpol_c2o, staff_coords, add_per_staff) = out
-        if isinstance(signal, str) or not seqs:
-            raise RuntimeError('jump splice needs the audio loaded in memory')
-        n = len(seqs)
-        if n < 2 * min_seg:
-            print(f'[JUMP] {piece_name}: {n} frames, too short to splice', flush=True)
-            return out
-        rng = np.random.default_rng(zlib.crc32(f'{piece_name}|{seed}'.encode()))
-        order, jumps = _plan(n, n_jumps, gap, rng, min_seg)
-
-        sig = np.asarray(signal)
-        chunks = np.zeros((len(order), HOP), sig.dtype)
-        for t, o in enumerate(order):
-            if o < 0:
-                continue
-            s = int(o) * HOP
-            c = sig[s:s + HOP]
-            chunks[t, :c.shape[0]] = c
-        new_sig = chunks.reshape(-1)
-
-        new_seqs = []
-        for t, o in enumerate(order):
-            base = seqs[int(o)] if o >= 0 else seqs[0]
-            e = dict(base)
-            e['frame'] = t
-            e['is_onset'] = bool(base['is_onset']) if o >= 0 else False
-            new_seqs.append(e)
-
-        side = {
-            'order': order,
-            'rms': np.sqrt((chunks.astype(np.float64) ** 2).mean(1)).astype(np.float32),
-            'is_onset': np.array([bool(s['is_onset']) for s in new_seqs]),
-            'jumps': np.array([[j['at'], j['src_old'], j['dst_old'], j['gap']]
-                               for j in jumps], np.int64).reshape(-1, 4),
-        }
-        SIDECAR[piece_name] = side
-        # load_sequences runs in a fork pool, so anything left in SIDECAR dies
-        # with the worker. One file per piece, merged by the parent at exit.
-        d = os.environ.get('JUMP_SIDECAR_DIR', '')
-        if d:
-            os.makedirs(d, exist_ok=True)
-            np.savez_compressed(os.path.join(d, piece_name + '.npz'), **side)
-        print(f'[JUMP] {piece_name}: {n} -> {len(order)} frames, '
-              f'{len(jumps)} jumps, gap {gap}', flush=True)
-        return (piece_idx, scores, new_sig, piece_name, new_seqs,
-                interpol_c2o, staff_coords, add_per_staff)
-
-    du.load_sequences = load_sequences
-    import cyolo_score_following.dataset as ds
-    if hasattr(ds, 'load_sequences'):
-        ds.load_sequences = load_sequences
+    _CFG.update(n_jumps=n_jumps, gap=gap, seed=seed, min_seg=min_seg)
+    _PREV = du.load_sequences
+    du.load_sequences = load_sequences_jump
+    ds.load_sequences = load_sequences_jump
     ds._jump_patched = True
     print(f'[JUMP] {n_jumps} jumps per piece, gap {gap} frames, seed {seed}',
           flush=True)
