@@ -1,41 +1,49 @@
-"""Swap CYOLO's recurrent core for CODA's Mamba, and change nothing else.
+"""CODA's Mamba audio encoder in CYOLO, in the slot MERT occupied.
 
-WHY THIS IS THE ABLATION CODA DID NOT RUN
------------------------------------------
-CODA's Table 3 ablates the cascade, cross-attention, beam search, the temporal
-priors and scheduled sampling. It never ablates the audio encoder, so the paper
-does not show that its Mamba tower contributes anything at all. The two models
-make that testable, because their conditioning paths have the same shape:
+WHAT CODA ACTUALLY DOES (Section 3.2)
+-------------------------------------
+    "The audio stream is converted into a 78-dimensional log-filterbank at 20
+    frames per second. A two-layer causal Mamba encoder processes each frame.
+    Its recurrent state compactly accumulates the entire audio history up to
+    frame t, yielding a conditioning vector z_t."
 
-    CYOLO-SB   78x40 log-mel CNN -> 32 -> LSTM(32 -> 64), 1 layer -> z (128)
-    CODA       audio             ->       Mamba(64), 2 layers     -> z (128)
+There is no CNN in their audio path. Mamba is the whole encoder, taking the
+filterbank frame by frame. Their implementation details: two layers, hidden 64,
+state 16, convolution width 4, expansion 2, into a 128-dimensional z.
 
-Same width, same depth of projection, same 128-dimensional conditioning vector.
-So `seq_model` is the whole difference and it is a drop-in swap: the CNN front
-end, the kw=40 window, the concat with the last step, the FPN, the anchors and
-the multi-class head are all untouched, and a change in the result is
-attributable to the recurrence and to nothing else.
+CYOLO-SB's audio path, for the same 78-bin input and the same 128-d output:
 
-This is the opposite half of the architecture from H1. H1 replaced the CNN with
-MERT and cost 40 points on room; this leaves the CNN alone and replaces what
-reads its output over time.
+    78 x 40 window -> 2D CNN -> 32 per block -> LSTM(32 -> 64), 1 layer
+                   -> concat with the encoded last window -> z (128)
+
+So the swap is the entire ContextConditioning audio tower, which is the same
+slot H1 put MERT into. Two encoders, opposite ends of the design space -- a
+768-d pretrained transformer and a 64-wide recurrence over raw filterbank --
+against the same detector, the same head and the same 128-d conditioning
+interface. If neither moves real-audio accuracy while reranking the very same
+candidates moves it by twenty points, perception is not the constraint.
+
+WHAT IS DELIBERATELY NOT PORTED
+-------------------------------
+CODA also keeps a sliding window H_t of recent Mamba outputs as keys and values
+for cross-attention against candidate regions. That belongs to their cascade,
+not to their encoder, and we have no cross-attention to feed. Porting it would
+make this a partial reimplementation of CODA rather than an encoder swap.
+
+COST, WHICH HAS TO BE MEASURED NOT ASSUMED
+------------------------------------------
+CYOLO's CNN chops the history into 40-frame blocks, so its recurrence takes T/40
+steps. A per-frame Mamba takes T, forty times as many, and cyolo's data pipeline
+re-encodes the whole history at every frame rather than streaming it. The
+smoke test times both arms so the budget-matched comparison can be set up on
+measured throughput instead of a guess.
 
 WHY IT IS INSTALLED AFTER __init__
 ----------------------------------
-`Model.__init__` finishes with `self.apply(initialize_weights)`, which
+`Model.__init__` ends with `self.apply(initialize_weights)`, which
 orthogonalises every Linear and zeroes every bias. Mamba's behaviour depends on
-its own initialisation of A_log, D and the dt projection bias, and orthogonal
-weights with zero bias would destroy the timescale prior that makes the block
-train at all. So the swap happens after the model is built and initialised, and
-the new block keeps the initialisation its authors chose.
-
-THE COMPARISON HAS TO BE BUDGET MATCHED
----------------------------------------
-Our detector trainings reach about ten epochs in a 24 hour A100 job, nowhere
-near Henkel's released checkpoint. A Mamba run measured against that release
-would confound the recurrence with three orders of magnitude of compute, so the
-LSTM control is retrained here under the identical budget, seed and data, and
-only the two of them are compared with each other.
+its own initialisation of A_log, D and the dt projection bias, and that would
+destroy the timescale prior the block needs to train.
 """
 from __future__ import annotations
 
@@ -43,45 +51,61 @@ import os
 
 import torch
 import torch.nn as nn
-from torch.nn.utils.rnn import pad_packed_sequence
+import torch.nn.functional as F
 
 
-class MambaSeq(nn.Module):
-    """A stand-in for nn.LSTM in ContextConditioning.encode_sequence.
+class MambaAudioEncoder(nn.Module):
+    """Drop-in for ContextConditioning: 78-bin frames in, a 128-d z out.
 
-    The caller does `_, hidden = self.seq_model(packed, hidden)` and then reads
-    `hidden[0][-1]` as the sequence summary, so the return shape is what has to
-    match, not the type. There is no streaming state to carry: cyolo rebuilds a
-    kw=40 window every step and calls encode_sequence with hidden=None, which is
-    why a non-recurrent-in-time wrapper is faithful here.
+    Only `encode_sequence` is required. cyolo calls it from Model.forward with
+    hidden=None and reads element 0; `get_conditioning` is used by test.py
+    alone, which nothing in our pipeline runs.
     """
 
-    def __init__(self, in_dim=32, hidden_size=64, n_layers=2, d_state=16,
-                 d_conv=4, expand=2):
+    def __init__(self, n_mels=78, hidden_size=64, zdim=128, n_layers=2,
+                 d_state=16, d_conv=4, expand=2, max_hist=0):
         super().__init__()
         from mamba_ssm import Mamba
-        self.hidden_size = hidden_size
-        self.inp = nn.Linear(in_dim, hidden_size)
-        self.blocks = nn.ModuleList(
+        self.hidden_size, self.zdim, self.max_hist = hidden_size, zdim, max_hist
+        self.inp = nn.Linear(n_mels, hidden_size)
+        # named seq_model because iterate_dataset clips gradients on
+        # `conditioning_network.seq_model.parameters()`, and the recurrence is
+        # what that clip is for in the LSTM path too
+        self.seq_model = nn.ModuleList(
             [Mamba(d_model=hidden_size, d_state=d_state, d_conv=d_conv,
                    expand=expand) for _ in range(n_layers)])
         self.norms = nn.ModuleList(
             [nn.LayerNorm(hidden_size) for _ in range(n_layers)])
+        self.z_enc = nn.Sequential(nn.Linear(hidden_size, zdim),
+                                   nn.LayerNorm(zdim), nn.ELU())
+        # cyolo's ContextConditioning carries these and the dataset reads them
+        self.kw, self.kh = 40, n_mels
+        self.dw, self.dh = 1, 1
 
-    def forward(self, packed, hidden=None):
-        x, lengths = pad_packed_sequence(packed, batch_first=True)
-        h = self.inp(x)
-        for blk, nrm in zip(self.blocks, self.norms):
+    def encode_sequence(self, x, hidden=None):
+        """x: list of (T_i, n_mels) spectrograms, one per batch item."""
+        if self.max_hist:
+            x = [s[-self.max_hist:] for s in x]
+        lengths = torch.tensor([max(1, s.shape[0]) for s in x])
+        T = int(lengths.max())
+        dev = x[0].device
+        padded = torch.stack([F.pad(s, (0, 0, 0, T - s.shape[0])) if s.shape[0] < T
+                              else s[:T] for s in x])
+        h = self.inp(padded)
+        for blk, nrm in zip(self.seq_model, self.norms):
             h = h + blk(nrm(h))
-        idx = (lengths - 1).clamp(min=0).to(h.device)
-        last = h[torch.arange(h.shape[0], device=h.device), idx]
-        # (n_layers, B, hidden) so that hidden[0][-1] is the summary, exactly
-        # what the LSTM path hands to z_enc
+        idx = (lengths - 1).to(dev)
+        last = h[torch.arange(h.shape[0], device=dev), idx]
+        z = self.z_enc(last)
+        # (n_layers, B, hidden) so a caller reading hidden[0][-1] still works
         s = last.unsqueeze(0)
-        return None, (s, s)
+        return z, (s, s)
+
+    def encode_samples(self, x):
+        raise NotImplementedError('the Mamba tower has no block structure')
 
 
-def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2):
+def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2, max_hist=0):
     from cyolo_score_following.models.yolo import Model
 
     if getattr(Model, '_mamba_patched', False):
@@ -90,18 +114,19 @@ def patch_mamba(n_layers=2, d_state=16, d_conv=4, expand=2):
 
     def __init__(self, *a, **kw):
         prev_init(self, *a, **kw)
-        cn = self.conditioning_network
-        old = cn.seq_model
-        in_dim = old.input_size
-        hidden = old.hidden_size
-        cn.seq_model = MambaSeq(in_dim=in_dim, hidden_size=hidden,
-                                n_layers=n_layers, d_state=d_state,
-                                d_conv=d_conv, expand=expand)
+        old = self.conditioning_network
+        n_mels = getattr(old, 'kh', 78)
+        hid = getattr(old.seq_model, 'hidden_size', 64)
+        new = MambaAudioEncoder(n_mels=n_mels, hidden_size=hid,
+                                zdim=self.zdim, n_layers=n_layers, d_state=d_state,
+                                d_conv=d_conv, expand=expand, max_hist=max_hist)
+        self.conditioning_network = new
         n_old = sum(p.numel() for p in old.parameters())
-        n_new = sum(p.numel() for p in cn.seq_model.parameters())
-        print(f'[MAMBA] seq_model LSTM({in_dim}->{hidden}, {n_old} params) -> '
-              f'Mamba x{n_layers} (d_state={d_state}, d_conv={d_conv}, '
-              f'expand={expand}, {n_new} params)', flush=True)
+        n_new = sum(p.numel() for p in new.parameters())
+        print(f'[MAMBA] audio tower CNN+LSTM ({n_old} params) -> causal Mamba '
+              f'x{n_layers} on {n_mels}-bin frames (d_state={d_state}, '
+              f'd_conv={d_conv}, expand={expand}, hist={max_hist or "full"}, '
+              f'{n_new} params)', flush=True)
 
     Model.__init__ = __init__
     Model._mamba_patched = True
@@ -113,5 +138,6 @@ def maybe_patch_mamba() -> bool:
     patch_mamba(n_layers=int(os.environ.get('MAMBA_LAYERS', '2')),
                 d_state=int(os.environ.get('MAMBA_DSTATE', '16')),
                 d_conv=int(os.environ.get('MAMBA_DCONV', '4')),
-                expand=int(os.environ.get('MAMBA_EXPAND', '2')))
+                expand=int(os.environ.get('MAMBA_EXPAND', '2')),
+                max_hist=int(os.environ.get('MAMBA_MAXHIST', '0')))
     return True
