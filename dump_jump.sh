@@ -38,9 +38,13 @@ case $((I % 2)) in
   0) GAP=8; TAG=gap8 ;;
   1) GAP=0; TAG=gap0 ;;
 esac
-O=/scratch/pmohseni/omr/jump/${D}_${DS}_${TAG}; mkdir -p "$O"
+# flat under omr/: creating a nested tree here trips Lustre's DNE with
+# "Object is remote" when the parent lands on another metadata target
+O=/scratch/pmohseni/omr/jump_${D}_${DS}_${TAG}
+S=/scratch/pmohseni/omr/jumpside_${D}_${DS}_${TAG}
+mkdir -p "$O" "$S"
 export DUMP_OUT="$O/cand.npz" JUMP_SIDECAR="$O/side.npz"
-export JUMP_SIDECAR_DIR="$O/side.d"
+export JUMP_SIDECAR_DIR="$S"
 export JUMP_N=3 JUMP_GAP=$GAP JUMP_SEED=0
 [ -f "$DUMP_OUT" ] && [ -f "$JUMP_SIDECAR" ] && { echo "present: $O"; exit 0; }
 echo "##### $D  $DS  $TAG  3 jumps/piece  $(date)"
