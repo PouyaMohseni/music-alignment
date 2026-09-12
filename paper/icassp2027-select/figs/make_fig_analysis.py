@@ -62,7 +62,7 @@ def scatter_points():
     return np.array(pts)
 
 
-fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.55), dpi=400)
+fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.42), dpi=400)
 
 # (a) the ladder
 # horizontal: five labels do not fit side by side under a 1.6 in axis

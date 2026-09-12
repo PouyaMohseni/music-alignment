@@ -38,6 +38,24 @@ Jorge Calvo-Zaragoza, Jan Haji{\v{c}}~jr., and Alexander Pacha,
 \newblock ``Understanding optical music recognition,''
 \newblock {\em ACM Computing Surveys}, vol. 53, no. 4, 2020.
 
+\bibitem{dorfer2016}
+Matthias Dorfer, Andreas Arzt, and Gerhard Widmer,
+\newblock ``Towards score following in sheet music images,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2016.
+
+\bibitem{henkel2019rl}
+Florian Henkel, Stefan Balke, Matthias Dorfer, and Gerhard Widmer,
+\newblock ``Score following as a multi-modal reinforcement learning problem,''
+\newblock {\em Transactions of the International Society for Music Information
+  Retrieval}, vol. 2, no. 1, 2019.
+
+\bibitem{henkel2020cunet}
+Florian Henkel, Rainer Kelz, and Gerhard Widmer,
+\newblock ``Learning to read and follow music in complete score sheet images,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2020.
+
 \bibitem{henkel2021eusipco}
 Florian Henkel and Gerhard Widmer,
 \newblock ``Multi-modal conditional bounding box regression for music score
@@ -56,24 +74,6 @@ Yining Yang, Ruogu Chen, and Jie Han,
   image-based score following,''
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2026.
-
-\bibitem{dorfer2016}
-Matthias Dorfer, Andreas Arzt, and Gerhard Widmer,
-\newblock ``Towards score following in sheet music images,''
-\newblock in {\em Proc. International Society for Music Information Retrieval
-  Conference (ISMIR)}, 2016.
-
-\bibitem{henkel2020cunet}
-Florian Henkel, Rainer Kelz, and Gerhard Widmer,
-\newblock ``Learning to read and follow music in complete score sheet images,''
-\newblock in {\em Proc. International Society for Music Information Retrieval
-  Conference (ISMIR)}, 2020.
-
-\bibitem{henkel2019rl}
-Florian Henkel, Stefan Balke, Matthias Dorfer, and Gerhard Widmer,
-\newblock ``Score following as a multi-modal reinforcement learning problem,''
-\newblock {\em Transactions of the International Society for Music Information
-  Retrieval}, vol. 2, no. 1, 2019.
 
 \bibitem{perez2018film}
 Ethan Perez, Florian Strub, Harm de~Vries, Vincent Dumoulin, and Aaron
