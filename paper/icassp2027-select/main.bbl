@@ -12,6 +12,12 @@ Roger~B. Dannenberg,
 \newblock ``An on-line algorithm for real-time accompaniment,''
 \newblock in {\em Proc. International Computer Music Conference (ICMC)}, 1984.
 
+\bibitem{dixon2005match}
+Simon Dixon and Gerhard Widmer,
+\newblock ``{MATCH}: A music alignment tool chest,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2005.
+
 \bibitem{cont2010}
 Arshia Cont,
 \newblock ``A coupled duration-focused architecture for real-time
@@ -26,12 +32,6 @@ Eita Nakamura, Philippe Cuvillier, Arshia Cont, Nobutaka Ono, and Shigeki
   performance for score following,''
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2015, pp. 392--398.
-
-\bibitem{dixon2005match}
-Simon Dixon and Gerhard Widmer,
-\newblock ``{MATCH}: A music alignment tool chest,''
-\newblock in {\em Proc. International Society for Music Information Retrieval
-  Conference (ISMIR)}, 2005.
 
 \bibitem{calvo2020omr}
 Jorge Calvo-Zaragoza, Jan Haji{\v{c}}~jr., and Alexander Pacha,
@@ -81,18 +81,18 @@ Ethan Perez, Florian Strub, Harm de~Vries, Vincent Dumoulin, and Aaron
 \newblock ``{FiLM}: Visual reasoning with a general conditioning layer,''
 \newblock in {\em Proc. AAAI Conference on Artificial Intelligence}, 2018.
 
-\bibitem{hosang2017nms}
-Jan Hosang, Rodrigo Benenson, and Bernt Schiele,
-\newblock ``Learning non-maximum suppression,''
-\newblock in {\em Proc. IEEE Conference on Computer Vision and Pattern
-  Recognition (CVPR)}, 2017.
-
 \bibitem{zaheer2017deepsets}
 Manzil Zaheer, Satwik Kottur, Siamak Ravanbakhsh, Barnab{\'a}s P{\'o}czos,
   Ruslan Salakhutdinov, and Alexander Smola,
 \newblock ``Deep sets,''
 \newblock in {\em Advances in Neural Information Processing Systems (NeurIPS)},
   2017.
+
+\bibitem{hosang2017nms}
+Jan Hosang, Rodrigo Benenson, and Bernt Schiele,
+\newblock ``Learning non-maximum suppression,''
+\newblock in {\em Proc. IEEE Conference on Computer Vision and Pattern
+  Recognition (CVPR)}, 2017.
 
 \bibitem{bengio2015scheduled}
 Samy Bengio, Oriol Vinyals, Navdeep Jaitly, and Noam Shazeer,
@@ -132,10 +132,5 @@ Yizhi Li, Ruibin Yuan, Ge~Zhang, et~al.,
   self-supervised training,''
 \newblock in {\em Proc. International Conference on Learning Representations
   (ICLR)}, 2024.
-
-\bibitem{gu2024mamba}
-Albert Gu and Tri Dao,
-\newblock ``Mamba: Linear-time sequence modeling with selective state spaces,''
-\newblock in {\em Proc. Conference on Language Modeling (COLM)}, 2024.
 
 \end{thebibliography}

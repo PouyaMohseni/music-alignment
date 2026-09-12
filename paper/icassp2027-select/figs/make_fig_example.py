@@ -95,7 +95,7 @@ def main():
     x0, x1 = max(cx - 350, 0), min(cx + 350, img.shape[1])
     if x1 - x0 < 700:
         x0, x1 = max(x1 - 700, 0), min(x0 + 700, img.shape[1])
-    y0, y1 = max(min(ys) - 62, 0), min(max(ys) + 62, img.shape[0])
+    y0, y1 = max(min(ys) - 40, 0), min(max(ys) + 40, img.shape[0])
 
     fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)))
     ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='antialiased')
