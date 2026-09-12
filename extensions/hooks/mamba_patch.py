@@ -65,7 +65,11 @@ class MambaAudioEncoder(nn.Module):
     def __init__(self, n_mels=78, hidden_size=64, zdim=128, n_layers=2,
                  d_state=16, d_conv=4, expand=2, max_hist=0):
         super().__init__()
-        from mamba_ssm import Mamba
+        # not `from mamba_ssm import Mamba`: the package __init__ pulls in
+        # MambaLMHeadModel, whose generation utils import
+        # GreedySearchDecoderOnlyOutput, removed from transformers 4.4x. The
+        # block itself has no such dependency.
+        from mamba_ssm.modules.mamba_simple import Mamba
         self.hidden_size, self.zdim, self.max_hist = hidden_size, zdim, max_hist
         self.inp = nn.Linear(n_mels, hidden_size)
         # named seq_model because iterate_dataset clips gradients on
@@ -126,7 +130,11 @@ class MambaSeq(nn.Module):
     def __init__(self, in_dim=32, hidden_size=64, n_layers=2, d_state=16,
                  d_conv=4, expand=2):
         super().__init__()
-        from mamba_ssm import Mamba
+        # not `from mamba_ssm import Mamba`: the package __init__ pulls in
+        # MambaLMHeadModel, whose generation utils import
+        # GreedySearchDecoderOnlyOutput, removed from transformers 4.4x. The
+        # block itself has no such dependency.
+        from mamba_ssm.modules.mamba_simple import Mamba
         self.hidden_size = hidden_size
         self.inp = nn.Linear(in_dim, hidden_size)
         self.blocks = nn.ModuleList(
