@@ -50,79 +50,90 @@ music information retrieval
 
 Score following, the real-time alignment of a live performance to its score,
 underlies automatic page turning~\cite{arzt2008} and computer
-accompaniment~\cite{dannenberg1984,raphael2010}. Most music exists only as
-printed or scanned sheets, and optical music recognition remains
-error-prone~\cite{calvo2020omr}, so a line of work follows the performance
-directly on the sheet image~\cite{dorfer2016,dorfer2018rl,henkel2019rl,%
-henkel2020cunet,henkel2021eusipco,henkel2021frontiers,yang2026coda}. These
-systems are trained on audio synthesized from the score and lose a large part
-of their accuracy on real recordings, which is the field's main open problem.
+accompaniment~\cite{dannenberg1984}. Classical systems align audio
+to a \emph{symbolic} score and infer the position over a discrete set of score
+states with hidden (semi-)Markov models~\cite{cont2010,nakamura2015} or online
+time warping~\cite{dixon2005match}. Most music, however, exists only as printed
+or scanned sheets, and optical music recognition is not reliable enough to
+produce that symbolic score automatically~\cite{calvo2020omr}. A decade of work
+therefore follows the performance directly on the sheet
+\emph{image}~\cite{dorfer2016,henkel2019rl,henkel2020cunet,%
+henkel2021eusipco,henkel2021frontiers,yang2026coda}: the input is a page of
+pixels and a stream of audio, the output is where on that page the musician is.
 
-Almost all of this work treats the task as \emph{regression}: a network maps
-audio and a page to a coordinate, whether as a heatmap, a bounding box or a
-reinforcement-learning action. We argue that the natural formulation is
-\emph{selection}. A page of music affords a finite, discrete set of places the
-performance could be at, one per notehead. Following the score is choosing
-among them, again at every instant, subject to the constraint that the choices
-form a plausible trajectory. Regression asks a network to synthesize a number
-that a set already contains.
+\textbf{How the field does this today.} Three families have emerged, and how
+they differ matters for what follows. \emph{Dense localizers} treat the page as
+a canvas and paint on it: MM-Loc~\cite{dorfer2016} and
+CUNet~\cite{henkel2020cunet} emit an audio-conditioned heatmap over the whole
+image and read a coordinate off its centre of mass. \emph{Agents} treat it as
+control: a reinforcement-learning policy~\cite{henkel2019rl} moves
+a reading head and is rewarded for staying aligned. \emph{Audio-conditioned
+detectors} treat it as a query: CYOLO~\cite{henkel2021eusipco} and its
+multi-resolution successor CYOLO-SB~\cite{henkel2021frontiers} encode the recent
+audio into a vector, modulate a visual backbone with it through
+FiLM~\cite{perez2018film}, and run object detection, so that the audio in effect
+asks \emph{which part of this page do I sound like}. All three commit to the
+same thing, that the answer is a coordinate the network must produce, all three
+train on audio synthesized from the score, and all three lose much of their
+accuracy on real recordings, the field's main open problem: CUNet falls from
+85.5\% of onsets tracked within 0.5\,s to 22.4\%, and CYOLO-SB, the most
+robust, from 89.3\% to 79.9\%~\cite{yang2026coda}.
 
-The distinction is not cosmetic, and one measurement makes it concrete. Given a
-set of 256 note hypotheses per instant, we find that on real room-microphone
-piano recordings a hypothesis within the 0.5\,s tolerance is present at every
-one of 4,149 scored onsets, and that an oracle which must commit one step at a
-time and may never move backwards tracks 99.6\% of them. A tracker built on the
-same hypotheses that reports the most confident one tracks 80.0\%
-(Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio are
-lost in the decision, not in the perception. Under a regression view this is
-invisible, because there is no set to take an oracle over.
+\textbf{Our starting point.} We argue the natural formulation is not regression
+but \emph{selection}. A page of music affords a finite, discrete set of places
+the performance could be at, one per notehead, and following the score is
+choosing among them, again at every instant, subject to the choices forming a
+plausible trajectory. This is what symbolic followers have always done over
+score states; on a sheet image the obstacle has been that the state set is not
+given, it must come from the pixels. Our observation is that a detector already
+produces it. CYOLO-SB emits thousands of note boxes per instant and discards
+all but the most confident, and that discarded set is exactly the hypothesis
+space a selection formulation needs.
 
-\sys{} is a score follower built on this formulation. Its three parts are a
-candidate generator, a transition prior with no trained parameters, and a small
-permutation-invariant scorer that judges each hypothesis against the others in
-its instant. Because selection is separable from proposal, the generator is an
-interchangeable component: we attach the same trained selector to three
-different published note detectors and it improves each of them, which is a
-property of the formulation rather than a tuning result.
+One measurement shows what is at stake. Keeping 256 hypotheses per instant, we
+find that on real room-microphone piano recordings a hypothesis within the
+0.5\,s tolerance is present at every one of 4,149 scored onsets, and that an
+oracle which must commit one step at a time and may never move backwards tracks
+99.6\% of them. Reporting the most confident hypothesis, which is what the
+detector does, tracks 80.0\% (Fig.~\ref{fig:example}). Nineteen of the twenty
+points lost to real audio are lost in the decision, not in the perception.
+Under a regression view this is invisible, because there is no set over which
+to take an oracle.
+
+\sys{} is a score follower built on this formulation: a candidate generator, a
+transition prior with no trained parameters, and a small permutation-invariant
+scorer that judges each hypothesis against the others in its instant. Because
+selection is separable from proposal, the generator is an interchangeable
+component; we attach one trained selector to three published detectors and it
+improves each, which is a property of the formulation rather than a tuning
+result.
+
+The concurrent CODA~\cite{yang2026coda} also abandons regression, and the
+contrast sharpens ours. It selects over \emph{given} structure, cascading
+system then bar then note over the layout regions of an annotated score, with a
+network trained end to end. We select over \emph{proposed} structure, the note
+hypotheses a frozen detector already emits, so no layout annotation is read at
+test time and no perception model is retrained.
 
 Our contributions are: (i)~a formulation of sheet-image score following as
 sequential selection over note hypotheses, with a candidate-oracle analysis
-that locates the synthetic-to-real gap in the decision; (ii)~\sys{}, a tracker
-realizing it, which reaches 94.4\% of onsets within 0.5\,s on real recordings
-at 1.25\,ms per step and transfers unchanged across candidate generators;
+locating the synthetic-to-real gap in the decision; (ii)~\sys{}, a tracker
+realizing it, reaching 94.4\% of onsets within 0.5\,s on real recordings at
+1.25\,ms per instant and transferring unchanged across candidate generators;
 (iii)~three findings the formulation exposes and regression hides: the image
 representation the selector reads is irrelevant while its temporal history is
 essential, synthetic validation accuracy barely ranks models for real audio,
 and the forward-motion prior that makes selection work is what makes
 discontinuities hard.
 
-\textbf{Related work.} Symbolic score followers already select, over score
-states, with hidden (semi-)Markov models~\cite{cont2010,nakamura2015} or online
-time warping~\cite{dixon2005match}; our formulation brings that stance to the
-sheet image, where the state set must be proposed from pixels rather than read
-from a symbolic score. Sheet-image trackers regress: staff
-strips~\cite{dorfer2016}, reinforcement-learning
-agents~\cite{dorfer2018rl,henkel2019rl}, full-page
-segmentation~\cite{henkel2020cunet}, and audio-conditioned
-detection~\cite{henkel2021eusipco,henkel2021frontiers} with
-FiLM~\cite{perez2018film}, whose box proposals we reuse as a candidate
-generator. The concurrent CODA~\cite{yang2026coda} also selects, over
-annotated system and bar regions with a cascade trained end to end, and
-contributes a discontinuity benchmark we adopt in Sec.~\ref{ssec:jump}; we
-select over note hypotheses the generator already emits, so nothing is
-retrained and no layout annotation is read. Set-based scoring
-follows~\cite{zaheer2017deepsets}, and re-scoring detections
-has precedent in vision~\cite{hosang2017nms,hu2018relation}. Conditioning on
-its own past choices exposes the selector to the drift of sequence
-prediction~\cite{bengio2015scheduled,ross2011dagger}, which we quantify.
-
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_example.pdf}
-  \caption{One instant of a real room-microphone recording. Grey: 40 of the
-  note hypotheses the page affords. Reporting the most confident (red) lands on
-  the wrong staff; \sys{} (teal) selects a less confident hypothesis on the
-  true note (ring). The right answer was in the set and was not chosen.}
+  \caption{One instant of a real room-microphone recording. Yellow: 40 of the
+  note hypotheses the page affords at this instant. Reporting the most
+  confident (red) lands on the wrong staff; \sys{} (teal) selects a
+  lower-confidence hypothesis on the true note (ring). The right answer was in
+  the set and was not chosen.}
   \label{fig:example}
 \end{figure}
 
@@ -174,7 +185,8 @@ box geometry, motion relative to the history, relation to any coarse regions
 the generator emits, and a neighbourhood group (how many hypotheses lie within
 25 and 100\,px, spacing to the nearest on each side, rank in reading order,
 size against the instant's median). We also read the 128-dimensional feature
-$f_i$ from which the generator scored the box. A permutation-invariant
+$f_i$ from which the generator scored the box. Re-scoring detections against each other has precedent in
+vision~\cite{hosang2017nms}; a permutation-invariant
 network~\cite{zaheer2017deepsets} embeds the set and pools a context every
 hypothesis sees:
 \begin{align}
@@ -209,9 +221,8 @@ samples by Laplace noise of scale 30\,px. We use AdamW ($3\cdot10^{-3}$, cosine,
 \end{equation}
 and $\hat u_t$ becomes the history of instant $t+1$. Decoding is causal and
 greedy: one forward pass over 256 hypotheses, 1.25\,ms on a single CPU thread.
-Training the scorer on the residual $s_i-h_i$ and selecting
-$\arg\max_i(s_i+h_i)$ is Eq.~\ref{eq:decode} at $\beta=0.5$ and removes all
-four scalars from the system; that variant is reported below.
+Training on the residual $s_i-h_i$ and selecting $\arg\max_i(s_i+h_i)$ is
+Eq.~\ref{eq:decode} at $\beta=0.5$ and removes all four scalars.
 
 \section{Experiments}
 \label{sec:exp}
@@ -219,19 +230,17 @@ four scalars from the system; that variant is reported below.
 \textbf{Data and metric.} Selectors are trained on 353 MSMD
 pieces~\cite{dorfer2018msmd} and validated on 19. The evaluation set is 16
 pieces, 25 pages and 4,149 onsets played on a Yamaha AvantGrand N2 and captured
-with a room microphone~\cite{henkel2019rl}. A held-out set of 80 further
-pieces is rendered with a real impulse response and additive noise from 12 to
-0.5\,dB SNR (40,594 onsets per level). We report the ratio of onsets whose
-selected position maps to within 0.05 to 5\,s of the true time, 0.5\,s being
-the primary figure, with 95\% intervals bootstrapped over
+with a room microphone~\cite{henkel2019rl}; a held-out set of 80 further pieces
+is rendered with a real impulse response and noise from 12 to 0.5\,dB SNR. We
+report the ratio of onsets whose selected position maps to within 0.05 to 5\,s
+of the true time, 0.5\,s primary, with 95\% intervals bootstrapped over
 pieces~\cite{efron1993}.
 
-\textbf{Selection of the four scalars.} $(\mu,\sigma,J,\beta)$ are fitted
-leave-one-piece-out: for each evaluation piece they are chosen on the other 15
-with pieces weighted equally, and that piece is decoded with them, so no piece
-influences its own decoding. Every \sys{} number below is cross-validated this
-way, and the residual variant needs no such fit at all. Seeds move results by
-about a point, so rows are seed means with standard deviations.
+\textbf{The four scalars} $(\mu,\sigma,J,\beta)$ are fitted leave-one-piece-out:
+for each evaluation piece they are chosen on the other 15, pieces weighted
+equally, so none influences its own decoding. Every \sys{} number below is
+cross-validated this way and the residual variant needs no fit at all. Seeds
+move results by about a point, so rows are seed means with deviations.
 
 \begin{table*}[t]
 \centering
@@ -242,6 +251,7 @@ checkpoint. \emph{Layout}: needs system and bar annotations at test time.
 \emph{Trains}: what the method fits on the target task. Published figures are
 as reported in~\cite{yang2026coda}.}
 \label{tab:main}
+\setlength{\tabcolsep}{4.4pt}
 \begin{tabular}{llccccccc}
 \toprule
 & & \multicolumn{5}{c}{Onset error threshold (s)} & & \\
@@ -249,15 +259,18 @@ as reported in~\cite{yang2026coda}.}
 & Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout & Trains \\
 \midrule
 \multirow{3}{*}{\rotatebox{90}{\footnotesize ours}}
-& \sys{}, hypotheses from CYOLO             & \tbd{.} & \tbd{.} & .916 & \tbd{.} & \tbd{.} & no & 23k selector \\
-& \sys{}, hypotheses from CYOLO-SB          & \tbd{.} & \tbd{.} & .909 & \tbd{.} & \tbd{.} & no & 23k selector \\
-& \sys{}, hypotheses from CYOLO-SB+A$^\dagger$ & \tbd{.} & \tbd{.} & \textbf{.944} & \tbd{.} & \tbd{.} & no & 23k selector \\
+& \sys{}, proposed structure, CYOLO             & \tbd{.} & \tbd{.} & .916 & \tbd{.} & \tbd{.} & no & 23k selector \\
+& \sys{}, proposed structure, CYOLO-SB          & \tbd{.} & \tbd{.} & .909 & \tbd{.} & \tbd{.} & no & 23k selector \\
+& \sys{}, proposed structure, CYOLO-SB+A$^\dagger$ & \tbd{.} & \tbd{.} & \textbf{.944} & \tbd{.} & \tbd{.} & no & 23k selector \\
 \midrule
-\multirow{4}{*}{\rotatebox{90}{\footnotesize prior work}}
-& CYOLO~\cite{henkel2021eusipco}                  & .563 & .581 & .712 & .749 & .919 & no  & 1.5M detector \\
-& CYOLO-SB~\cite{henkel2021frontiers}             & .610 & .630 & .799 & .832 & .960 & no  & 1.5M detector \\
+\multirow{7}{*}{\rotatebox{90}{\footnotesize prior work}}
+& MM-Loc~\cite{dorfer2016}, dense                 & .364 & .406 & .585 & .611 & .735 & no  & 1.2M end to end \\
+& RL agent~\cite{henkel2019rl}, control           & .185 & .200 & .476 & .603 & .901 & no  & policy \\
+& CUNet~\cite{henkel2020cunet}, dense             & .113 & .125 & .224 & .266 & .443 & no  & 4.5M end to end \\
+& CYOLO~\cite{henkel2021eusipco}, query           & .563 & .581 & .712 & .749 & .919 & no  & 1.5M detector \\
+& CYOLO-SB~\cite{henkel2021frontiers}, query      & .610 & .630 & .799 & .832 & .960 & no  & 1.5M detector \\
 & CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers} & .682 & .706 & .865 & .891 & .981 & no  & 1.5M detector \\
-& CODA~\cite{yang2026coda}                        & .721 & .743 & .883 & .914 & .987 & yes & 2.0M end to end \\
+& CODA~\cite{yang2026coda}, given structure       & .721 & .743 & .883 & .914 & .987 & yes & 2.0M end to end \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -288,7 +301,7 @@ recordings at 0.5\,s. \emph{argmax} is Eq.~\ref{eq:argmax} over the same
 hypotheses, \emph{prior} adds Eq.~\ref{eq:prior}, \emph{full} adds the scorer.}
 \label{tab:transfer}
 \setlength{\tabcolsep}{4pt}
-{\small
+{\footnotesize
 \begin{tabular}{lrrrr}
 \toprule
  & $n$ & argmax & prior & full \\
@@ -314,6 +327,28 @@ Mamba~\cite{gu2024mamba}                & \tbd{3} & \tbd{.} & \tbd{.} & \tbd{.} 
 \end{tabular}}
 \end{table}
 
+\begin{table}[t]
+\centering
+\caption{Recovery from 41 spliced discontinuities. \emph{rec@1}: fraction first
+tracked correctly within 1\,s. \emph{post}: onsets tracked within 1\,s over the
+following 5\,s.}
+\label{tab:jump}
+\setlength{\tabcolsep}{4pt}
+{\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{break present} & \multicolumn{2}{c}{no break} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Selector & rec@1 & post & rec@1 & post \\
+\midrule
+confidence only \eqref{eq:argmax} & 0.32 & 0.22 & 0.27 & 0.22 \\
+\sys{}                            & 0.12 & 0.15 & 0.10 & 0.15 \\
+\quad + silence trigger           & 0.27 & 0.19 & 0.10 & 0.15 \\
+\quad + confidence trigger        & 0.15 & 0.22 & 0.20 & \textbf{0.23} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
 \subsection{What selection needs, and what it does not}
 \label{ssec:abl}
 
@@ -335,18 +370,20 @@ sequence that is hard.
 
 \textbf{Synthetic accuracy does not rank selectors.} Across 48 trained
 checkpoints, accuracy on synthesized validation audio correlates $r=0.16$ with
-accuracy on real recordings; the best-validation checkpoint scores 89.3 on real
-audio, below a selector reading no image features at all. A reverberant
-held-out set does better ($r=0.80$) and still mispicks. This is why the four
+accuracy on real recordings (Fig.~\ref{fig:analysis}b); the best-validation
+checkpoint scores 89.3 on real audio, below a selector reading no image
+features at all. A reverberant held-out set does better ($r=0.80$) and still
+mispicks. This is why the four
 scalars are fitted on the target recordings under cross-validation rather than
 on a synthetic proxy, and it is a caution for the field.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_analysis.pdf}
-  \caption{(a) Error at 0.5\,s split by teacher forcing into drift, ranking,
-  and the gap to a causal oracle over the same hypotheses. (b) Held-out pieces
-  with a real impulse response and additive noise, 40,594 onsets per level.}
+  \caption{(a) Every step from the degenerate selector to the ceiling on the
+  real recordings. \sys{} to \emph{given true history} is drift; above it is
+  ranking. (b) Each point is one of 48 trained selectors: accuracy on
+  synthesised validation audio against accuracy on the real recordings.}
   \label{fig:analysis}
 \end{figure}
 
@@ -363,59 +400,33 @@ boundary where our state resets anyway, leaving 41.
 Table~\ref{tab:jump} reports a failure. \sys{} is worse after a jump than
 selecting by confidence alone, 0.15 against 0.22 of onsets tracked over the
 next five seconds, because the prior pins the trajectory to a stale position.
-Suppressing the prior on detected silence recovers part of it when a break
-exists and nothing when it does not; triggering instead on the selector's own
-confidence, which needs no break, works in both cases but only returns to the
-confidence baseline. A prior strong enough to be worth eleven points on
-continuous playing is strong enough to be wrong at a discontinuity, and
-handling both within one selector is open.
+Suppressing it on detected silence recovers part of that when a break exists
+and nothing when it does not; triggering instead on the selector's own
+confidence needs no break and works in both cases, but only returns to the
+confidence baseline. A prior worth eleven points on continuous playing is
+strong enough to be wrong at a discontinuity, and handling both in one selector
+is open.
 
-\begin{table}[t]
-\centering
-\caption{Recovery from 41 spliced discontinuities. \emph{rec@1}: fraction first
-tracked correctly within 1\,s. \emph{post}: onsets tracked within 1\,s over the
-following 5\,s.}
-\label{tab:jump}
-\setlength{\tabcolsep}{4pt}
-{\small
-\begin{tabular}{lcccc}
-\toprule
-& \multicolumn{2}{c}{break present} & \multicolumn{2}{c}{no break} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}
-Selector & rec@1 & post & rec@1 & post \\
-\midrule
-confidence only \eqref{eq:argmax} & 0.32 & 0.22 & 0.27 & 0.22 \\
-\sys{}                            & 0.12 & 0.15 & 0.10 & 0.15 \\
-\quad + silence trigger           & 0.27 & 0.19 & 0.10 & 0.15 \\
-\quad + confidence trigger        & 0.15 & 0.22 & 0.20 & \textbf{0.23} \\
-\bottomrule
-\end{tabular}}
-\end{table}
 
 \subsection{Robustness and budget}
 
-On held-out pieces (Fig.~\ref{fig:analysis}b) the scorer improves on the prior
-at every noise level, by less as the SNR falls: comparative evidence helps most
-while the hypotheses are still trustworthy. On 94 synthetic test pieces, where
-confidence alone selects .893 at 0.5\,s, \sys{} reaches .955. Halving the
-hypothesis budget to $K=128$ costs 0.5 points, and the correct hypothesis sits
-at rank 27 at the 90th percentile, so the tail of the set is load-bearing.
+Under a real impulse response and noise on 80 held-out pieces the scorer beats
+the prior at every level from 12 to 0.5\,dB, by less as the SNR falls. On 94
+synthetic test pieces, where confidence alone selects .893 at 0.5\,s, \sys{}
+reaches .955. Halving the budget to $K=128$ costs 0.5 points and the correct
+hypothesis sits at rank 27 at the 90th percentile: the tail is load-bearing.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-Posing sheet-image score following as sequential selection over note hypotheses
-makes the synthetic-to-real gap measurable and mostly closable. The right
-answer is already in the set on real audio; a 23k-parameter selector with a
-parameter-free temporal prior finds it 94.4\% of the time at 1.25\,ms per
-instant, and transfers across candidate generators because selection and
-proposal are separate concerns. What the selector needs is its own history, not
-better pixels, and the temporal constraint it depends on is exactly what fails
-at a discontinuity. As in prior work the correct page is given, all performances
-are piano, and with 16 evaluation pieces differences of a point or two are not
-resolvable. Agreement between the pitches a hypothesis implies and those heard
-is a natural next source of evidence that does not depend on the history. Code
-and trained selectors will be released.
+Posing sheet-image score following as selection over note hypotheses makes the
+synthetic-to-real gap measurable and mostly closable: the answer is already in
+the set, and a 23k-parameter selector finds it 94.4\% of the time at 1.25\,ms
+per instant, transferring across generators because selection and proposal are
+separate concerns. What it needs is its own history, not better pixels, and the
+constraint it relies on is what fails at a discontinuity. The correct page is
+given, all performances are piano, and 16 pieces cannot resolve a point or two.
+Pitch agreement is the natural next history-independent cue.
 
 \vfill\pagebreak
 
@@ -429,7 +440,7 @@ approval was required.
 This research was enabled in part by support provided by Calcul Qu\'ebec and
 the Digital Research Alliance of Canada. \tbd{Funding sources.}
 
-{\small
+{\footnotesize
 \bibliographystyle{IEEEbib}
 \bibliography{refs}}
 

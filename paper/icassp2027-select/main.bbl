@@ -1,0 +1,134 @@
+\begin{thebibliography}{10}
+
+\bibitem{arzt2008}
+Andreas Arzt, Gerhard Widmer, and Simon Dixon,
+\newblock ``Automatic page turning for musicians via real-time machine
+  listening,''
+\newblock in {\em Proc. European Conference on Artificial Intelligence (ECAI)},
+  2008, pp. 241--245.
+
+\bibitem{dannenberg1984}
+Roger~B. Dannenberg,
+\newblock ``An on-line algorithm for real-time accompaniment,''
+\newblock in {\em Proc. International Computer Music Conference (ICMC)}, 1984.
+
+\bibitem{cont2010}
+Arshia Cont,
+\newblock ``A coupled duration-focused architecture for real-time
+  music-to-score alignment,''
+\newblock {\em IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  vol. 32, no. 6, pp. 974--987, 2010.
+
+\bibitem{nakamura2015}
+Eita Nakamura, Philippe Cuvillier, Arshia Cont, Nobutaka Ono, and Shigeki
+  Sagayama,
+\newblock ``Autoregressive hidden semi-{M}arkov model of symbolic music
+  performance for score following,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2015, pp. 392--398.
+
+\bibitem{dixon2005match}
+Simon Dixon and Gerhard Widmer,
+\newblock ``{MATCH}: A music alignment tool chest,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2005.
+
+\bibitem{calvo2020omr}
+Jorge Calvo-Zaragoza, Jan Haji{\v{c}}~jr., and Alexander Pacha,
+\newblock ``Understanding optical music recognition,''
+\newblock {\em ACM Computing Surveys}, vol. 53, no. 4, 2020.
+
+\bibitem{dorfer2016}
+Matthias Dorfer, Andreas Arzt, and Gerhard Widmer,
+\newblock ``Towards score following in sheet music images,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2016.
+
+\bibitem{henkel2019rl}
+Florian Henkel, Stefan Balke, Matthias Dorfer, and Gerhard Widmer,
+\newblock ``Score following as a multi-modal reinforcement learning problem,''
+\newblock {\em Transactions of the International Society for Music Information
+  Retrieval}, vol. 2, no. 1, 2019.
+
+\bibitem{henkel2020cunet}
+Florian Henkel, Rainer Kelz, and Gerhard Widmer,
+\newblock ``Learning to read and follow music in complete score sheet images,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2020.
+
+\bibitem{henkel2021eusipco}
+Florian Henkel and Gerhard Widmer,
+\newblock ``Multi-modal conditional bounding box regression for music score
+  following,''
+\newblock in {\em Proc. European Signal Processing Conference (EUSIPCO)}, 2021.
+
+\bibitem{henkel2021frontiers}
+Florian Henkel and Gerhard Widmer,
+\newblock ``Real-time music following in score sheet images via
+  multi-resolution prediction,''
+\newblock {\em Frontiers in Computer Science}, vol. 3, pp. 718340, 2021.
+
+\bibitem{yang2026coda}
+Yining Yang, Ruogu Chen, and Jie Han,
+\newblock ``{CODA}: Cascaded online discontinuity-aware alignment for real-time
+  image-based score following,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2026.
+
+\bibitem{perez2018film}
+Ethan Perez, Florian Strub, Harm de~Vries, Vincent Dumoulin, and Aaron
+  Courville,
+\newblock ``{FiLM}: Visual reasoning with a general conditioning layer,''
+\newblock in {\em Proc. AAAI Conference on Artificial Intelligence}, 2018.
+
+\bibitem{hosang2017nms}
+Jan Hosang, Rodrigo Benenson, and Bernt Schiele,
+\newblock ``Learning non-maximum suppression,''
+\newblock in {\em Proc. IEEE Conference on Computer Vision and Pattern
+  Recognition (CVPR)}, 2017.
+
+\bibitem{zaheer2017deepsets}
+Manzil Zaheer, Satwik Kottur, Siamak Ravanbakhsh, Barnab{\'a}s P{\'o}czos,
+  Ruslan Salakhutdinov, and Alexander Smola,
+\newblock ``Deep sets,''
+\newblock in {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  2017.
+
+\bibitem{dorfer2018msmd}
+Matthias Dorfer, Jan Haji{\v{c}}~jr., Andreas Arzt, Harald Frostel, and Gerhard
+  Widmer,
+\newblock ``Learning audio-sheet music correspondences for cross-modal
+  retrieval and piece identification,''
+\newblock {\em Transactions of the International Society for Music Information
+  Retrieval}, vol. 1, no. 1, 2018.
+
+\bibitem{traer2016}
+James Traer and Josh~H. McDermott,
+\newblock ``Statistics of natural reverberation enable perceptual separation of
+  sound and space,''
+\newblock {\em Proceedings of the National Academy of Sciences}, vol. 113, no.
+  48, pp. E7856--E7865, 2016.
+
+\bibitem{efron1993}
+Bradley Efron and Robert~J. Tibshirani,
+\newblock {\em An Introduction to the Bootstrap},
+\newblock Chapman \& Hall, 1993.
+
+\bibitem{oquab2024dinov2}
+Maxime Oquab, Timoth{\'e}e Darcet, Th{\'e}o Moutakanni, et~al.,
+\newblock ``{DINOv2}: Learning robust visual features without supervision,''
+\newblock {\em Transactions on Machine Learning Research}, 2024.
+
+\bibitem{li2024mert}
+Yizhi Li, Ruibin Yuan, Ge~Zhang, et~al.,
+\newblock ``{MERT}: Acoustic music understanding model with large-scale
+  self-supervised training,''
+\newblock in {\em Proc. International Conference on Learning Representations
+  (ICLR)}, 2024.
+
+\bibitem{gu2024mamba}
+Albert Gu and Tri Dao,
+\newblock ``Mamba: Linear-time sequence modeling with selective state spaces,''
+\newblock in {\em Proc. Conference on Language Modeling (COLM)}, 2024.
+
+\end{thebibliography}

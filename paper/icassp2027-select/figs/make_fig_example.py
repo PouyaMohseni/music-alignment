@@ -87,28 +87,32 @@ def main():
     img = padded[page]
     xs = [xb, xo, xg]
     ys = [yb, yo, yg]
-    x0, x1 = max(min(xs) - 260, 0), min(max(xs) + 260, img.shape[1])
-    y0, y1 = max(min(ys) - 110, 0), min(max(ys) + 110, img.shape[0])
+    x0, x1 = max(min(xs) - 150, 0), min(max(xs) + 150, img.shape[1])
+    y0, y1 = max(min(ys) - 55, 0), min(max(ys) + 55, img.shape[0])
 
     fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)))
     ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='lanczos')
+    # outlined boxes at this scale vanished into the staff lines; a translucent
+    # fill is what makes "the answer was in the set" visible at column width
     for r in range(min(TOPN, len(x)))[::-1]:
-        ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r], fill=False,
-                               lw=0.5, ec='0.55', alpha=0.35 + 0.65 * (1 - r / TOPN)))
+        ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
+                               facecolor='#f2b705', edgecolor='none',
+                               alpha=0.16 + 0.34 * (1 - r / TOPN)))
     ax.add_patch(Rectangle((x[0] - w[0] / 2, y[0] - h[0] / 2), w[0], h[0], fill=False,
-                           lw=1.6, ec='#C0392B', label=f'detector argmax ({eb:.1f} s off)'))
+                           lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
-                           lw=1.6, ec='#138D90', label=f'ours ({eo:.2f} s off)'))
-    ax.add_patch(Circle((xg, yg), 14, fill=False, lw=1.2, ec='k', label='ground truth'))
-    ax.plot([], [], color='0.55', lw=0.8, label=f'top-{TOPN} candidates')
+                           lw=1.5, ec='#138D90', label=f'CANDOR, {eo:.2f}\u2009s off'))
+    ax.add_patch(Circle((xg, yg), 14, fill=False, lw=1.2, ec='k', label='true position'))
+    ax.plot([], [], marker='s', ls='none', ms=4, color='#f2b705', alpha=0.7, label=f'{TOPN} of the hypotheses')
     ax.set_xlim(x0, x1)
     ax.set_ylim(y1, y0)
     ax.set_xticks([])
     ax.set_yticks([])
     for s in ax.spines.values():
         s.set_linewidth(0.4)
-    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=2, fontsize=6.5,
-              frameon=False, handlelength=1.4, columnspacing=1.0)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=2, fontsize=5.8,
+              frameon=False, handlelength=1.1, columnspacing=0.9,
+              handletextpad=0.4, labelspacing=0.25, borderpad=0.0)
     fig.savefig(OUT + '.pdf', bbox_inches='tight', pad_inches=0.01)
     fig.savefig(OUT + '.png', dpi=220, bbox_inches='tight', pad_inches=0.01)
     print('wrote', OUT + '.pdf')

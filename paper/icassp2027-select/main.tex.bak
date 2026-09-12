@@ -1,0 +1,364 @@
+% ICASSP 2027 submission. Open items are \tbd{red} so none can reach the PDF unseen.
+\documentclass{article}
+\usepackage{spconf,amsmath,amssymb,graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\newcommand{\tbd}[1]{\textcolor{red}{#1}}
+
+\title{SELECTION, NOT PERCEPTION: LEARNING TO CHOOSE DETECTOR CANDIDATES\\FOR ROBUST SHEET-IMAGE SCORE FOLLOWING}
+\name{Pouya Mohseni, Ichiro Fujinaga}
+\address{Schulich School of Music, McGill University, Montr\'eal, Canada}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Real-time score following on sheet-music images needs no symbolic score, but
+systems trained on synthesized audio lose accuracy on real recordings. We show
+that for a state-of-the-art detection-based tracker this loss is a failure of
+selection rather than perception: on real room-microphone piano recordings, a
+correct candidate is among the detector's top 256 boxes at every scored onset,
+and a causal oracle over them tracks 99.6\% of onsets within 0.5\,s, while the
+detector's argmax tracks 80.0\%. We therefore freeze the detector and learn to
+select. A parameter-free transition prior and a 23k-parameter set-based
+candidate scorer, trained only on synthesized audio, raise accuracy on the real
+recordings from 80.0\% to 94.9\%, above a recent end-to-end system that also
+needs layout annotations, with significant gains on 80 held-out pieces under
+noise. Teacher forcing shows that two thirds of the remaining error is error
+propagation, which history-independent candidate features reduce.
+\end{abstract}
+% the CODA comparison stands only if the every-frame row of Table 1 stays above .883
+
+\begin{keywords}
+Score following, sheet music, real-time alignment, candidate re-ranking,
+music information retrieval
+\end{keywords}
+
+\section{Introduction}
+\label{sec:intro}
+
+Score following, the real-time alignment of a live performance to its score,
+underlies automatic page turning~\cite{arzt2008} and computer
+accompaniment~\cite{dannenberg1984,raphael2010}. Most music exists only as
+printed or scanned sheets, and optical music recognition remains
+error-prone~\cite{calvo2020omr}, so a line of work follows the performance
+directly on the sheet image, mapping audio and a score page to the current
+position~\cite{dorfer2016,dorfer2018rl,henkel2019rl,henkel2020cunet,henkel2021eusipco,henkel2021frontiers,yang2026coda}.
+
+These systems are trained on audio synthesized from the score, and real
+recordings remain their main open problem. On the public real piano
+performances aligned to sheet images~\cite{henkel2019rl}, the detection-based
+CYOLO-SB~\cite{henkel2021frontiers} drops from 89.3\% of onsets tracked within
+0.5\,s on synthetic audio to 79.9\%, and CUNet from 85.5\% to
+22.4\%~\cite{yang2026coda}. Proposed remedies change the training:
+impulse-response augmentation~\cite{henkel2021eusipco}, extra proprietary
+recordings~\cite{henkel2021frontiers}, or a new cascaded architecture that also
+reads system and bar layout annotations at test time~\cite{yang2026coda}.
+
+We start from a measurement instead. The CYOLO-SB detector proposes 8,112
+candidate note boxes per step and the tracker reports the most confident one.
+On the real room-microphone recordings, a box within the 0.5\,s tolerance is
+among the 256 most confident candidates at every one of the 4,149 scored
+onsets, and an oracle that knows the answer but must commit one step at a time
+and may never move backwards tracks 99.6\% of them. The argmax tracks 80.0\%
+(Fig.~\ref{fig:example}). The information needed to follow the performance
+survives the room; what fails is the rule that reads a position out of it. For
+this model, robustness to real audio is a selection problem.
+
+Our contributions are: (i)~a diagnosis, by candidate-set oracles, that locates
+the synthetic-to-real gap of a sheet-image tracker in selection; (ii)~a
+lightweight decoder for the frozen detector, a parameter-free transition prior
+and a 23k-parameter set-based scorer (1.6\% of the detector) with
+neighbourhood features, which raises accuracy on the real recordings from
+80.0\% to 94.9\% without layout annotations or retraining; (iii)~an analysis
+showing that two thirds of the remaining error is error propagation, reduced by
+the features that do not depend on the tracker's history.
+
+\textbf{Related work.} Symbolic score followers infer the position with hidden
+(semi-)Markov models~\cite{cont2010,nakamura2015} or online time
+warping~\cite{dixon2005match}. Sheet-image trackers moved from staff
+strips~\cite{dorfer2016} and reinforcement-learning
+agents~\cite{dorfer2018rl,henkel2019rl} to full-page
+segmentation~\cite{henkel2020cunet} and audio-conditioned object
+detection~\cite{henkel2021eusipco,henkel2021frontiers} with
+FiLM~\cite{perez2018film}. CODA~\cite{yang2026coda} adds a system, bar and note
+cascade with learned transition penalties and beam search, trained end to end
+with layout supervision. We keep the detector and re-rank its output, akin to
+learned re-scoring of detections~\cite{hosang2017nms,hu2018relation}. Because
+the scorer conditions on its own past choices, it faces the exposure bias of
+sequence prediction~\cite{bengio2015scheduled,ross2011dagger}, which
+Sec.~\ref{ssec:left} measures.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figs/fig_example.pdf}
+  \caption{One onset of a real room-microphone recording. Grey: the detector's
+  40 most confident note candidates. The argmax (red) sits on the wrong staff;
+  the decoder (teal) picks a lower-ranked box on the true note (ring). The
+  correct box was proposed but not chosen, the typical failure on real audio.}
+  \label{fig:example}
+\end{figure}
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Candidates from a frozen detector}
+
+A performance is processed in steps $t=1,\dots,T$. At each step the detector
+receives the audio up to $t$ and the current page and outputs note boxes
+$b_i=(x_i,y_i,w_i,h_i)$ with objectness $o_i$ on three anchors of a
+$52\times52$ grid. We keep the $K=256$ most confident, $\mathcal{C}_t$. Staves
+are concatenated along one horizontal axis, the unrolled coordinate $u_i$, so
+that positions on either side of a line break are close. The baseline outputs
+\begin{equation}
+  \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t} o_i .
+  \label{eq:argmax}
+\end{equation}
+Everything below reads only $\mathcal{C}_t$ and the decoder's own previous
+choice $\hat u_{t-1}=u_{\hat\imath_{t-1}}$.
+
+\subsection{Transition prior}
+
+Between steps $\Delta_t$ frames apart, the performer moves forward by a roughly
+predictable amount. We score the displacement $d_i=u_i-\hat u_{t-1}$ with a
+floored Gaussian whose mean grows with elapsed time,
+\begin{equation}
+  \log\pi_i=\max\Big(-\frac{(d_i-\mu\rho_t)^2}{2\sigma^2},\,J\Big),
+  \label{eq:prior}
+\end{equation}
+where $\rho_t=\mathrm{clip}(\Delta_t/\Delta_0,\,0.2,\,8)$, $\mu=6$\,px per
+reference step of $\Delta_0=5$ frames, $\sigma=18$\,px, and the floor $J=-6$
+keeps jumps possible. The prior has no trained parameters
+\tbd{(constants: provenance to be stated after the held-out re-selection)}.
+Alone, the hand score $h_i=\log o_i+\log\pi_i$ already improves the tracker
+(Table~\ref{tab:main}).
+
+\subsection{Candidate scorer}
+
+Each candidate is described by $\phi_i\in\mathbb{R}^{33}$: confidence (log
+objectness, gap to the frame's best, rank); box geometry; motion relative to
+the history (normalized displacement, backward and staff-change flags, residual
+to a constant-velocity extrapolation); relation to the detector's predicted
+system and bar boxes; and a \emph{neighbourhood} group asking whether the box
+looks like a real notehead (candidates within 25 and 100\,px, gaps to the
+nearest candidate on each side, rank in reading order, size and aspect relative
+to the frame's median box, position inside the predicted bar). Only the
+confidence, geometry and neighbourhood groups are independent of the history.
+We also read the 128-dimensional feature $f_i$ from which the detector's head
+scores the box. A permutation-invariant network~\cite{zaheer2017deepsets}
+embeds the set and pools a context shared by all candidates:
+\begin{align}
+  e_i &= g\big([\phi_i;\,\mathrm{ReLU}(Wf_i)]\big),\qquad
+  c=\Big[\tfrac{1}{K}{\textstyle\sum_j} e_j;\ \max_j e_j\Big],
+  \label{eq:embed}\\
+  s_i &= r\big([e_i;\,c]\big),
+  \label{eq:score}
+\end{align}
+where $g$ and $r$ are two-layer perceptrons (64, 32 and 64, 1 units),
+$W\in\mathbb{R}^{64\times128}$, and the maximum is per dimension, so each
+candidate is judged against the others in its frame. The scorer has 22,881
+parameters, 1.6\% of the 1.46M-parameter detector.
+
+\subsection{Training and decoding}
+
+We run the frozen detector over the MSMD training
+pieces~\cite{dorfer2018msmd}, synthesized and convolved with measured room
+impulse responses~\cite{traer2016}, and store $\mathcal{C}_t$ and $f_i$ at every
+onset. With $\varepsilon_i$ the error in frames of candidate $i$, the soft
+target is $q_i\propto\exp(-\varepsilon_i/\tau)$ with $\tau=3$, and the loss is
+the listwise cross-entropy
+\begin{equation}
+  \mathcal{L}=-\sum_{i\in\mathcal{C}_t} q_i\,\log\frac{\exp s_i}{\sum_{j\in\mathcal{C}_t}\exp s_j}.
+  \label{eq:loss}
+\end{equation}
+History features come from the best candidates of the previous steps (teacher
+forcing), perturbed on 30\% of samples by Laplace noise of scale 30\,px. We
+train with AdamW (learning rate $3\cdot10^{-3}$, cosine schedule, 40 epochs,
+batch 256) and keep the epoch with the best greedy rollout on the validation
+pieces. At test time the learned and hand scores are blended,
+\begin{equation}
+  \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,h_i ,
+  \label{eq:decode}
+\end{equation}
+with $\beta=0.7$ \tbd{(provenance as for the prior)}, and $\hat u_t$ becomes the
+history of step $t+1$. Decoding is causal and greedy: one forward pass of the
+scorer over 256 candidates per step.
+
+\section{Experiments}
+\label{sec:exp}
+
+\subsection{Setup}
+\label{ssec:setup}
+
+\textbf{Data.} The detector is the released CYOLO-SB
+checkpoint~\cite{henkel2021frontiers}. The scorer is trained on its candidates
+over the 353 MSMD training pieces and validated on the 19 validation pieces.
+The test set is the real-performance subset of~\cite{henkel2019rl} (Setting~II
+in~\cite{yang2026coda}): 16 pieces, 25 pages and 4,149 onsets played on a
+Yamaha AvantGrand N2 hybrid piano and recorded with a room microphone. A larger
+held-out set uses 80 pieces withheld from the scorer's training; as the
+detector saw their synthesized audio, we render them with a real room impulse
+response and additive noise at 12, 6, 3 and 0.5\,dB SNR (40,594 onsets per
+level).
+
+\textbf{Metric and protocol.} As in~\cite{henkel2021frontiers,yang2026coda},
+we report the ratio of onsets whose predicted position maps to within 0.05 to
+5\,s of the true time, with 0.5\,s as the primary figure, and 95\% intervals
+from a bootstrap over pieces~\cite{efron1993}. The standard protocol steps a
+tracker only at annotated onsets; since our decoder carries state, we also step
+it on every frame at 20\,fps and score the onset frames, which removes access
+to annotated onset timing. Retraining with another seed moves the test score by
+about a point, so we report seed means, and the single reported checkpoint is
+chosen without the test set: the best held-out configuration mean, then its
+best seed on held-out.
+
+\begin{table*}[t]
+\centering
+\caption{Real piano recordings (16 pieces, 4,149 onsets, room microphone).
+Ratio of onsets tracked within each error threshold. Published rows are from
+Table~1 of~\cite{yang2026coda}, which also lists weaker
+systems~\cite{dorfer2016,henkel2019rl,henkel2020cunet}; $^\dagger$\,trained
+with additional proprietary recordings. \emph{Layout}: system and bar
+annotations needed at test time. Our rows use the released CYOLO-SB detector,
+frozen; the scorer is the checkpoint selected on held-out pieces (over six
+seeds it scores $0.927\pm0.015$ at 0.5\,s).}
+\label{tab:main}
+\begin{tabular}{lcccccc}
+\toprule
+& \multicolumn{5}{c}{Onset error threshold (s)} & \\
+\cmidrule(lr){2-6}
+Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout \\
+\midrule
+CYOLO~\cite{henkel2021eusipco}              & .563 & .581 & .712 & .749 & .919 & no \\
+CYOLO-SB~\cite{henkel2021frontiers}         & .610 & .630 & .799 & .832 & .960 & no \\
+CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers} & .682 & .706 & .865 & .891 & .981 & no \\
+CODA~\cite{yang2026coda}                    & .721 & .743 & .883 & .914 & .987 & yes \\
+\midrule
+CYOLO-SB, our run (argmax, Eq.~\ref{eq:argmax}) & .609 & .629 & .800 & .832 & .960 & no \\
+\quad + transition prior (Eq.~\ref{eq:prior}), 0 params & .636 & .660 & .865 & .899 & .973 & no \\
+\quad + candidate scorer (ours), 23k params & \textbf{.755} & \textbf{.777} & \textbf{.949} & \textbf{.975} & \textbf{.994} & no \\
+\quad + candidate scorer, stepped on every frame & \tbd{.} & \tbd{.} & \tbd{.} & \tbd{.} & \tbd{.} & no \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Main result}
+
+Table~\ref{tab:main} compares the decoder with published systems on the same
+real recordings. Our run of the released detector reproduces the published
+CYOLO-SB figures to within 0.001 at every threshold. The transition prior
+alone, without training, adds 6.5 points at 0.5\,s, and the scorer another 8.4.
+The decoded tracker is more accurate than every published system at every
+threshold, including CYOLO-SB+A, which uses extra training data, and CODA,
+which retrains the whole model and reads layout annotations at test time.
+Against the detector's argmax, the gain at 0.5\,s is 13.8 points under the
+piece bootstrap (95\% CI $[5.6, 23.0]$). Stepped on every frame, the decoder
+scores \tbd{X} at 0.5\,s \tbd{(every-frame run pending; the argmax is
+unchanged at .800 by construction)}.
+
+\begin{table}[t]
+\centering
+\caption{Decoder ablation on the frozen detector. \emph{Real}: accuracy at
+0.5\,s on the real recordings, mean$\,\pm\,$s.d.\ over seeds (count in
+brackets). \emph{Held-out}: 80 unseen pieces at 12\,dB SNR, seed mean.}
+\label{tab:abl}
+\setlength{\tabcolsep}{3.5pt}
+{\small
+\begin{tabular}{lrcc}
+\toprule
+Decoder & Params & Real & Held-out \\
+\midrule
+Argmax \eqref{eq:argmax}        & 0      & 80.0             & 77.9 \\
++ prior \eqref{eq:prior}        & 0      & 86.5             & 82.5 \\
++ scorer, base features         & 9,697  & 91.4 [1]         & 86.8 \\
+\ + motion, detector feat.      & 11,497 & 92.2$\pm$1.0 [5] & 89.3 \\
+\ \ + neighbourhood feat.       & 12,073 & 93.2$\pm$0.7 [8] & 89.7 \\
+\ \ \ wider projection (ours)   & 22,881 & 92.7$\pm$1.5 [6] & 90.0 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Ablation}
+
+Table~\ref{tab:abl} adds the decoder's parts one at a time, and each helps on
+the real recordings. The prior's gain is significant on its own (95\% CI
+$[2.7, 10.0]$), and so is the scorer's gain over the prior ($[1.4, 7.6]$). The
+per-candidate features raise the real-recording mean from 91.4 to between 92.7
+and 93.2; with 16 pieces this step is not separable from zero there, but on the
+80 held-out pieces all six seeds beat the featureless scorer with intervals
+excluding zero (mean gain 3.2 points). The two projection widths are tied
+within seed noise on both sets; we report the wider one because it has the
+better held-out mean, the rule fixed before reading the test set.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figs/fig_analysis.pdf}
+  \caption{(a) Error on the real recordings at 0.5\,s, split by teacher
+  forcing into error propagation (lost by conditioning on the tracker's own
+  past choices), ranking (lost even with the true history) and the gap to a
+  causal oracle over the same candidates. (b) Held-out pieces with a real room
+  impulse response and additive noise (40,594 onsets per level).}
+  \label{fig:analysis}
+\end{figure}
+
+\subsection{Robustness to noise}
+
+On the held-out pieces (Fig.~\ref{fig:analysis}b) the full scorer improves on
+the featureless one by 3.9, 5.7, 8.5 and 6.6 points at 12, 6, 3 and 0.5\,dB,
+each with a 95\% interval excluding zero. As a share of the remaining error the
+gain shrinks from 30\% to 10\%: the candidate features help most where the
+detector's boxes are still reliable.
+
+\subsection{What is left}
+\label{ssec:left}
+
+Given the true previous position at every step (teacher forcing), the same
+scorer reaches 98.0\%, and the causal oracle 99.6\%. The deployed tracker's
+5.1-point error thus splits into 3.1 points of error propagation, 1.6 of
+ranking, and 0.4 no causal selector could recover (Fig.~\ref{fig:analysis}a).
+The scorer without the neighbourhood features (Table~\ref{tab:abl}, fourth row;
+one checkpoint each) splits 4.7 and 1.5: those features cut propagation by a
+third and leave ranking unchanged. This matches what they measure. Displacement
+and velocity features are computed from the previous position and mislead the
+scorer once it is wrong, whereas whether a box looks like a real notehead does
+not depend on the history. Recovering from a lost state directly is harder: the
+chosen box's objectness does reveal that the tracker is lost (AUC 0.81), but
+lost steps are about 5\% of all steps, so no threshold reaches a precision above
+0.33, and gated re-localization lowered accuracy in every configuration we
+tried. Most remaining errors are timing drift within two bars (190 of 212);
+jumps to a wrong staff fall from 90 with the featureless scorer to 19.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+A state-of-the-art sheet-image tracker loses accuracy on real recordings mostly
+because of how it selects a position, not what it perceives, and a small
+decoder over its frozen candidates recovers most of the gap, reaching 94.9\% of
+onsets within 0.5\,s on real piano recordings. As in prior work, the correct
+page is given and the audio restarts at page turns; all performances are piano;
+and with 16 test pieces, differences of a point or two between variants are
+not resolvable, hence the seed means and the larger held-out set. The remaining
+error is propagation, and what reduces it is evidence independent of the
+tracker's history; agreement between the pitches a candidate implies and those
+heard in the audio is a natural next source. Code and trained scorers will be
+released.
+
+\vfill\pagebreak
+
+\section{Compliance with ethical standards}
+\label{sec:ethics}
+This is a numerical study that uses only publicly available data; no ethical
+approval was required.
+
+\section{Acknowledgments}
+\label{sec:ack}
+This research was enabled in part by support provided by Calcul Qu\'ebec and
+the Digital Research Alliance of Canada. \tbd{Funding sources.}
+
+\bibliographystyle{IEEEbib}
+\bibliography{refs}
+
+\end{document}

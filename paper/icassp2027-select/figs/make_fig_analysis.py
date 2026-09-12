@@ -1,101 +1,108 @@
-"""Fig. 2: (a) where the remaining error lives, (b) robustness to noise.
+"""Fig. 2: (a) the selection ladder, (b) synthetic validation does not rank.
 
-(a) Teacher-forced decomposition of the error on the real recordings
-    (extensions/analysis/error_split.py; logs results/esplit-*.log and
-    results/shipoff-2862886.log): deployed accuracy, accuracy when handed the
-    true history, and the causal oracle over the same candidates.
-(b) Held-out pieces with a real room impulse response and additive noise
-    (extensions/analysis/snr_ladder.py; results/snrlad-*.log). Falls back to
-    the two scorer rows of results/shipnoise-2862888.log if the ladder log is
-    not there yet.
+Replaces an earlier version whose panel (a) contrasted the scorer with and
+without neighbourhood features. That contrast is retracted: three image
+representations, including none at all, score 90.9 on the real recordings, so a
+figure built on it argued the opposite of the paper.
+
+(a) Every step from the degenerate selector to the ceiling, on the real
+    recordings: confidence only, plus the parameter-free prior, plus the
+    scorer, the same scorer handed the true history (teacher forcing), and the
+    causal oracle over the identical hypotheses. The gap between the third and
+    fourth bars is drift; between the fourth and fifth, ranking.
+(b) Each point is one of 48 trained selectors: accuracy on synthesised
+    validation audio against accuracy on the real recordings. Pearson r is
+    computed over the points shown.
 """
 from __future__ import annotations
 
-import glob
 import os
 import re
+import glob
 
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = '/project/def-ichiro/pmohseni/music-alignment/results'
-ORACLE = 99.57                       # causal oracle over the top-256 candidates
-SPLIT = {                            # deployed, teacher-forced
-    'w/o neighbourhood': (93.42, 98.07),
-    'full scorer': (94.89, 98.00),
-}
-SNRS = ('12', '6', '3', '0.5')
+
+# real recordings, CYOLO-SB hypotheses, all cross-validated per piece
+LADDER = [                     # drawn bottom-up, so ceiling last
+    ('confidence only', 79.97, '#b8b8b8'),
+    ('+ transition prior', 86.48, '#8c8c8c'),
+    ('CANDOR', 90.92, '#1b7f79'),
+    ('given true history', 98.00, '#7fb2ae'),
+    ('causal oracle', 99.57, '#d9d9d9'),
+]
+
+plt.rcParams.update({
+    'font.size': 7, 'axes.labelsize': 7.5, 'xtick.labelsize': 6.5,
+    'ytick.labelsize': 7, 'legend.fontsize': 6.5, 'axes.titlesize': 8,
+    'axes.linewidth': 0.6, 'xtick.major.width': 0.6,
+    'ytick.major.width': 0.6, 'font.family': 'sans-serif',
+})
 
 
-def ladder():
-    logs = sorted(glob.glob(f'{RES}/snrlad-*.log'), key=os.path.getmtime)
-    rows = {}
-    if logs:
-        for line in open(logs[-1]):
-            m = re.match(r'\s*([\d.]+)\s+\d+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)', line)
-            if m and m.group(1) in SNRS:
-                rows[m.group(1)] = tuple(float(v) for v in m.groups()[1:])
-    # short labels: the panel is ~1.5 in wide, and long ones made the legend
-    # wider than any empty region of the plot
-    if len(rows) == len(SNRS):
-        return {'argmax': [rows[s][0] for s in SNRS],
-                'prior': [rows[s][1] for s in SNRS],
-                'featureless': [rows[s][2] for s in SNRS],
-                'full': [rows[s][3] for s in SNRS]}
-    return {'featureless': [86.79, 75.78, 55.68, 36.41],
-            'full': [90.69, 81.48, 64.12, 43.01]}
+def scatter_points():
+    """valid, room for every checkpoint that trained and decoded sanely."""
+    pts = []
+    for f in sorted(glob.glob(f'{RES}/lopoall_*-2895940.log')):
+        for line in open(f):
+            m = re.search(r'(\S+\.pt)\s+([\d.]+|nan)\s+([\d.]+|nan)\s+([\d.]+)', line)
+            if not m:
+                continue
+            try:
+                v, r = float(m.group(2)), float(m.group(4))
+            except ValueError:
+                continue
+            if v == v and r > 60.0:      # exclude load failures and the
+                pts.append((v, r))       # collapsed audio-swap runs
+    return np.array(pts)
 
 
-def main():
-    plt.rcParams.update({'font.size': 7, 'font.family': 'serif', 'axes.linewidth': 0.5,
-                         'xtick.major.width': 0.5, 'ytick.major.width': 0.5})
-    fig, (a, b) = plt.subplots(1, 2, figsize=(3.4, 1.45), gridspec_kw={'width_ratios': [1.15, 1]})
+fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.55), dpi=400)
 
-    names = list(SPLIT)
-    for k, n in enumerate(names):
-        dep, tf = SPLIT[n]
-        prop, rank, gap = tf - dep, ORACLE - tf, 100 - ORACLE
-        left = 0.0
-        for v, c, lab in ((prop, '#C0392B', 'propagation'), (rank, '#2E86C1', 'ranking'),
-                          (gap, '#AAB7B8', 'oracle gap')):
-            a.barh(k, v, left=left, color=c, height=0.55, label=lab if k == 0 else None)
-            left += v
-        a.text(left + 0.1, k, f'{100 - dep:.2f}', va='center', fontsize=6.5)
-    a.set_yticks(range(len(names)))
-    a.set_yticklabels(names)
-    a.invert_yaxis()
-    a.set_xlim(0, 11.5)
-    a.set_xticks([0, 2, 4, 6])
-    a.set_xlabel('error at 0.5 s (points)')
-    a.legend(fontsize=5.6, frameon=False, loc='center right', handlelength=1.0,
-             borderaxespad=0.2)
-    a.set_title('(a) remaining error', fontsize=7)
+# (a) the ladder
+# horizontal: five labels do not fit side by side under a 1.6 in axis
+names = [n for n, _, _ in LADDER][::-1]
+vals = [v for _, v, _ in LADDER][::-1]
+cols = [c for _, _, c in LADDER][::-1]
+ys = np.arange(len(vals))
+ax[0].barh(ys, vals, color=cols, height=0.68, zorder=3, edgecolor='none')
+for y, v in zip(ys, vals):
+    ax[0].text(v + 0.7, y, f'{v:.1f}', ha='left', va='center', fontsize=6.4)
+ax[0].set_yticks(ys)
+ax[0].set_yticklabels(names, fontsize=6.4)
+ax[0].set_xlim(74, 107)
+ax[0].set_xticks([80, 90, 100])
+ax[0].set_xlabel('onsets within 0.5 s (%)')
+ax[0].set_title('(a) the selection ceiling', pad=3)
+ax[0].grid(axis='x', lw=0.4, color='#dddddd', zorder=0)
+ax[0].set_axisbelow(True)
+for s in ('top', 'right'):
+    ax[0].spines[s].set_visible(False)
 
-    rows = ladder()
-    style = {'argmax': ('0.6', 'o'), 'prior': ('#7F8C8D', 's'),
-             'featureless': ('#2E86C1', '^'), 'full': ('#138D90', 'D')}
-    xs = range(len(SNRS))
-    for n, v in rows.items():
-        c, m = style[n]
-        b.plot(xs, v, color=c, marker=m, ms=2.6, lw=0.9, label=n)
-    b.set_xticks(list(xs))
-    b.set_xticklabels([f'{s}' for s in SNRS])
-    b.set_xlabel('SNR (dB)')
-    b.set_ylabel('onsets within 0.5 s (%)')
-    # every curve is above 78% at 12 dB and falls to the right, so the lower
-    # left corner is the only region no line crosses
-    b.legend(fontsize=5.0, frameon=False, loc='lower left', handlelength=1.2,
-             borderaxespad=0.2, labelspacing=0.25)
-    b.grid(alpha=0.25, lw=0.4)
-    b.set_title('(b) held-out, added noise', fontsize=7)
+# (b) validation does not rank
+p = scatter_points()
+ax[1].scatter(p[:, 0], p[:, 1], s=9, facecolor='#1b7f79', edgecolor='none',
+              alpha=0.75, zorder=3)
+r = np.corrcoef(p[:, 0], p[:, 1])[0, 1]
+b, a = np.polyfit(p[:, 0], p[:, 1], 1)
+xx = np.linspace(p[:, 0].min(), p[:, 0].max(), 2)
+ax[1].plot(xx, a + b * xx, color='#c0392b', lw=1.0, zorder=4)
+ax[1].text(0.04, 0.93, f'$r = {r:.2f}$   $n = {len(p)}$', transform=ax[1].transAxes,
+           ha='left', va='top', fontsize=6.8)
+ax[1].set_xlabel('synthesised validation (%)')
+ax[1].set_ylabel('real recordings (%)')
+ax[1].set_title('(b) synthetic vs. real', pad=3)
+ax[1].grid(lw=0.4, color='#dddddd', zorder=0)
+ax[1].set_axisbelow(True)
+for s in ('top', 'right'):
+    ax[1].spines[s].set_visible(False)
 
-    fig.tight_layout(pad=0.2, w_pad=0.6)
-    fig.savefig(f'{HERE}/fig_analysis.pdf', bbox_inches='tight', pad_inches=0.01)
-    fig.savefig(f'{HERE}/fig_analysis.png', dpi=220, bbox_inches='tight', pad_inches=0.01)
-    print('wrote', f'{HERE}/fig_analysis.pdf', '| ladder rows:', list(rows))
-
-
-if __name__ == '__main__':
-    main()
+fig.tight_layout(pad=0.25, w_pad=1.6)
+for ext in ('pdf', 'png'):
+    fig.savefig(os.path.join(HERE, f'fig_analysis.{ext}'), bbox_inches='tight')
+print(f'wrote fig_analysis, {len(p)} checkpoints, r={r:.3f}')
