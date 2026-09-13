@@ -79,7 +79,7 @@ ax[0].set_title('(a) added noise', pad=2.5)
 ax[0].grid(lw=0.4, color='#dddddd', zorder=0)
 ax[0].set_axisbelow(True)
 ax[0].legend(frameon=False, handlelength=1.5, labelspacing=0.18,
-             borderpad=0.1, loc='upper right')
+             borderpad=0.1, loc='lower left')
 for sp in ('top', 'right'):
     ax[0].spines[sp].set_visible(False)
 

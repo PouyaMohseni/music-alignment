@@ -16,6 +16,7 @@
 
 \newcommand{\tbd}[1]{\textcolor{red}{#1}}
 \newcommand{\sys}{CANDOR}
+\newcommand{\syson}[1]{CANDOR\textsubscript{#1}}
 
 \title{SCORE FOLLOWING IN SHEET MUSIC IMAGES\\AS SEQUENTIAL CANDIDATE SELECTION}
 \name{Pouya Mohseni, Ichiro Fujinaga\thanks{Code and trained decision models:
@@ -342,21 +343,21 @@ checkpoint. Published figures from~\cite{yang2026coda}.}
 {\small
 \begin{tabular}{lccccccc}
 \toprule
-& \multicolumn{5}{c}{Onset error threshold (s)} & & \\
+& \multicolumn{5}{c}{Onsets tracked (\%) within threshold (s)} & & \\
 \cmidrule(lr){2-6}
 Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Layout & $\Delta$ \\
 \midrule
-MM-Loc~\cite{dorfer2016}                         & .364 & .406 & .585 & .611 & .735 & no  & \\
-RL agent~\cite{henkel2019rl}                     & .185 & .200 & .476 & .603 & .901 & no  & \\
-CUNet~\cite{henkel2020cunet}                     & .113 & .125 & .224 & .266 & .443 & no  & \\
-CYOLO~\cite{henkel2021eusipco}                   & .563 & .581 & .712 & .749 & .919 & no  & \\
-CYOLO-SB~\cite{henkel2021frontiers}              & .610 & .630 & .799 & .832 & .960 & no  & \\
-CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers}  & .682 & .706 & .865 & .891 & .981 & no  & \\
-CODA~\cite{yang2026coda}                         & .721 & .743 & .883 & .914 & .987 & yes & \\
+MM-Loc~\cite{dorfer2016}                         & 36.4 & 40.6 & 58.5 & 61.1 & 73.5 & no  & \\
+RL agent~\cite{henkel2019rl}                     & 18.5 & 20.0 & 47.6 & 60.3 & 90.1 & no  & \\
+CUNet~\cite{henkel2020cunet}                     & 11.3 & 12.5 & 22.4 & 26.6 & 44.3 & no  & \\
+CYOLO~\cite{henkel2021eusipco}                   & 56.3 & 58.1 & 71.2 & 74.9 & 91.9 & no  & \\
+CYOLO-SB~\cite{henkel2021frontiers}              & 61.0 & 63.0 & 79.9 & 83.2 & 96.0 & no  & \\
+CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers}  & 68.2 & 70.6 & 86.5 & 89.1 & 98.1 & no  & \\
+CODA~\cite{yang2026coda}                         & 72.1 & 74.3 & 88.3 & 91.4 & 98.7 & yes & \\
 \midrule
-\sys{} on CYOLO                                  & .726 & .747 & .916 & .950 & .991 & no & $+$20.4 \\
-\sys{} on CYOLO-SB                               & .690 & .714 & .906 & .942 & .982 & no & $+$10.7 \\
-\sys{} on CYOLO-SB+A$^\dagger$                   & \textbf{.760} & \textbf{.785} & \textbf{.944} & \textbf{.969} & \textbf{.996} & no & $+$7.9 \\
+\syson{CYOLO}                                           & 72.6 & 74.7 & 91.6 & 95.0 & 99.1 & no & $+$20.4 \\
+\syson{CYOLO-SB}                                     & 69.0 & 71.4 & 90.6 & 94.2 & 98.2 & no & $+$10.7 \\
+\syson{CYOLO-SB+A$^\dagger$}                   & \textbf{76.0} & \textbf{78.5} & \textbf{94.4} & \textbf{96.9} & \textbf{99.6} & no & $+$7.9 \\
 \bottomrule
 \end{tabular}}
 \end{table*}
@@ -387,7 +388,7 @@ it beats the transition model at every level from 12 to 0.5\,dB
 (Fig.~\ref{fig:analysis}a).
 
 The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reaches
-.690 and .714 at 0.05 and 0.1\,s, below CODA's .721 and .743, because a
+69.0\% and 71.4\% at 0.05 and 0.1\,s, below CODA's 72.1\% and 74.3\%, because a
 decision is only as precise as the boxes it chooses between, so the mechanism
 recovers which notehead is active rather than the position within it.
 
@@ -438,10 +439,10 @@ tracked within 1\,s over the next 5\,s.}
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 Decision rule & rec@1 & post & rec@1 & post \\
 \midrule
-argmax, Eq.~\ref{eq:argmax}       & 0.27 & \textbf{0.27} & 0.15 & \textbf{0.26} \\
-\sys{}                            & 0.00 & 0.08 & 0.00 & 0.09 \\
-\quad $+$ silence trigger         & 0.15 & 0.17 & 0.00 & 0.09 \\
-\quad $+$ confidence trigger      & 0.10 & 0.26 & 0.02 & 0.23 \\
+argmax, Eq.~\ref{eq:argmax}       & 27 & \textbf{27} & 15 & \textbf{26} \\
+\sys{}                            &  0 &  8 &  0 &  9 \\
+\quad $+$ silence trigger         & 15 & 17 &  0 &  9 \\
+\quad $+$ confidence trigger      & 10 & 26 &  2 & 23 \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -495,8 +496,18 @@ performs considerably worse than the rule it replaces, 0.08 against 0.27 of onse
 next five seconds, because the transition model holds the trajectory at a stale
 position. Suppressing it on detected silence helps where a break exists and not
 otherwise, as its design implies; triggering on the scorer's own confidence
-needs no break and recovers most of the loss, but never beats argmax; the same
-ordering holds over 220 jumps on the synthetic benchmark. A transition
+needs no break, recovers most of the loss and reaches argmax without passing
+it; the same ordering holds over 220 jumps on the synthetic benchmark.
+
+Whether such a trigger belongs in the deployed decoder turns on what it costs
+when nothing goes wrong, which the spliced takes cannot show. Run on the
+unspliced recordings with identical constants, the confidence trigger costs
+1.0 point and the two-hypothesis variant 2.5, each consistently across three
+seeds and so outside the 0.4-point spread between them. The confidence trigger
+therefore buys roughly eighteen points after a discontinuity for one point of
+continuous accuracy. We report \sys{} without it, since the evaluation
+repertoire is played straight through, and note that the trade favours the
+trigger for any repertoire in which repeats are taken. A transition
 model strong enough to be worth ten points on continuous playing is strong
 enough to be wrong at a discontinuity, and reconciling the two is open.
 
