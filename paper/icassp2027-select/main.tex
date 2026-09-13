@@ -25,23 +25,28 @@
 
 \begin{abstract}
 Score following aligns a live performance to its score in real time, committing
-to a position at every instant with no lookahead. Doing it directly on a
-sheet-music image converts neither modality, avoiding both optical music
-recognition and transcription, but such systems are trained on synthesized
-audio for want of annotated real recordings and lose much of their accuracy on
-a real instrument in a real room. Closing that gap is the field's central open
-problem, and every remedy proposed for it has treated the gap as a failure of
-perception. We show it is not. On real recordings a conditional YOLO detector
-already proposes a correct position at every scored onset, and an oracle under
-the same real-time constraints, committing at each instant and never moving
-backwards, reaches 99.6\% where the deployed rule reaches 80.0\%. We therefore
-recast the task as sequential selection over the candidates the detector
-already emits, combining a parameter-free transition model with a set-based
-scorer that judges each candidate against its competitors. On real piano
-recordings this tracks 94.4\% of onsets within 0.5\,s against 88.3\% for the
-best published system, and holds that margin across three independently trained
-detectors. What the decision needs, we find, is its own temporal history rather
-than a better image representation.
+to a position at every instant with no lookahead. The two sides are different
+kinds of object: the performance is audio and the score is an image. The
+established response is to convert one into the other and align within a single
+modality, either by turning the page into symbols with optical music
+recognition or by turning the audio into notes with transcription, and each
+detour inherits the errors of its conversion. Sheet-image score following
+converts neither side and learns the correspondence directly, and its strongest
+systems condition a visual detector on the audio. What limits them is
+annotation: performances aligned to notehead coordinates on the page are costly
+enough that nearly all training data is synthesized, so these systems work on
+synthesized audio and lose much of their accuracy on a real instrument in a
+real room. Closing that gap is the field's central open problem, and every
+remedy proposed for it has treated the gap as a failure of perception. We show
+it is not. On real recordings the detector already proposes a correct position
+at every scored onset, and an oracle held to the same real-time commitments
+recovers almost everything the deployed rule loses. We therefore recast the
+task as sequential selection over the candidates the detector already emits,
+combining a parameter-free transition model with a set-based scorer that judges
+each candidate against its competitors in the same instant. This sets a new
+best on real piano recordings, holds across three independently trained
+detectors, and shows that what the decision needs is its own temporal history
+rather than a better image representation.
 \end{abstract}
 
 \begin{keywords}
