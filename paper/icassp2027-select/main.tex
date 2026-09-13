@@ -57,12 +57,14 @@ music information retrieval
 \section{Introduction}
 \label{sec:intro}
 
-A musician plays from a printed page while a machine listens and looks at that
-same page, reporting at every instant the position the performer has reached.
-That is score following~\cite{orio2003}, and it is what automatic page
-turning~\cite{arzt2008}, live computer
+Score following~\cite{orio2003} is the online alignment of an acoustic signal to
+the score being performed. Given the audio observed up to frame $t$ and a
+representation of the score, the system emits an estimate of the position the
+performer currently occupies, and it does so under a strict latency budget, in
+that the estimate for frame $t$ must be produced before frame $t+1$ arrives. The task
+supports automatic page turning~\cite{arzt2008}, live computer
 accompaniment~\cite{dannenberg1984,dannenberg2006,raphael2010} and
-score-synchronised visualisation are built on.
+score-synchronised visualisation.
 
 Aligning a performance to its score offline is a different problem, usually
 called audio-to-score alignment or music synchronisation. There the entire
