@@ -82,6 +82,11 @@ def main():
     xb, yb = b['x_pred'][i], b['y_pred'][i]
     xo, yo = o['x_pred'][j], o['y_pred'][j]
     xg, yg = o['x_gt'][j], o['y_gt'][j]
+    # the position the decoder committed to at the previous onset, which is
+    # what the transition model conditions on. Without it the figure cannot
+    # show why the red box is implausible: it is a long backward jump from
+    # where the tracker already was.
+    xp, yp = (o['x_pred'][j - 1], o['y_pred'][j - 1]) if j > 0 else (None, None)
     io = int(np.argmin((x - xo) ** 2 + (y - yo) ** 2))
 
     img = padded[page]
@@ -104,19 +109,26 @@ def main():
 
     fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)), dpi=600)
     ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='antialiased')
-    # outlined boxes at this scale vanished into the staff lines; a translucent
-    # fill is what makes "the answer was in the set" visible at column width
+    # outlined boxes at this scale vanished into the staff lines, so the
+    # candidates are drawn as fills. They have to stay faint: at the earlier
+    # opacity the notation underneath them was unreadable, and the figure
+    # exists to show that the correct notehead was among them.
     for r in range(min(TOPN, len(x)))[::-1]:
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
-                               facecolor='#f2b705', edgecolor='none',
-                               alpha=0.16 + 0.34 * (1 - r / TOPN)))
+                               facecolor='#f7c948', edgecolor='none',
+                               alpha=0.07 + 0.13 * (1 - r / TOPN)))
     ax.add_patch(Rectangle((x[0] - w[0] / 2, y[0] - h[0] / 2), w[0], h[0], fill=False,
                            lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
                            lw=1.5, ec='#138D90', label=f'CANDOR, {eo:.2f}\u2009s off'))
+    if xp is not None:
+        ax.plot([xp], [y1 - 24], marker='^', ms=4.5, color='#3f5468',
+                ls='none')
     ax.add_patch(Circle((xg, yg), 15, fill=False, lw=1.3, ec='k'))
     # legend proxies: a Patch renders as a rectangle whatever shape it is, so
     # the ring was advertised as a square. Draw the handles as markers.
+    ax.plot([], [], marker='^', ms=5, color='#3f5468', ls='none',
+            label='previous onset')
     ax.plot([], [], marker='o', ls='none', ms=5, mfc='none', mec='k', mew=1.1,
             label='true position')
     ax.plot([], [], marker='s', ls='none', ms=5, color='#f2b705', alpha=0.8,
@@ -127,7 +139,7 @@ def main():
     ax.set_yticks([])
     for s in ax.spines.values():
         s.set_linewidth(0.4)
-    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=2, fontsize=5.8,
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3, fontsize=5.4,
               frameon=False, handlelength=1.1, columnspacing=0.9,
               handletextpad=0.4, labelspacing=0.25, borderpad=0.0)
     fig.savefig(OUT + '.pdf', bbox_inches='tight', pad_inches=0.01)

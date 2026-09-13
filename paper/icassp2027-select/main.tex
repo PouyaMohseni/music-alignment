@@ -5,6 +5,7 @@
 \usepackage{multirow,rotating}
 \usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
+\usepackage{url}
 \usepackage{microtype}
 
 % five floats at the template's default 20pt separation cost most of a column
@@ -16,8 +17,9 @@
 \newcommand{\tbd}[1]{\textcolor{red}{#1}}
 \newcommand{\sys}{CANDOR}
 
-\title{REAL-TIME SCORE FOLLOWING IN SHEET MUSIC IMAGES\\AS SEQUENTIAL CANDIDATE SELECTION}
-\name{Pouya Mohseni, Ichiro Fujinaga}
+\title{SCORE FOLLOWING IN SHEET MUSIC IMAGES\\AS SEQUENTIAL CANDIDATE SELECTION}
+\name{Pouya Mohseni, Ichiro Fujinaga\thanks{Code and trained decision models:
+\url{https://github.com/PouyaMohseni/candor}}}
 \address{Schulich School of Music, McGill University, Montr\'eal, Canada}
 
 \begin{document}
@@ -40,7 +42,7 @@ real room. Closing that gap is the field's central open problem, and every
 remedy proposed for it has treated the gap as a failure of perception. We
 present evidence that it is not, since on real recordings the detector already
 proposes a correct position at every scored onset and an oracle held to the
-same real-time commitments recovers almost everything the deployed rule loses. We therefore recast the
+same realtime commitments recovers almost everything the deployed rule loses. We therefore recast the
 task as sequential selection over the candidates the detector already emits,
 combining a parameter-free transition model with a set-based scorer that judges
 each candidate against its competitors in the same instant. This sets a new
@@ -50,7 +52,7 @@ rather than a better image representation.
 \end{abstract}
 
 \begin{keywords}
-Score following, sheet music, audio-to-score alignment, real-time,
+Score following, sheet music, audio-to-score alignment, realtime,
 music information retrieval
 \end{keywords}
 
@@ -99,7 +101,7 @@ follower inherits every mistake.
 
 A second family converts the audio instead, transcribing the performance into
 notes and comparing symbol to symbol. Recent work pairs
-real-time piano transcription with symbol-level tracking and reports strong
+realtime piano transcription with symbol-level tracking and reports strong
 accuracy~\cite{peter2025}, though the follower is then bounded by the
 transcriber, which restricts it to instruments transcription handles well.
 
@@ -113,8 +115,11 @@ gives the position; and CYOLO~\cite{henkel2021eusipco} recast it as
 audio-conditioned object detection, with CYOLO-SB~\cite{henkel2021frontiers}
 adding heads for the enclosing system and bar. The concurrent
 CODA~\cite{yang2026coda} cascades system, bar and note selection over the
-layout regions of an annotated score, with beam search and learned transition
-penalties.
+layout regions of the score, with beam search and learned transition penalties.
+It is the strongest published system on this benchmark, but it requires the
+system and bar bounding boxes of the page as an additional input at test time,
+so it presumes a layout annotation that the other methods, and ours, do not
+read.
 
 Training any of these needs performances aligned to notehead coordinates on the
 page, an annotation costly enough that nearly all of it is synthesized. A score
@@ -142,7 +147,7 @@ is therefore perfect, but could not be run live. The one that matters must
 commit at each instant and never move backwards, exactly as a deployed follower
 must, and it still reaches 99.6\%. The deployed rule reaches 80.0\%
 (Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio
-survive the real-time constraint and are recoverable from what the model
+survive the realtime constraint and are recoverable from what the model
 already saw, which indicates that reverberation degrades the detector's
 confidence ordering rather than the underlying visual evidence.
 
@@ -296,14 +301,24 @@ $\beta=0.5$ and eliminates all four constants.
 
 \subsection{Dataset}
 
-The decision model is trained on 353 pieces of
-MSMD~\cite{dorfer2018msmd}, synthesized and convolved with measured room
-impulse responses~\cite{traer2016}, and validated on 19, using AdamW
-($3\cdot10^{-3}$, cosine, 40 epochs, batch 256). The evaluation set is the
-real-performance benchmark of~\cite{henkel2019rl}: 16 pieces, 25 pages and
-4,149 onsets on a Yamaha AvantGrand N2 captured with a room microphone. A
-held-out set of 80 further pieces is rendered with a real impulse response and
-noise from 12 to 0.5\,dB SNR.
+All experiments use MSMD~\cite{dorfer2018msmd}, which pairs public-domain
+LilyPond engravings with MIDI-derived alignments for solo piano. Its repertoire
+is Western classical, weighted towards the Baroque and Classical periods and
+dominated by Bach, with Beethoven, Mozart, Handel, Schumann, Chopin, Czerny and
+Burgm\"uller making up most of the remainder, alongside a smaller set of
+Romantic character pieces, traditional tunes and early ragtime. Textures range
+from two-voice inventions to dense Romantic writing, which matters here because
+the number of simultaneous noteheads sets how many plausible candidates a page
+affords at each instant.
+
+The decision model is trained on 353 pieces, synthesized and convolved with
+measured room impulse responses~\cite{traer2016}, and validated on 19, using
+AdamW ($3\cdot10^{-3}$, cosine, 40 epochs, batch 256). The evaluation set is the
+real-performance benchmark of~\cite{henkel2019rl}, 16 pieces of Bach, Schumann,
+Mozart, Chopin and Mussorgsky spanning 25 pages and 4,149 onsets, played on a
+Yamaha AvantGrand N2 and captured with a room microphone. A held-out set of 80
+further pieces is rendered with a real impulse response and noise from 12 to
+0.5\,dB SNR.
 
 We report the ratio of onsets whose predicted position maps to within
 0.05 to 5\,s of the true time, 0.5\,s primary, with 95\% intervals bootstrapped
@@ -317,12 +332,11 @@ deviations.
 
 \begin{table*}[t]
 \centering
-\caption{Real piano recordings, 16 pieces and 4,149 onsets, Yamaha AvantGrand N2
-captured with a room microphone. Ratio of onsets tracked within each error
-threshold. $^\dagger$\,perception model trained with additional proprietary
-recordings, public checkpoint. Layout means system and bar annotations
-required at test time. $\Delta$ is the gain at 0.5\,s over the perception model
-the row is built on. Published figures as reported in~\cite{yang2026coda}.}
+\caption{Real piano recordings, 16 pieces and 4,149 onsets. Ratio of onsets
+tracked within each error threshold. Layout marks methods needing system and
+bar annotation at test time; $\Delta$ is the gain at 0.5\,s over the perception
+model the row is built on. $^\dagger$\,proprietary training data, public
+checkpoint. Published figures from~\cite{yang2026coda}.}
 \label{tab:main}
 \setlength{\tabcolsep}{4.2pt}
 {\small
@@ -353,10 +367,10 @@ CODA~\cite{yang2026coda}                         & .721 & .743 & .883 & .914 & .
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_analysis.pdf}
-  \caption{(a) Every step from the deployed rule to the ceiling on the real
-  recordings; \sys{} to the row given the true history is drift, above it is
-  ranking. (b) Each point is one of 48 trained models, accuracy on synthesised
-  validation audio against accuracy on the real recordings.}
+  \caption{(a) 80 held-out pieces under a measured room impulse response and
+  additive noise, 40,594 onsets per level. (b) Each point is one of 48 trained
+  decision models, accuracy on synthesised validation audio against accuracy on
+  the real recordings.}
   \label{fig:analysis}
 \end{figure}
 
@@ -369,7 +383,8 @@ data is entirely public, it passes the point at which the strongest one begins.
 A decision model does not need good proposals, only proposals containing the
 answer. On the 94 synthetic test pieces \sys{} reaches .955 where argmax
 reaches .893, and on 80 held-out pieces under a real impulse response and noise
-it beats the transition model at every level from 12 to 0.5\,dB.
+it beats the transition model at every level from 12 to 0.5\,dB
+(Fig.~\ref{fig:analysis}a).
 
 The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reaches
 .690 and .714 at 0.05 and 0.1\,s, below CODA's .721 and .743, because a
@@ -397,23 +412,23 @@ CYOLO~\cite{henkel2021eusipco}          & 3 & 71.3 & 72.5 & 91.6\,$\pm$\,1.4 \\
 CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
 CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\,0.9} \\
 \midrule
-\multicolumn{5}{l}{\emph{Decision model, on CYOLO-SB candidates}}\\
-residual, no fitted constants           & 3 & 80.0 & 86.5 & 88.7\,$\pm$\,0.9 \\
-without temporal history                & 3 & 80.0 & 86.5 & 83.7\,$\pm$\,0.4 \\
+\multicolumn{5}{l}{\emph{Decision model}, on CYOLO-SB candidates (80.0, 86.5)}\\
+residual, no fitted constants           & 3 &      &      & 88.7\,$\pm$\,0.9 \\
+without temporal history                & 3 &      &      & 83.7\,$\pm$\,0.4 \\
 \midrule
-\multicolumn{5}{l}{\emph{Image features $f_i$ read by the scorer}}\\
-FiLM-conditioned backbone               & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
-DINOv2~\cite{oquab2024dinov2}           & 1 & 80.0 & 86.5 & 90.9 \\
-none                                    & 1 & 80.0 & 86.5 & 90.9 \\
+\multicolumn{5}{l}{\emph{Image features} $f_i$, on CYOLO-SB candidates}\\
+FiLM-conditioned backbone               & 6 &      &      & 90.6\,$\pm$\,0.9 \\
+DINOv2~\cite{oquab2024dinov2}           & 1 &      &      & 90.9 \\
+none                                    & 1 &      &      & 90.9 \\
 \bottomrule
 \end{tabular}}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{Recovery from 41 discontinuities spliced into the real recordings,
-on CYOLO-SB+A candidates. rec@1 is the fraction first tracked correctly within
-1\,s, post the onsets tracked within 1\,s over the following 5\,s.}
+\caption{Recovery from 41 spliced discontinuities, CYOLO-SB+A candidates.
+rec@1 is the fraction first tracked correctly within 1\,s, post the onsets
+tracked within 1\,s over the next 5\,s.}
 \label{tab:jump}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
@@ -423,7 +438,7 @@ on CYOLO-SB+A candidates. rec@1 is the fraction first tracked correctly within
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 Decision rule & rec@1 & post & rec@1 & post \\
 \midrule
-argmax \eqref{eq:argmax}          & 0.27 & \textbf{0.27} & 0.15 & \textbf{0.26} \\
+argmax, Eq.~\ref{eq:argmax}       & 0.27 & \textbf{0.27} & 0.15 & \textbf{0.26} \\
 \sys{}                            & 0.00 & 0.08 & 0.00 & 0.09 \\
 \quad $+$ silence trigger         & 0.15 & 0.17 & 0.00 & 0.09 \\
 \quad $+$ confidence trigger      & 0.10 & 0.26 & 0.02 & 0.23 \\
@@ -451,8 +466,8 @@ $52\times52$ grid, against a control retrained identically, gives \tbd{.}.
 Removing the features computed against the previous
 decision costs 7.2 points, the largest single ablation here. Teacher forcing
 attributes two thirds of the remaining error to drift, since given the true previous
-position the same scorer reaches 98.0\% against the causal oracle's 99.6\%
-(Fig.~\ref{fig:analysis}a), which locates the remaining difficulty in the
+position the same scorer reaches 98.0\% against the causal oracle's 99.6\%,
+which locates the remaining difficulty in the
 sequence of decisions rather than in the image.
 
 Across 48 trained
@@ -492,7 +507,7 @@ The synthetic-to-real gap in sheet-image score following has been read as a
 failure of perception and answered with better audio, more data and new
 architectures. The measurement reported here places it elsewhere. On real
 room-microphone recordings the detector already proposes a correct position at
-every scored onset, and an oracle held to the same real-time commitments
+every scored onset, and an oracle held to the same realtime commitments
 recovers almost all of what the deployed rule loses, so the information needed
 to follow the performance survives the room and what fails is the rule that
 reads a position out of it.
