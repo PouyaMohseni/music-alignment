@@ -78,14 +78,14 @@ measure what is achievable.
 
 The remaining difficulty is that the two sides are different kinds of object.
 The performance is audio, the score is an image, and there is no shared space
-in which to compare them. The literature answers this in three ways.
+in which to compare them, a mismatch the literature answers in three ways.
 
 \subsection{Related work}
 \label{ssec:related}
 
-One family converts the score. Optical music recognition turns the page into
-symbols, and a classical follower tracks the performance over a discrete set of
-score states. This line is mature, spanning online dynamic time
+One family converts the score, using optical music recognition to turn the page
+into symbols so that a classical follower can track the performance over a
+discrete set of score states. This line is mature, spanning online dynamic time
 warping~\cite{dixon2005match}, duration-focused probabilistic
 models~\cite{cont2010}, hidden semi-Markov models that absorb performer errors
 and arbitrary repeats~\cite{nakamura2015}, particle filters for rests and tempo
@@ -95,8 +95,8 @@ deviation~\cite{arzt2010}. Its weakness is the conversion, since optical music
 recognition remains error-prone on real scores~\cite{calvo2020omr} and the
 follower inherits every mistake.
 
-A second family converts the audio. The symmetric route transcribes the
-performance into notes and compares symbol to symbol. Recent work pairs
+A second family converts the audio instead, transcribing the performance into
+notes and comparing symbol to symbol. Recent work pairs
 real-time piano transcription with symbol-level tracking and reports strong
 accuracy~\cite{peter2025}, though the follower is then bounded by the
 transcriber, which restricts it to instruments transcription handles well.
@@ -130,9 +130,9 @@ architecture~\cite{yang2026coda}.
 \subsection{Diagnosis}
 \label{ssec:diagnosis}
 
-We tested that premise before accepting it. A conditional detector does not
-produce a position directly. It scores thousands of candidate noteheads and
-reports the most confident one. Keeping the 256 most confident, we find that on
+We tested that premise before accepting it, starting from the observation that
+a conditional detector does not produce a position directly but scores
+thousands of candidate noteheads and reports the most confident one. Keeping the 256 most confident, we find that on
 real room-microphone recordings a candidate within the 0.5\,s tolerance is
 present at every one of 4,149 scored onsets. An oracle free to pick any of them
 is therefore perfect, but could not be run live. The one that matters must
@@ -213,7 +213,7 @@ to the next.
 
 \subsubsection{Candidate positions}
 
-A performance is processed in instants $t=1,\dots,T$. At each instant the
+A performance is processed in instants $t=1,\dots,T$, and at each one the
 backbone reads the audio so far and the current page and scores note boxes
 $b_i=(x_i,y_i,w_i,h_i)$ with confidence $o_i$; we keep the $K=256$ most
 confident, $\mathcal{C}_t$. Staves are concatenated along one horizontal axis,
@@ -228,8 +228,8 @@ previous choice $\hat u_{t-1}$, and nothing else.
 
 \subsubsection{Transition model}
 
-Selections must form a plausible trajectory. Between instants $\Delta_t$ frames
-apart the performer advances by a roughly predictable amount, so the
+Selections must form a plausible trajectory, and between instants $\Delta_t$
+frames apart the performer advances by a roughly predictable amount, so the
 displacement $d_i=u_i-\hat u_{t-1}$ is scored by a floored Gaussian whose mean
 grows with elapsed time,
 \begin{equation}
@@ -243,9 +243,9 @@ already recovers a large part of the gap on its own.
 
 \subsubsection{Set-based scorer}
 
-The transition model treats candidates independently given the history. What it
-cannot express is comparative, whether this box, among those on offer in this
-instant, looks like a real notehead rather than a spurious response. Each
+The transition model treats candidates independently given the history, so what
+it cannot express is comparative, whether this box, among those on offer in
+this instant, looks like a real notehead rather than a spurious response. Each
 candidate is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence
 relative to the instant's best, box geometry, motion relative to the history,
 relation to any coarse regions the backbone emits, and a neighbourhood group
@@ -268,8 +268,8 @@ candidate is judged against its competitors.
 
 \subsubsection{Training and inference}
 
-The decision is supervised listwise. With $\varepsilon_i$ the error in frames of
-candidate $i$, the target is $q_i\propto\exp(-\varepsilon_i/\tau)$, $\tau=3$,
+The decision is supervised listwise, so with $\varepsilon_i$ the error in frames
+of candidate $i$ the target is $q_i\propto\exp(-\varepsilon_i/\tau)$, $\tau=3$,
 and
 \begin{equation}
   \mathcal{L}=-\sum_{i\in\mathcal{C}_t} q_i\,\log\frac{\exp s_i}{\sum_{j}\exp s_j},
@@ -306,7 +306,7 @@ We report the ratio of onsets whose predicted position maps to within
 0.05 to 5\,s of the true time, 0.5\,s primary, with 95\% intervals bootstrapped
 over pieces~\cite{efron1993}.
 
-The four constants $(\mu,\sigma,J,\beta)$ are fitted leave-one-piece-out. For
+The four constants $(\mu,\sigma,J,\beta)$ are fitted leave-one-piece-out, so for
 each evaluation piece they are chosen on the other 15, pieces weighted equally,
 so none influences its own decoding, and the residual variant needs no fit at
 all. Seeds move results by about a point, so rows are seed means with
@@ -368,7 +368,7 @@ answer. On the 94 synthetic test pieces \sys{} reaches .955 where argmax
 reaches .893, and on 80 held-out pieces under a real impulse response and noise
 it beats the transition model at every level from 12 to 0.5\,dB.
 
-The tightest thresholds qualify this. On CYOLO-SB candidates \sys{} reaches
+The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reaches
 .690 and .714 at 0.05 and 0.1\,s, below CODA's .721 and .743, because a
 decision is only as precise as the boxes it chooses between. Deciding recovers
 which notehead, not where within it.
@@ -471,8 +471,8 @@ performance at random destinations, re-running perception on the spliced audio
 so its conditioning is genuinely wrong afterwards, and excluding jumps across a
 page boundary where state resets anyway, leaving 41.
 
-Table~\ref{tab:jump} reports a systematic failure. After a jump \sys{} is far
-worse than the rule it replaces, 0.08 against 0.27 of onsets tracked over the
+Table~\ref{tab:jump} reports a systematic failure, in which after a jump \sys{}
+is far worse than the rule it replaces, 0.08 against 0.27 of onsets tracked over the
 next five seconds, because the transition model holds the trajectory at a stale
 position. Suppressing it on detected silence helps where a break exists and not
 otherwise, as its design implies; triggering on the scorer's own confidence
