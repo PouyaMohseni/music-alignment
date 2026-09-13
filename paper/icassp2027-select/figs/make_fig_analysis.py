@@ -70,7 +70,7 @@ rows = ladder()
 xs = np.arange(len(SNRS))
 for label, k, col, mk, ls in SERIES:
     ax[0].plot(xs, [rows[s][k] for s in SNRS], color=col, marker=mk, ls=ls,
-               ms=3.0, lw=1.0, label=label, zorder=3)
+               ms=2.8, lw=1.0, label=label, zorder=3)
 ax[0].set_xticks(xs)
 ax[0].set_xticklabels(SNRS)
 ax[0].set_xlabel('SNR (dB)')
@@ -78,20 +78,33 @@ ax[0].set_ylabel('onsets $\\leq$0.5 s (\\%)' if False else 'onsets $\\leq$0.5 s 
 ax[0].set_title('(a) added noise', pad=2.5)
 ax[0].grid(lw=0.4, color='#dddddd', zorder=0)
 ax[0].set_axisbelow(True)
-ax[0].legend(frameon=False, handlelength=1.5, labelspacing=0.18,
-             borderpad=0.1, loc='lower left')
+# no in-axes placement survives here: the curves sweep the whole diagonal and
+# every corner is either occupied or too small. One shared strip under both
+# panels cannot collide with anything.
 for sp in ('top', 'right'):
     ax[0].spines[sp].set_visible(False)
 
 p = scatter_points()
+r = np.corrcoef(p[:, 0], p[:, 1])[0, 1]
+# The correlation alone reads as a weak trend. What the panel has to show is
+# the spread: half the models sit inside a 1.5-point validation band and still
+# differ by 19 points on real audio, which is the fact that makes selection on
+# a synthetic proxy arbitrary.
+LO, HI = 97.0, 98.5
+band = p[(p[:, 0] >= LO) & (p[:, 0] <= HI)]
+ax[1].axvspan(LO, HI, color='#f2b705', alpha=0.16, lw=0, zorder=1)
 ax[1].scatter(p[:, 0], p[:, 1], s=7, facecolor='#1b7f79', edgecolor='none',
               alpha=0.75, zorder=3)
-r = np.corrcoef(p[:, 0], p[:, 1])[0, 1]
-b, a = np.polyfit(p[:, 0], p[:, 1], 1)
-xx = np.linspace(p[:, 0].min(), p[:, 0].max(), 2)
-ax[1].plot(xx, a + b * xx, color='#c0392b', lw=1.0, zorder=4)
-ax[1].text(0.04, 0.94, f'$r={r:.2f}$, $n={len(p)}$', transform=ax[1].transAxes,
-           ha='left', va='top', fontsize=6.4)
+bx = HI + 0.35
+ax[1].annotate('', xy=(bx, band[:, 1].min()), xytext=(bx, band[:, 1].max()),
+               arrowprops=dict(arrowstyle='<->', lw=0.9, color='#c0392b'),
+               zorder=4)
+ax[1].text(bx - 0.25, 0.5 * (band[:, 1].min() + band[:, 1].max()),
+           f'{band[:, 1].max() - band[:, 1].min():.0f}\u2009pts',
+           color='#c0392b', fontsize=6.2, ha='right', va='center', rotation=90)
+ax[1].text(0.04, 0.06, f'$r={r:.2f}$, $n={len(p)}$', transform=ax[1].transAxes,
+           ha='left', va='bottom', fontsize=6.4)
+ax[1].set_xlim(p[:, 0].min() - 0.6, HI + 1.1)
 ax[1].set_xlabel('synthesised validation (%)')
 ax[1].set_ylabel('real recordings (%)')
 ax[1].set_title('(b) model selection', pad=2.5)
@@ -100,6 +113,10 @@ ax[1].set_axisbelow(True)
 for sp in ('top', 'right'):
     ax[1].spines[sp].set_visible(False)
 
+h, lb = ax[0].get_legend_handles_labels()
+fig.legend(h, lb, loc='lower center', bbox_to_anchor=(0.5, -0.10), ncol=4,
+           frameon=False, handlelength=1.6, columnspacing=1.3,
+           handletextpad=0.45, fontsize=6.2)
 fig.tight_layout(pad=0.2, w_pad=1.4)
 for ext in ('pdf', 'png'):
     fig.savefig(os.path.join(HERE, f'fig_analysis.{ext}'), bbox_inches='tight')
