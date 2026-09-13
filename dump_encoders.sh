@@ -11,6 +11,11 @@
 #
 #   sbatch dump_encoders.sh lstm|mamba|cnnmamba|dinov2|cnn
 #
+# The mamba and cnnmamba arms need --gres=gpu:1 on the command line: mamba_ssm
+# reaches for a CUDA kernel through triton on import and dies with "0 active
+# drivers" on a CPU node. The other three arms are plain convolutions and run
+# on CPU.
+#
 #   task 0 room (FEATK 256, clean)   1 valid   2-6 train shards c0-c4 (real IR)
 set -uo pipefail
 ARM=${1:?usage: dump_encoders.sh lstm|mamba|cnnmamba|dinov2|cnn}
