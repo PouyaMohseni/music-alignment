@@ -523,7 +523,15 @@ without retraining any of them and without layout annotation at test time.
 What the decision needs is its own temporal history rather than a better image
 representation, since three image representations including none at all give
 the same real-audio accuracy while removing the history costs more than any
-other ablation we ran. Two results temper this. Accuracy on synthesized audio
+other ablation we ran.
+
+The method applies where a follower discards a candidate set, which is what
+makes the detection-based family its natural target. CODA~\cite{yang2026coda}
+is not such a target, since its final stage regresses a continuous bar-local
+coordinate rather than choosing among proposals, and the sets it does select
+over, systems and bars, are supplied by layout annotation and already decoded
+with learned transition penalties and beam search. Comparing that decoder with
+ours over the same candidates is a worthwhile experiment and a different one. Two results temper this. Accuracy on synthesized audio
 barely predicts accuracy on real audio across 48 trained models, which makes
 model selection on a synthetic proxy unreliable for the whole field and not
 only for us. And the forward-motion assumption that makes the decision
