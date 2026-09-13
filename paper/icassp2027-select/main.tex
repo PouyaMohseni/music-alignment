@@ -24,27 +24,34 @@
 \maketitle
 
 \begin{abstract}
-Score following tracks a live performance against its score in real time,
-committing to a position at every instant with no lookahead. Doing it directly
-on a page of printed music removes the need for any symbolic transcription, but
-such systems work on synthesized audio and fail on real recordings, and closing
-that gap is the field's central open problem: the strongest published system tracks
-95.5\% of onsets within 0.5\,s on synthetic audio and 88.3\% on real piano
-recordings, and earlier systems fall much further. Every remedy proposed so far
-has treated the gap as a perception failure. We show it is not. On real
-recordings the perception model already proposes a correct position at every
-scored onset, and an oracle under the same real-time constraints, committing at
-each instant and never moving backwards, reaches 99.6\% where the deployed
-system reaches 80.0\%. We present
-\sys{}, which follows the score by deciding sequentially among the positions
-the page affords, combining a transition model over displacements with a
-set-based scorer that judges each position against its competitors. \sys{}
-tracks 94.4\% of onsets within 0.5\,s of real piano recordings against 88.3\%
-for the previous best, and holds that margin across three independently trained
-perception models. Analysis of the remaining error shows that the image
-representation is irrelevant while the temporal history is decisive, that
-accuracy on synthesized audio barely predicts accuracy on real audio, and that
-the forward-motion assumption fails at repeats.
+Score following aligns a live performance to its score in real time, committing
+to a position at every instant with no lookahead. The performance is audio and
+the score is an image, and most systems resolve that mismatch by collapsing the
+two into a single modality before aligning: optical music recognition converts
+the page into symbols, or transcription converts the audio into notes, and the
+alignment is then carried out within whichever modality survives. Each detour
+inherits the errors of its conversion, and optical music recognition in
+particular remains unreliable on real scores. Sheet-image score following keeps
+both modalities and learns the correspondence directly, and its strongest
+systems condition a visual detector on the audio. What limits them is
+annotation: training needs performances aligned to notehead coordinates on the
+page, costly enough that nearly all of it is synthesized, so these systems work
+on synthesized audio and lose much of their accuracy on real recordings.
+Closing that gap is the field's central open problem, and every remedy proposed
+for it has treated the gap as a failure of perception. We show it is not. On
+real recordings a conditional YOLO detector already proposes a correct position
+at every scored onset, and an oracle under the same real-time constraints,
+committing at each instant and never moving backwards, reaches 99.6\% where the
+deployed rule reaches 80.0\%. We therefore recast the task as sequential
+selection over the candidates the detector already emits, combining a
+parameter-free transition model with a set-based scorer that judges each
+candidate against its competitors in the same instant. On real piano recordings
+this tracks 94.4\% of onsets within 0.5\,s against 88.3\% for the best
+published system, and holds that margin across three independently trained
+detectors. Analysis of the remaining error shows that the image representation
+is irrelevant while the temporal history is decisive, that accuracy on
+synthesized audio barely predicts accuracy on real audio, and that the
+forward-motion assumption fails at repeats.
 \end{abstract}
 
 \begin{keywords}
@@ -68,13 +75,18 @@ the whole recording is in hand and a global method such as dynamic time warping
 settles every position at once~\cite{dixon2005match}. Everything below respects
 this constraint, including the oracles we use to measure what is achievable.
 
-The other requirement is the score itself. Classical followers need it
-symbolic and track the performance over a discrete set of score
-states~\cite{cont2010,nakamura2015}, but most music exists only as printed
-paper and optical music recognition is still too error-prone to supply that
-form automatically~\cite{calvo2020omr}. Sheet-image score following drops the
-requirement: the system reads a page of pixels and a stream of audio and
-reports a position on the page~\cite{dorfer2016,henkel2019rl,henkel2020cunet,%
+The other difficulty is that the two sides are different kinds of object. The
+performance is audio; the score is an image. The established response is to
+convert one into the other and align within a single modality. Going one way,
+optical music recognition turns the page into symbols and a classical follower
+tracks the performance over a discrete set of score
+states~\cite{cont2010,nakamura2015}. Going the other, transcription turns the
+audio into notes and the comparison becomes symbolic. Either detour inherits
+the errors of its conversion, and optical music recognition in particular is
+still too unreliable on real scores to be the foundation of a live
+system~\cite{calvo2020omr}. Sheet-image score following converts neither side:
+it reads a page of pixels and a stream of audio and learns the correspondence
+between them directly~\cite{dorfer2016,henkel2019rl,henkel2020cunet,%
 henkel2021eusipco,henkel2021frontiers,yang2026coda}.
 
 \textbf{The gap.} Training such a system needs performances aligned to
