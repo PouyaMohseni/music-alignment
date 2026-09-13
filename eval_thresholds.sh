@@ -8,7 +8,7 @@
 #SBATCH --output=/project/def-ichiro/pmohseni/music-alignment/results/evalth_%a-%A.log
 set -uo pipefail
 cd /project/def-ichiro/pmohseni/music-alignment
-module load gcc python/3.10 opencv/4.10.0
+module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 export PYTHONPATH=/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-} PYTHONUNBUFFERED=1 OMP_NUM_THREADS=4
 M=/scratch/pmohseni/omr/scorer; O=/scratch/pmohseni/omr

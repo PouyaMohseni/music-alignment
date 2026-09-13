@@ -20,7 +20,7 @@
 set -uo pipefail
 ARM=${1:?usage: dump_encoders.sh lstm|mamba|cnnmamba|dinov2|cnn}
 cd /project/def-ichiro/pmohseni/music-alignment
-module load gcc python/3.10 opencv/4.10.0
+module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd

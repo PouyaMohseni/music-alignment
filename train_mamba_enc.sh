@@ -34,7 +34,7 @@ esac
 echo "Job started on $(hostname) at $(date), arm=$ARM"
 nvidia-smi | head -12
 CFG=${2:-cyolo_sb}
-module load gcc python/3.10 opencv/4.10.0
+module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 python -c "import torch,cv2;print('torch',torch.__version__,'cuda',torch.cuda.is_available())" \
   || { echo "FATAL: venv_cyolo broken"; exit 1; }

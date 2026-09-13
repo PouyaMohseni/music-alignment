@@ -11,7 +11,7 @@
 set -uo pipefail
 ARM=${1:?usage: train_enc_scorers.sh <arm>}
 cd /project/def-ichiro/pmohseni/music-alignment
-module load gcc python/3.10 opencv/4.10.0
+module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 export PYTHONPATH=/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=8

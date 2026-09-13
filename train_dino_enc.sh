@@ -28,7 +28,7 @@ export DINO_NOSHIFT=1
 echo "Job started on $(hostname) at $(date), arm=$ARM"
 nvidia-smi | head -12
 CFG=${2:-cyolo_sb}
-module load gcc python/3.10 opencv/4.10.0
+module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
