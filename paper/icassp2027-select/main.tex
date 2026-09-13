@@ -25,33 +25,23 @@
 
 \begin{abstract}
 Score following aligns a live performance to its score in real time, committing
-to a position at every instant with no lookahead. The performance is audio and
-the score is an image, and most systems resolve that mismatch by collapsing the
-two into a single modality before aligning: optical music recognition converts
-the page into symbols, or transcription converts the audio into notes, and the
-alignment is then carried out within whichever modality survives. Each detour
-inherits the errors of its conversion, and optical music recognition in
-particular remains unreliable on real scores. Sheet-image score following keeps
-both modalities and learns the correspondence directly, and its strongest
-systems condition a visual detector on the audio. What limits them is
-annotation: training needs performances aligned to notehead coordinates on the
-page, costly enough that nearly all of it is synthesized, so these systems work
-on synthesized audio and lose much of their accuracy on real recordings.
-Closing that gap is the field's central open problem, and every remedy proposed
-for it has treated the gap as a failure of perception. We show it is not. On
-real recordings a conditional YOLO detector already proposes a correct position
-at every scored onset, and an oracle under the same real-time constraints,
-committing at each instant and never moving backwards, reaches 99.6\% where the
-deployed rule reaches 80.0\%. We therefore recast the task as sequential
-selection over the candidates the detector already emits, combining a
-parameter-free transition model with a set-based scorer that judges each
-candidate against its competitors in the same instant. On real piano recordings
-this tracks 94.4\% of onsets within 0.5\,s against 88.3\% for the best
-published system, and holds that margin across three independently trained
-detectors. Analysis of the remaining error shows that the image representation
-is irrelevant while the temporal history is decisive, that accuracy on
-synthesized audio barely predicts accuracy on real audio, and that the
-forward-motion assumption fails at repeats.
+to a position at every instant with no lookahead. Doing it directly on a
+sheet-music image converts neither modality, avoiding both optical music
+recognition and transcription, but such systems are trained on synthesized
+audio for want of annotated real recordings and lose much of their accuracy on
+a real instrument in a real room. Closing that gap is the field's central open
+problem, and every remedy proposed for it has treated the gap as a failure of
+perception. We show it is not. On real recordings a conditional YOLO detector
+already proposes a correct position at every scored onset, and an oracle under
+the same real-time constraints, committing at each instant and never moving
+backwards, reaches 99.6\% where the deployed rule reaches 80.0\%. We therefore
+recast the task as sequential selection over the candidates the detector
+already emits, combining a parameter-free transition model with a set-based
+scorer that judges each candidate against its competitors. On real piano
+recordings this tracks 94.4\% of onsets within 0.5\,s against 88.3\% for the
+best published system, and holds that margin across three independently trained
+detectors. What the decision needs, we find, is its own temporal history rather
+than a better image representation.
 \end{abstract}
 
 \begin{keywords}
