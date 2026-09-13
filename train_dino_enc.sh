@@ -48,7 +48,7 @@ python /project/def-ichiro/pmohseni/music-alignment/extensions/hooks/run_train_d
     --config "$CY/cyolo_score_following/models/configs/${CFG}.yaml" \
     --augment --ir_path "$IR" \
     --dump_root "$OUT/params" --log_root "$OUT/runs" \
-    --tag ${CFG}_${ARM} --num_workers 2 $PARAM_FLAG
+    --tag ${CFG}_${ARM} --num_workers 6 $PARAM_FLAG
 STATUS=$?
 find "$OUT/params" -name "*.pt" -printf "  ckpt %p (%s bytes)\n" 2>/dev/null | head -3
 echo "exit $STATUS at $(date)"
