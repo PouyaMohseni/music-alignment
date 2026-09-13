@@ -64,69 +64,103 @@ music information retrieval
 
 A musician plays from a printed page; a machine listens, looks at the same
 page, and at every moment reports where in the music the performer has got to.
-That is score following, and it is what automatic page
-turning~\cite{arzt2008}, live computer accompaniment~\cite{dannenberg1984} and
+That is \emph{score following}~\cite{orio2003}, and it is what automatic page
+turning~\cite{arzt2008}, live computer
+accompaniment~\cite{dannenberg1984,dannenberg2006,raphael2010} and
 score-synchronised visualisation are built on.
 
-What makes it hard is that it happens \emph{during} the performance: the system
-sees only what has been played, commits to a position immediately, and never
-revises it. That is the difference from offline audio-to-score alignment, where
-the whole recording is in hand and a global method such as dynamic time warping
-settles every position at once~\cite{dixon2005match}. Everything below respects
-this constraint, including the oracles we use to measure what is achievable.
+\textbf{Real time is the constraint.} Aligning a performance to its score
+offline is a different problem, usually called audio-to-score alignment or
+music synchronisation: the whole recording is in hand, a global method such as
+dynamic time warping settles every position at once~\cite{dixon2005match}, and
+even repeats and jumps can be resolved after the fact~\cite{shan2020,morsi2022}.
+Offline alignment underpins cross-modal retrieval and piece identification,
+where a recording is matched against a collection of
+scores~\cite{dorfer2018msmd}. Score following, also called music
+tracking~\cite{arzt2010}, gets none of that: it sees only what has been played,
+commits to a position immediately, and never revises it. Everything below
+respects this constraint, including the oracles we use to measure what is
+achievable.
 
-The other difficulty is that the two sides are different kinds of object. The
-performance is audio; the score is an image. The established response is to
-convert one into the other and align within a single modality. Going one way,
-optical music recognition turns the page into symbols and a classical follower
-tracks the performance over a discrete set of score
-states~\cite{cont2010,nakamura2015}. Going the other, transcription turns the
-audio into notes and the comparison becomes symbolic. Either detour inherits
-the errors of its conversion, and optical music recognition in particular is
-still too unreliable on real scores to be the foundation of a live
-system~\cite{calvo2020omr}. Sheet-image score following converts neither side:
-it reads a page of pixels and a stream of audio and learns the correspondence
-between them directly~\cite{dorfer2016,henkel2019rl,henkel2020cunet,%
-henkel2021eusipco,henkel2021frontiers,yang2026coda}.
+\textbf{Two modalities.} The remaining difficulty is that the two sides are
+different kinds of object. The performance is audio, the score is an image, and
+there is no shared space in which to compare them. The literature answers this
+in three ways.
 
-\textbf{The gap.} Training such a system needs performances aligned to
-notehead coordinates on the page, an annotation that is expensive enough that
-essentially all of it is produced by synthesis: a score is rendered to MIDI, the
-MIDI to audio, and the alignment comes for free. Systems trained this way work
-on synthesized audio and degrade sharply on a real instrument in a real room.
-The published figures are stark. Between synthetic audio and real piano
-recordings of the same pieces, CUNet~\cite{henkel2020cunet} falls from 85.5\%
-of onsets tracked within 0.5\,s to 22.4\%,
-CYOLO-SB~\cite{henkel2021frontiers} from 89.3\% to 79.9\%, and the strongest
-published system CODA~\cite{yang2026coda} from 95.5\% to 88.3\%. Every remedy
-proposed has been a perception remedy: reverberant
-augmentation~\cite{henkel2021eusipco}, extra proprietary
-recordings~\cite{henkel2021frontiers}, or a new end-to-end
+\subsection{Related work}
+\label{ssec:related}
+
+\textbf{Convert the score.} Optical music recognition turns the page into
+symbols, and a classical follower tracks the performance over a discrete set of
+score states. This line is mature: online dynamic time
+warping~\cite{dixon2005match}, duration-focused probabilistic
+models~\cite{cont2010}, hidden semi-Markov models absorbing performer errors
+and arbitrary repeats~\cite{nakamura2015}, particle filters for rests and tempo
+change~\cite{korzeniowski2013}, switching state-space models with hidden
+tempo~\cite{jiang2020}, and multi-agent tracking for robustness to arbitrary
+deviation~\cite{arzt2010}. Its weakness is the conversion: optical music
+recognition remains error-prone on real scores~\cite{calvo2020omr} and the
+follower inherits every mistake.
+
+\textbf{Convert the audio.} The symmetric route transcribes the performance
+into notes and compares symbol to symbol. Recent work pairs real-time piano
+transcription with symbol-level tracking and reports strong
+accuracy~\cite{peter2025}, but the follower is then bounded by the transcriber,
+which restricts it to instruments transcription handles well.
+
+\textbf{Convert neither.} Sheet-image score following learns the correspondence
+between audio and pixels directly. Dorfer et al.~\cite{dorfer2016} first
+classified position into staff-level buckets on image crops; reinforcement
+learning then framed tracking as an agent navigating a score
+strip~\cite{dorfer2018rl,henkel2019rl}; CUNet~\cite{henkel2020cunet} moved to
+full pages, emitting an audio-conditioned segmentation whose centre of mass
+gives the position; and CYOLO~\cite{henkel2021eusipco} recast it as
+audio-conditioned object detection, with CYOLO-SB~\cite{henkel2021frontiers}
+adding heads for the enclosing system and bar. The concurrent
+CODA~\cite{yang2026coda} cascades system, bar and note selection over the
+layout regions of an annotated score, with beam search and learned transition
+penalties. Beneath these differences the field has settled on one visual front
+end: a convolutional network over the page whose feature maps are modulated by
+feature-wise linear modulation~\cite{perez2018film},
+$f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z)$, from a vector $z$ encoding the recent
+audio. Our experiments use three separately trained instances of it, so the
+conclusions are about the family and not one checkpoint.
+
+\textbf{The gap.} Training any of these needs performances aligned to notehead
+coordinates on the page, an annotation costly enough that nearly all of it is
+synthesized: a score is rendered to MIDI, the MIDI to audio, and the alignment
+comes for free. The result is systems that work on synthesized audio and lose
+much of their accuracy on a real instrument in a real room.
+CUNet~\cite{henkel2020cunet} falls from 85.5\% of onsets tracked within 0.5\,s
+to 22.4\%, CYOLO-SB~\cite{henkel2021frontiers} from 89.3\% to 79.9\%, and
+CODA~\cite{yang2026coda} from 95.5\% to 88.3\%. Closing this gap is the field's
+central open problem, and every remedy proposed for it has been a perception
+remedy: reverberant augmentation~\cite{henkel2021eusipco}, extra proprietary
+recordings~\cite{henkel2021frontiers}, or a new
 architecture~\cite{yang2026coda}.
 
-\textbf{Perception is not the bottleneck.} We tested that premise before
-accepting it. A conditional detector for this task does not produce a position
-directly; it scores thousands of candidate noteheads on the page and reports
-the most confident one. Keeping the 256 most confident, we find that on real
-room-microphone recordings a candidate within the 0.5\,s tolerance is present
-at \emph{every one} of 4,149 scored onsets. An oracle free to pick any of them
-is therefore perfect, but that oracle could not be run live; the one that
-matters must commit at each instant and may never move backwards, exactly as a
-deployed follower must, and it still reaches 99.6\%. The deployed rule reaches
-80.0\% (Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real
-audio survive the real-time constraint and are recoverable from what the model
+\subsection{Perception is not the bottleneck}
+
+We tested that premise before accepting it. A conditional detector does not
+produce a position directly; it scores thousands of candidate noteheads and
+reports the most confident one. Keeping the 256 most confident, we find that on
+real room-microphone recordings a candidate within the 0.5\,s tolerance is
+present at \emph{every one} of 4,149 scored onsets. An oracle free to pick any
+of them is therefore perfect, but could not be run live; the one that matters
+must commit at each instant and never move backwards, exactly as a deployed
+follower must, and it still reaches 99.6\%. The deployed rule reaches 80.0\%
+(Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio
+survive the real-time constraint and are recoverable from what the model
 already saw. The room degrades the confidences, not the evidence.
 
-\textbf{This paper.} We therefore treat sheet-image score following as a
-sequential decision over the positions the page affords, rather than as the
-regression of a coordinate. \sys{} makes that decision with two parts: a
-transition model scoring a displacement against how much time has passed, and a
-set-based scorer judging each candidate against its competitors in the same
-instant, trained listwise on synthesized audio alone. The decision is causal
-and greedy, with no lookahead and no beam, and costs 1.25\,ms per instant on a
-single CPU thread against the 50\,ms available at 20\,frames per second. On
-real piano recordings \sys{} tracks 94.4\% of onsets within 0.5\,s, against
-88.3\% for the best published system.
+We therefore recast sheet-image score following as a sequential decision over
+the positions the page affords, rather than the regression of a coordinate.
+\sys{} makes that decision with two parts: a transition model scoring a
+displacement against how much time has passed, and a set-based scorer judging
+each candidate against its competitors in the same instant, trained listwise on
+synthesized audio alone. The decision is causal and greedy, with no lookahead
+and no beam, and costs 1.25\,ms per instant on a single CPU thread against the
+50\,ms available at 20\,frames per second.
 
 Our contributions are: (i)~evidence, from candidate-set oracles, that this gap
 is a decision failure and not a perception failure; (ii)~\sys{}, which acts on
@@ -134,31 +168,6 @@ it and sets a new best on real recordings by a margin holding across three
 independently trained perception models; (iii)~an analysis of what remains,
 covering the irrelevance of the image representation, the unreliability of
 synthesized audio for model selection, and the failure at discontinuities.
-
-\section{Related work}
-\label{sec:related}
-
-\textbf{Sheet-image score following.} Three approaches have been tried.
-\emph{Dense localizers} treat the page as a canvas: MM-Loc~\cite{dorfer2016}
-and CUNet~\cite{henkel2020cunet} emit an audio-conditioned heatmap and read a
-coordinate off its centre of mass. \emph{Agents} treat it as control: a
-reinforcement-learning policy~\cite{henkel2019rl} moves a reading head, rewarded
-for staying aligned. \emph{Conditional detectors} treat it as a query:
-CYOLO~\cite{henkel2021eusipco} encodes the recent audio into a vector and runs
-object detection, so the audio asks which part of the page it sounds like, and
-CYOLO-SB~\cite{henkel2021frontiers} adds heads for the enclosing system and
-bar. The concurrent CODA~\cite{yang2026coda} cascades system, bar and note
-selection over the layout regions of an annotated score, which it requires at
-test time.
-
-\textbf{A common perception module.} Beneath these differences the field has
-settled on one visual front end: a convolutional network reads the page and its
-feature maps are modulated by feature-wise linear
-modulation~\cite{perez2018film}, $f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z)$, from
-a vector $z$ encoding the recent audio, in CYOLO's downscale and upscale blocks
-and at the deeper stages of CODA's backbone. Our diagnosis concerns that
-module, and our experiments use three separately trained instances of it, so
-the conclusions are about the family and not one checkpoint.
 
 \begin{figure}[t]
   \centering

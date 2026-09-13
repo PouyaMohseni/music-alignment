@@ -1,5 +1,11 @@
 \begin{thebibliography}{10}
 
+\bibitem{orio2003}
+Nicola Orio, Serge Lemouton, and Diemo Schwarz,
+\newblock ``Score following: State of the art and new developments,''
+\newblock in {\em Proc. International Conference on New Interfaces for Musical
+  Expression (NIME)}, 2003, pp. 36--41.
+
 \bibitem{arzt2008}
 Andreas Arzt, Gerhard Widmer, and Simon Dixon,
 \newblock ``Automatic page turning for musicians via real-time machine
@@ -12,11 +18,49 @@ Roger~B. Dannenberg,
 \newblock ``An on-line algorithm for real-time accompaniment,''
 \newblock in {\em Proc. International Computer Music Conference (ICMC)}, 1984.
 
+\bibitem{dannenberg2006}
+Roger~B. Dannenberg and Christopher Raphael,
+\newblock ``Music score alignment and computer accompaniment,''
+\newblock {\em Communications of the ACM}, vol. 49, no. 8, pp. 38--43, 2006.
+
+\bibitem{raphael2010}
+Christopher Raphael,
+\newblock ``Music plus one and machine learning,''
+\newblock in {\em Proc. International Conference on Machine Learning (ICML)},
+  2010, pp. 21--28.
+
 \bibitem{dixon2005match}
 Simon Dixon and Gerhard Widmer,
 \newblock ``{MATCH}: A music alignment tool chest,''
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2005.
+
+\bibitem{shan2020}
+Mengyi Shan and TJ~Tsai,
+\newblock ``Improved handling of repeats and jumps in audio--sheet image
+  synchronization,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2020, pp. 62--69.
+
+\bibitem{morsi2022}
+Alia Morsi and Xavier Serra,
+\newblock ``Bottlenecks and solutions for audio to score alignment research,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2022.
+
+\bibitem{dorfer2018msmd}
+Matthias Dorfer, Jan Haji{\v{c}}~jr., Andreas Arzt, Harald Frostel, and Gerhard
+  Widmer,
+\newblock ``Learning audio-sheet music correspondences for cross-modal
+  retrieval and piece identification,''
+\newblock {\em Transactions of the International Society for Music Information
+  Retrieval}, vol. 1, no. 1, 2018.
+
+\bibitem{arzt2010}
+Andreas Arzt and Gerhard Widmer,
+\newblock ``Towards effective `any-time' music tracking,''
+\newblock in {\em Proc. Starting AI Researchers' Symposium (STAIRS)}, 2010, pp.
+  24--36.
 
 \bibitem{cont2010}
 Arshia Cont,
@@ -33,16 +77,43 @@ Eita Nakamura, Philippe Cuvillier, Arshia Cont, Nobutaka Ono, and Shigeki
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2015, pp. 392--398.
 
+\bibitem{korzeniowski2013}
+Filip Korzeniowski, Florian Krebs, Andreas Arzt, and Gerhard Widmer,
+\newblock ``Tracking rests and tempo changes: Improved score following with
+  particle filters,''
+\newblock in {\em Proc. International Computer Music Conference (ICMC)}, 2013.
+
+\bibitem{jiang2020}
+Yucong Jiang and Christopher Raphael,
+\newblock ``Score following with hidden tempo using a switching state-space
+  model,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2020, pp. 693--699.
+
 \bibitem{calvo2020omr}
 Jorge Calvo-Zaragoza, Jan Haji{\v{c}}~jr., and Alexander Pacha,
 \newblock ``Understanding optical music recognition,''
 \newblock {\em ACM Computing Surveys}, vol. 53, no. 4, 2020.
+
+\bibitem{peter2025}
+Silvan Peter, Patricia Hu, and Gerhard Widmer,
+\newblock ``Pairing real-time piano transcription with symbol-level tracking
+  for precise and robust score following,''
+\newblock in {\em Proc. Sound and Music Computing Conference (SMC)}, 2025, pp.
+  190--196.
 
 \bibitem{dorfer2016}
 Matthias Dorfer, Andreas Arzt, and Gerhard Widmer,
 \newblock ``Towards score following in sheet music images,''
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2016.
+
+\bibitem{dorfer2018rl}
+Matthias Dorfer, Florian Henkel, and Gerhard Widmer,
+\newblock ``Learning to listen, read, and follow: Score following as a
+  reinforcement learning game,''
+\newblock in {\em Proc. International Society for Music Information Retrieval
+  Conference (ISMIR)}, 2018.
 
 \bibitem{henkel2019rl}
 Florian Henkel, Stefan Balke, Matthias Dorfer, and Gerhard Widmer,
@@ -100,14 +171,6 @@ Samy Bengio, Oriol Vinyals, Navdeep Jaitly, and Noam Shazeer,
   networks,''
 \newblock in {\em Advances in Neural Information Processing Systems (NeurIPS)},
   2015.
-
-\bibitem{dorfer2018msmd}
-Matthias Dorfer, Jan Haji{\v{c}}~jr., Andreas Arzt, Harald Frostel, and Gerhard
-  Widmer,
-\newblock ``Learning audio-sheet music correspondences for cross-modal
-  retrieval and piece identification,''
-\newblock {\em Transactions of the International Society for Music Information
-  Retrieval}, vol. 1, no. 1, 2018.
 
 \bibitem{traer2016}
 James Traer and Josh~H. McDermott,
