@@ -392,11 +392,10 @@ nothing on real audio. \textbf{Nor the encoders.} We rebuilt the perception mode
 audio encoder twice: a frozen MERT-95M tower~\cite{li2024mert} with only a
 projection trained, which reaches 46.2 against 90.6 and overfits 12.6-fold on
 the 353 training pieces, and the two-layer causal Mamba of~\cite{yang2026coda}
-trained from scratch as they train it, which reaches \tbd{.}. The two are not
-matched on pretraining and fail differently, one on generalisation and one on
-capacity, and arrive at the same place. Replacing the \emph{visual} stem with
-frozen DINOv2-base patches on the identical $52\times52$ grid, against a
-control retrained under the same conditions, gives \tbd{.}.
+trained from scratch as they train it, which reaches \tbd{.}. The two are not matched on pretraining and fail
+differently, on generalisation and on capacity, arriving at the same place.
+Replacing the \emph{visual} stem with frozen DINOv2-base patches on the same
+$52\times52$ grid, against a control retrained identically, gives \tbd{.}.
 
 \textbf{The history.} Removing the features computed against the previous
 decision costs 7.2 points, the largest single ablation here. Teacher forcing
