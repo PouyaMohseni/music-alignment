@@ -388,9 +388,15 @@ feature, DINOv2 patch features~\cite{oquab2024dinov2} on the same grid, or no
 image feature at all yields 90.6, 90.9 and 90.9, a spread well inside the
 0.9-point seed deviation. On synthesized validation audio the same three differ
 by 3.4 points, so those features are learnable and useful there and worth
-nothing on real audio. Replacing the perception model's audio encoder does not help either: retrained
-with a MERT tower~\cite{li2024mert} it reaches 46.2 against 90.6, and with the
-Mamba encoder of~\cite{yang2026coda}, \tbd{pending}. The oracle predicted this.
+nothing on real audio. \textbf{Nor the encoders.} We rebuilt the perception model with a different
+audio encoder twice: a frozen MERT-95M tower~\cite{li2024mert} with only a
+projection trained, which reaches 46.2 against 90.6 and overfits 12.6-fold on
+the 353 training pieces, and the two-layer causal Mamba of~\cite{yang2026coda}
+trained from scratch as they train it, which reaches \tbd{.}. The two are not
+matched on pretraining and fail differently, one on generalisation and one on
+capacity, and arrive at the same place. Replacing the \emph{visual} stem with
+frozen DINOv2-base patches on the identical $52\times52$ grid, against a
+control retrained under the same conditions, gives \tbd{.}.
 
 \textbf{The history.} Removing the features computed against the previous
 decision costs 7.2 points, the largest single ablation here. Teacher forcing
