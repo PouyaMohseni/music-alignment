@@ -72,7 +72,7 @@ def main():
     cand = z[f'{key}||cand'][off[k]:off[k + 1]]
 
     du = _data_utils()
-    padded, _, _, coords, _, _, _, _, _, _ = du.load_piece(DATA, piece)
+    padded, _, _, coords, _, systems, _, _, _, _ = du.load_piece(DATA, piece)
     sc, aps = staff_tables(coords, page)
     y = cand[:, 1]
     x = cand[:, 0] - aps[np.argmin(np.abs(sc[None, :] - y[:, None]), 1)]
@@ -87,17 +87,22 @@ def main():
     img = padded[page]
     xs = [xb, xo, xg]
     ys = [yb, yo, yg]
-    # MSMD rasterises a page at 1181x835 and no higher-resolution source
-    # ships with it, so the only way to put enough pixels behind a 3.35 in
-    # figure is to crop wide: 300 px blown up to column width is 90 dpi and
-    # the noteheads turn to mush. ~700 px lands near 210 dpi.
-    cx = 0.5 * (min(xs) + max(xs))
-    x0, x1 = max(cx - 350, 0), min(cx + 350, img.shape[1])
-    if x1 - x0 < 700:
-        x0, x1 = max(x1 - 700, 0), min(x0 + 700, img.shape[1])
-    y0, y1 = max(min(ys) - 40, 0), min(max(ys) + 40, img.shape[0])
+    # Crop to WHOLE systems. Cutting a system mid-bar makes the figure look
+    # like a detail shot of nothing, and the reader cannot tell that the two
+    # boxes are on different lines of the same page. The system boxes on this
+    # page give the true extent; x spans every system so no line is clipped,
+    # y spans only the systems the marks fall on.
+    pg_sys = [q for q in systems if q['page_nr'] == page]
+    sx0 = min(q['x'] - q['w'] / 2 for q in pg_sys)
+    sx1 = max(q['x'] + q['w'] / 2 for q in pg_sys)
+    keep = [q for q in pg_sys
+            if q['y'] - q['h'] / 2 - 30 <= max(ys) and q['y'] + q['h'] / 2 + 30 >= min(ys)]
+    sy0 = min(q['y'] - q['h'] / 2 for q in keep)
+    sy1 = max(q['y'] + q['h'] / 2 for q in keep)
+    x0, x1 = max(sx0 - 14, 0), min(sx1 + 14, img.shape[1])
+    y0, y1 = max(sy0 - 16, 0), min(sy1 + 16, img.shape[0])
 
-    fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)))
+    fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)), dpi=600)
     ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='antialiased')
     # outlined boxes at this scale vanished into the staff lines; a translucent
     # fill is what makes "the answer was in the set" visible at column width
@@ -109,8 +114,13 @@ def main():
                            lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
                            lw=1.5, ec='#138D90', label=f'CANDOR, {eo:.2f}\u2009s off'))
-    ax.add_patch(Circle((xg, yg), 14, fill=False, lw=1.2, ec='k', label='true position'))
-    ax.plot([], [], marker='s', ls='none', ms=4, color='#f2b705', alpha=0.7, label=f'{TOPN} note candidates')
+    ax.add_patch(Circle((xg, yg), 15, fill=False, lw=1.3, ec='k'))
+    # legend proxies: a Patch renders as a rectangle whatever shape it is, so
+    # the ring was advertised as a square. Draw the handles as markers.
+    ax.plot([], [], marker='o', ls='none', ms=5, mfc='none', mec='k', mew=1.1,
+            label='true position')
+    ax.plot([], [], marker='s', ls='none', ms=5, color='#f2b705', alpha=0.8,
+            label=f'{TOPN} note candidates')
     ax.set_xlim(x0, x1)
     ax.set_ylim(y1, y0)
     ax.set_xticks([])
@@ -121,7 +131,7 @@ def main():
               frameon=False, handlelength=1.1, columnspacing=0.9,
               handletextpad=0.4, labelspacing=0.25, borderpad=0.0)
     fig.savefig(OUT + '.pdf', bbox_inches='tight', pad_inches=0.01)
-    fig.savefig(OUT + '.png', dpi=400, bbox_inches='tight', pad_inches=0.01)
+    fig.savefig(OUT + '.png', dpi=600, bbox_inches='tight', pad_inches=0.01)
     print('wrote', OUT + '.pdf')
 
 
