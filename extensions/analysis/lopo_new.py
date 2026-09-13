@@ -48,6 +48,14 @@ JOBS = [
     ('image: DINOv2',          f'{M}/abl/dino_s*.pt', f'{O}/candf_dino/room.npz', None),
     ('audio: MERT',            f'{M}/abl/h1_s*.pt', f'{O}/candh1/room.npz', None),
     ('audio+image swap',       f'{M}/abl/h1dino_s*.pt', f'{O}/candh1_dino/room.npz', None),
+    # the five retrained encoder arms: three audio (LSTM control, CODA's Mamba
+    # tower, CNN keeping only the Mamba recurrence) and two image (DINOv2 stem
+    # against its own control, both without the page shift)
+    ('encoder: LSTM control',  f'{M}/enc/lstm_s*.pt',     f'{O}/cand_enc_lstm/room.npz', None),
+    ('encoder: Mamba tower',   f'{M}/enc/mamba_s*.pt',    f'{O}/cand_enc_mamba/room.npz', None),
+    ('encoder: CNN+Mamba',     f'{M}/enc/cnnmamba_s*.pt', f'{O}/cand_enc_cnnmamba/room.npz', None),
+    ('encoder: DINOv2 stem',   f'{M}/enc/dinov2_s*.pt',   f'{O}/cand_enc_dinov2/room.npz', None),
+    ('encoder: CNN control',   f'{M}/enc/cnn_s*.pt',      f'{O}/cand_enc_cnn/room.npz', None),
 ]
 
 

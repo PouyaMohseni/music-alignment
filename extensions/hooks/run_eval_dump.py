@@ -23,6 +23,14 @@ from extensions.hooks.h1_eval_patch import maybe_patch_h1
 
 maybe_patch_h1()     # MERT-audio detector, only when H1_EMB_MAP is set
 
+from extensions.hooks.mamba_patch import maybe_patch_mamba
+
+maybe_patch_mamba()  # Mamba audio tower, only when MAMBA_ENC is set
+
+from extensions.hooks.dino_backbone_patch import maybe_patch_dino
+
+maybe_patch_dino()   # DINOv2 visual stem, only when DINO_ENC is set
+
 from extensions.hooks.cyolo_probe_patch import patch_int_scale_width
 from extensions.hooks.cyolo_search_patch import patch_batch_frames
 
