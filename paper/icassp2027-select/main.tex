@@ -37,10 +37,10 @@ annotation, since performances aligned to notehead coordinates are costly
 enough that nearly all training data is synthesized, so these systems work on
 synthesized audio and lose much of their accuracy on a real instrument in a
 real room. Closing that gap is the field's central open problem, and every
-remedy proposed for it has treated the gap as a failure of perception. We show
-it is not. On real recordings the detector already proposes a correct position
-at every scored onset, and an oracle held to the same real-time commitments
-recovers almost everything the deployed rule loses. We therefore recast the
+remedy proposed for it has treated the gap as a failure of perception. We
+present evidence that it is not, since on real recordings the detector already
+proposes a correct position at every scored onset and an oracle held to the
+same real-time commitments recovers almost everything the deployed rule loses. We therefore recast the
 task as sequential selection over the candidates the detector already emits,
 combining a parameter-free transition model with a set-based scorer that judges
 each candidate against its competitors in the same instant. This sets a new
@@ -57,22 +57,22 @@ music information retrieval
 \section{Introduction}
 \label{sec:intro}
 
-A musician plays from a printed page; a machine listens, looks at the same
-page, and at every moment reports where in the music the performer has got to.
+A musician plays from a printed page while a machine listens and looks at that
+same page, reporting at every instant the position the performer has reached.
 That is score following~\cite{orio2003}, and it is what automatic page
 turning~\cite{arzt2008}, live computer
 accompaniment~\cite{dannenberg1984,dannenberg2006,raphael2010} and
 score-synchronised visualisation are built on.
 
 Aligning a performance to its score offline is a different problem, usually
-called audio-to-score alignment or music synchronisation. There the whole
-recording is in hand, a global method such as dynamic time warping settles
+called audio-to-score alignment or music synchronisation. There the entire
+recording is available, a global method such as dynamic time warping settles
 every position at once~\cite{dixon2005match}, and even repeats and jumps can be
 resolved after the fact~\cite{shan2020,morsi2022}. Offline alignment underpins
 cross-modal retrieval and piece identification, where a recording is matched
 against a collection of scores~\cite{dorfer2018msmd}. Score following, also
-called music tracking~\cite{arzt2010}, gets none of that. It sees only what has
-been played, commits to a position immediately, and never revises it.
+called music tracking~\cite{arzt2010}, has none of these advantages. It observes
+only what has been played, commits to a position immediately, and never revises it.
 Everything below respects this constraint, including the oracles we use to
 measure what is achievable.
 
@@ -85,7 +85,7 @@ in which to compare them, a mismatch the literature answers in three ways.
 
 One family converts the score, using optical music recognition to turn the page
 into symbols so that a classical follower can track the performance over a
-discrete set of score states. This line is mature, spanning online dynamic time
+discrete set of score states. This line is well developed, spanning online dynamic time
 warping~\cite{dixon2005match}, duration-focused probabilistic
 models~\cite{cont2010}, hidden semi-Markov models that absorb performer errors
 and arbitrary repeats~\cite{nakamura2015}, particle filters for rests and tempo
@@ -116,7 +116,8 @@ penalties.
 
 Training any of these needs performances aligned to notehead coordinates on the
 page, an annotation costly enough that nearly all of it is synthesized. A score
-is rendered to MIDI, the MIDI to audio, and the alignment comes for free. The
+is rendered to MIDI and the MIDI to audio, and the alignment follows from the
+rendering at no additional cost. The
 result is systems that work on synthesized audio and lose much of their
 accuracy on a real instrument in a real room. CUNet~\cite{henkel2020cunet}
 falls from 85.5\% of onsets tracked within 0.5\,s to 22.4\%,
@@ -140,7 +141,8 @@ commit at each instant and never move backwards, exactly as a deployed follower
 must, and it still reaches 99.6\%. The deployed rule reaches 80.0\%
 (Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio
 survive the real-time constraint and are recoverable from what the model
-already saw. The room degrades the confidences, not the evidence.
+already saw, which indicates that reverberation degrades the detector's
+confidence ordering rather than the underlying visual evidence.
 
 We therefore recast sheet-image score following as a sequential decision over
 the positions the page affords, rather than the regression of a coordinate.
@@ -370,8 +372,8 @@ it beats the transition model at every level from 12 to 0.5\,dB.
 
 The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reaches
 .690 and .714 at 0.05 and 0.1\,s, below CODA's .721 and .743, because a
-decision is only as precise as the boxes it chooses between. Deciding recovers
-which notehead, not where within it.
+decision is only as precise as the boxes it chooses between, so the mechanism
+recovers which notehead is active rather than the position within it.
 
 Table~\ref{tab:transfer} separates the parts: the transition model alone, with
 no learned parameters, accounts for roughly half the gain, and the residual
@@ -449,14 +451,15 @@ Removing the features computed against the previous
 decision costs 7.2 points, the largest single ablation here. Teacher forcing
 attributes two thirds of the remaining error to drift, since given the true previous
 position the same scorer reaches 98.0\% against the causal oracle's 99.6\%
-(Fig.~\ref{fig:analysis}a). The sequence is hard, not the image.
+(Fig.~\ref{fig:analysis}a), which locates the remaining difficulty in the
+sequence of decisions rather than in the image.
 
 Across 48 trained
 models, accuracy on the synthesized validation split correlates $r=0.16$ with
 accuracy on the real recordings (Fig.~\ref{fig:analysis}b); the
 best-validation model scores 89.3 on real audio, below one reading no image
-features at all. A reverberant held-out set does better ($r=0.80$) and still
-mispicks. Since the whole field selects models on synthesized audio, this is a
+features at all. A reverberant held-out set correlates more strongly ($r=0.80$) yet still
+selects poorly. Since the whole field selects models on synthesized audio, this is a
 caution beyond our own experiments, and it is why our constants are
 cross-validated on the target recordings instead.
 
@@ -472,7 +475,7 @@ so its conditioning is genuinely wrong afterwards, and excluding jumps across a
 page boundary where state resets anyway, leaving 41.
 
 Table~\ref{tab:jump} reports a systematic failure, in which after a jump \sys{}
-is far worse than the rule it replaces, 0.08 against 0.27 of onsets tracked over the
+performs considerably worse than the rule it replaces, 0.08 against 0.27 of onsets tracked over the
 next five seconds, because the transition model holds the trajectory at a stale
 position. Suppressing it on detected silence helps where a break exists and not
 otherwise, as its design implies; triggering on the scorer's own confidence
