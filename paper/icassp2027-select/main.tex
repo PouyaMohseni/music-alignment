@@ -155,12 +155,11 @@ synthesized audio alone. The decision is causal and greedy, with no lookahead
 and no beam, and costs 1.25\,ms per instant on a single CPU thread against the
 50\,ms available at 20\,frames per second.
 
-Our contributions are: (i)~evidence, from candidate-set oracles, that this gap
-is a decision failure and not a perception failure; (ii)~\sys{}, which acts on
-it and sets a new best on real recordings by a margin holding across three
-independently trained perception models; (iii)~an analysis of what remains,
-covering the irrelevance of the image representation, the unreliability of
-synthesized audio for model selection, and the failure at discontinuities.
+Our contribution is to relocate the synthetic-to-real gap in this task and to
+act on it. Candidate-set oracles place the gap in the decision rather than in
+perception, and \sys{}, a decision model built on that finding, sets a new best
+on real recordings by a margin that holds across three independently trained
+perception models.
 
 \begin{figure}[t]
   \centering
@@ -210,10 +209,10 @@ conclusions concern the family and not one checkpoint.
 \subsection{\sys{}}
 \label{ssec:candor}
 
-\sys{} sits after the backbone and replaces only its final step. Where the
-detector reports the single most confident box, \sys{} treats the boxes as a
-candidate set and decides among them, carrying its own state from one instant
-to the next.
+\sys{}, for candidate ordering, sits after the backbone and replaces only its
+final step. Where the detector reports the single most confident box, \sys{}
+treats the boxes as a candidate set and orders them by how well each continues
+the performance so far, carrying its own state from one instant to the next.
 
 \subsubsection{Candidate positions}
 
@@ -432,7 +431,7 @@ argmax \eqref{eq:argmax}          & 0.27 & \textbf{0.27} & 0.15 & \textbf{0.26} 
 \end{tabular}}
 \end{table}
 
-\subsection{What the decision depends on}
+\subsection{Ablation study}
 \label{ssec:abl}
 
 Giving the scorer the FiLM-conditioned backbone
@@ -466,7 +465,7 @@ caution beyond our own experiments, and it is why our constants are
 cross-validated on the target recordings instead.
 
 
-\subsection{Where the forward assumption fails}
+\subsection{Score discontinuities}
 \label{ssec:jump}
 
 Eq.~\ref{eq:prior} assumes the performance moves forward, which is why the
@@ -490,9 +489,34 @@ enough to be wrong at a discontinuity, and reconciling the two is open.
 \label{sec:conclusion}
 
 The synthetic-to-real gap in sheet-image score following has been read as a
-perception failure. It is a decision failure: a correct position is already
-among the candidates at every onset, and choosing among them in real time takes real
-piano recordings from 80.0\% to 94.4\%, against 88.3\% previously.
+failure of perception and answered with better audio, more data and new
+architectures. The measurement reported here places it elsewhere. On real
+room-microphone recordings the detector already proposes a correct position at
+every scored onset, and an oracle held to the same real-time commitments
+recovers almost all of what the deployed rule loses, so the information needed
+to follow the performance survives the room and what fails is the rule that
+reads a position out of it.
+
+Acting on that, \sys{} orders the candidates the detector already emits and
+takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
+against 88.3\% for the best published system, at 1.25\,ms per instant on a
+single CPU thread. The margin holds across three independently trained
+perception models, which suggests the finding concerns the family of
+audio-conditioned detectors rather than one checkpoint, and it is obtained
+without retraining any of them and without layout annotation at test time.
+
+What the decision needs is its own temporal history rather than a better image
+representation, since three image representations including none at all give
+the same real-audio accuracy while removing the history costs more than any
+other ablation we ran. Two results temper this. Accuracy on synthesized audio
+barely predicts accuracy on real audio across 48 trained models, which makes
+model selection on a synthetic proxy unreliable for the whole field and not
+only for us. And the forward-motion assumption that makes the decision
+tractable is what fails at a repeat, where \sys{} is worse than the rule it
+replaces and no recovery mechanism we tried improves on that rule. Reconciling
+continuous tracking with discontinuity remains open, and pitch agreement
+between a candidate and the audio is the natural next source of evidence
+independent of the history.
 
 \vfill\pagebreak
 
