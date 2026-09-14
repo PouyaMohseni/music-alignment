@@ -163,7 +163,8 @@ score. We use the released CYOLO detectors to propose noteheads.
 \subsection{\sys{}}
 \label{ssec:candor}
 
-\sys{} sits after the backbone and replaces only its
+\sys{}, from \textbf{cand}idate \textbf{or}dering, sits after the backbone and
+replaces only its
 final step. At each instant the detector offers a few hundred possible notehead
 positions, and where it would report the most confident of them, \sys{} asks
 which one is most compatible with where its own previous decision was and with
