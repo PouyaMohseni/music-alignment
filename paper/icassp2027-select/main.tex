@@ -373,11 +373,6 @@ CYOLO~\cite{henkel2021eusipco}          & 3 & 71.3 & 72.5 & 91.6\,$\pm$\,1.4 \\
 CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
 CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\,0.9} \\
 \midrule
-\multicolumn{5}{l}{\emph{Image features} $f_i$}\\
-FiLM-conditioned backbone               & 6 &      &      & 90.6\,$\pm$\,0.9 \\
-DINOv2~\cite{oquab2024dinov2}           & 1 &      &      & 90.9 \\
-none                                    & 1 &      &      & 90.9 \\
-\midrule
 \multicolumn{5}{l}{\emph{Decision model}}\\
 residual, no fitted constants           & 3 &      &      & 88.7\,$\pm$\,0.9 \\
 without temporal history                & 3 &      &      & 83.7\,$\pm$\,0.4 \\
@@ -392,7 +387,8 @@ without temporal history                & 3 &      &      & 83.7\,$\pm$\,0.4 \\
 
 Giving the scorer the FiLM-conditioned backbone feature, DINOv2 patch
 features~\cite{oquab2024dinov2} on the same grid, or no image feature at all
-yields 90.6\%, 90.9\% and 90.9\%, a spread well inside the 0.9-point seed deviation,
+yields 90.6\% over six seeds and 90.9\% for each of two single runs, a spread
+well inside the 0.9-point seed deviation,
 where on synthesized validation audio the same three differ by 3.4 points.
 Removing the features computed against the previous decision instead costs 7.2
 points, the largest single ablation here, and teacher forcing attributes two
