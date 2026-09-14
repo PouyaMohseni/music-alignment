@@ -37,7 +37,18 @@ case $ARM in
   cnn)      ROOT=/scratch/pmohseni/dinoenc/cyolo_sb_cnn ;;
   *) echo "FATAL: unknown arm $ARM"; exit 1 ;;
 esac
-CKPT=$(find "$ROOT/params" -name best_model.pt -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+# best_model.pt is selected on validation LOSS. For the audio arms that
+# coincides with the best frame-difference and with the final epoch, so it is
+# the right checkpoint. For the image arms, which train without the page shift
+# and so without its regularisation, validation loss is lowest at epoch 0 and
+# rises thereafter, freezing best_model.pt two hours into a 24-hour run. Those
+# two arms are therefore evaluated at their final checkpoint, which spends the
+# whole budget and treats both identically.
+case $ARM in
+  dinov2|cnn) WANT=latest_model.pt ;;
+  *)          WANT=best_model.pt ;;
+esac
+CKPT=$(find "$ROOT/params" -name "$WANT" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 [ -n "$CKPT" ] || { echo "FATAL: no best_model.pt under $ROOT/params"; exit 1; }
 echo "##### arm=$ARM ckpt=$CKPT"
 
