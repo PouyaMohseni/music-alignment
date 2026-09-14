@@ -139,13 +139,13 @@ new best on real recordings across three released detectors.
 \subsection{Backbone}
 \label{ssec:backbone}
 
-Every sheet-image follower of the last five years shares one perception module,
+Every sheet-image follower shares one perception module,
 a convolutional network over the score page whose feature maps are modulated by
 the audio. The mechanism is feature-wise linear
 modulation~\cite{perez2018film}, which injects an external vector into a
 network by scaling and shifting its activations,
 $f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z)$, where $s$ and $t$ are learned linear
-maps of a conditioning vector $z$ and $\odot$ is elementwise. The page alone cannot say where the performer is, so
+maps of a conditioning vector $z$ and $\odot$ is elementwise. As the page does not indicate where the performer is,
 $z$ carries the recent audio and the visual features become a function of what
 has just been heard.
 
@@ -153,16 +153,10 @@ CYOLO~\cite{henkel2021eusipco} encodes the last two seconds of audio into $z$
 with a spectrogram network and places FiLM layers through the downscale and
 upscale blocks of a YOLO detector~\cite{redmon2016yolo}, which then predicts a bounding box for the
 notehead currently sounding. CYOLO-SB~\cite{henkel2021frontiers} keeps that
-arrangement and adds heads for the enclosing system and bar, so one 
-$52\times52$ feature map yields all three. CODA~\cite{yang2026coda} conditions
-its own backbone the same way, at the deeper stages, before cascading selection
-over layout regions supplied with the score.
-
-We take this module as given rather than as a design choice, and use the
-released CYOLO detectors to propose noteheads. No detector weight is updated
-anywhere in this work, and three released instances are used, differing in
-their heads and in their training data, so the conclusions concern the family
-and not one checkpoint.
+arrangement and adds heads for the enclosing system and bar.
+CODA~\cite{yang2026coda} conditions its own backbone the same way, at the
+deeper stages, before cascading selection over layout regions supplied with the
+score. We use the released CYOLO detectors to propose noteheads.
 
 \subsection{\sys{}}
 \label{ssec:candor}
