@@ -100,7 +100,7 @@ and bar boxes at test time, which the others and ours do not. These methods
 require performances aligned to notehead coordinates, an annotation costly
 enough that nearly all training data is synthesized, so they learn on rendered
 audio and lose much of their accuracy in a real room, CUNet falling
-from 85.5\% of onsets within 0.5\,s to 22.4\%, CYOLO-SB from 89.3\% to 79.9\%
+from 85.5\% of onsets within 0.5\,s to 22.4\%, CYOLO-SB from 89.3\% to 80.0\%
 and CODA from 95.5\% to 88.3\%. Every remedy has been a perception remedy, whether reverberant augmentation~\cite{henkel2021eusipco}, extra
 proprietary recordings~\cite{henkel2021frontiers} or a new
 architecture~\cite{yang2026coda}.
@@ -396,7 +396,7 @@ features~\cite{oquab2024dinov2} on the same grid, or no image feature at all
 yields 90.6\% over six seeds and 90.9\% for each of two single runs, a spread
 well inside the 0.9-point seed deviation,
 where on synthesized validation audio the same three differ by 3.4 points.
-Removing the features computed against the previous decision instead costs 7.2
+Removing the features computed against the previous decision instead costs 6.9
 points, the largest single ablation here, and teacher forcing attributes two
 thirds of the remaining error to drift, since given the true previous position
 the same scorer reaches 98.0\% against the causal oracle's 99.9\%.
