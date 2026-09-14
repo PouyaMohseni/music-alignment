@@ -64,7 +64,7 @@ def scatter_points():
     return np.array(pts)
 
 
-fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.18), dpi=400)
+fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.72), dpi=400)
 
 rows = ladder()
 xs = np.arange(len(SNRS))
@@ -78,9 +78,16 @@ ax[0].set_ylabel('onsets $\\leq$0.5 s (\\%)' if False else 'onsets $\\leq$0.5 s 
 ax[0].set_title('(a) added noise', pad=2.5)
 ax[0].grid(lw=0.4, color='#dddddd', zorder=0)
 ax[0].set_axisbelow(True)
-# no in-axes placement survives here: the curves sweep the whole diagonal and
-# every corner is either occupied or too small. One shared strip under both
-# panels cannot collide with anything.
+# every series falls from left to right, so the top-right corner is the one
+# region none of them reaches and the legend can sit inside the panel.
+# two columns keep it two rows tall, and the headroom is sized so the box
+# clears the highest point rather than sitting on top of the CANDOR curve.
+_lo, _hi = ax[0].get_ylim()
+ax[0].set_ylim(_lo, _hi + 0.34 * (_hi - _lo))
+ax[0].legend(loc='upper center', ncol=2, fontsize=5.6, frameon=False,
+             handlelength=1.3, handletextpad=0.35, labelspacing=0.2,
+             columnspacing=0.9, borderpad=0.2,
+             borderaxespad=0.2).set_zorder(5)
 for sp in ('top', 'right'):
     ax[0].spines[sp].set_visible(False)
 
@@ -95,16 +102,9 @@ band = p[(p[:, 0] >= LO) & (p[:, 0] <= HI)]
 ax[1].axvspan(LO, HI, color='#f2b705', alpha=0.16, lw=0, zorder=1)
 ax[1].scatter(p[:, 0], p[:, 1], s=7, facecolor='#1b7f79', edgecolor='none',
               alpha=0.75, zorder=3)
-bx = HI + 0.35
-ax[1].annotate('', xy=(bx, band[:, 1].min()), xytext=(bx, band[:, 1].max()),
-               arrowprops=dict(arrowstyle='<->', lw=0.9, color='#c0392b'),
-               zorder=4)
-ax[1].text(bx - 0.25, 0.5 * (band[:, 1].min() + band[:, 1].max()),
-           f'{band[:, 1].max() - band[:, 1].min():.0f}\u2009pts',
-           color='#c0392b', fontsize=6.2, ha='right', va='center', rotation=90)
 ax[1].text(0.04, 0.06, f'$r={r:.2f}$, $n={len(p)}$', transform=ax[1].transAxes,
            ha='left', va='bottom', fontsize=6.4)
-ax[1].set_xlim(p[:, 0].min() - 0.6, HI + 1.1)
+ax[1].set_xlim(p[:, 0].min() - 0.6, HI + 0.5)
 ax[1].set_xlabel('synthesised validation (%)')
 ax[1].set_ylabel('real recordings (%)')
 ax[1].set_title('(b) model selection', pad=2.5)
@@ -113,11 +113,8 @@ ax[1].set_axisbelow(True)
 for sp in ('top', 'right'):
     ax[1].spines[sp].set_visible(False)
 
-h, lb = ax[0].get_legend_handles_labels()
-fig.legend(h, lb, loc='lower center', bbox_to_anchor=(0.5, -0.10), ncol=4,
-           frameon=False, handlelength=1.6, columnspacing=1.3,
-           handletextpad=0.45, fontsize=6.2)
 fig.tight_layout(pad=0.2, w_pad=1.4)
 for ext in ('pdf', 'png'):
     fig.savefig(os.path.join(HERE, f'fig_analysis.{ext}'), bbox_inches='tight')
-print(f'wrote fig_analysis, ladder {sorted(rows)}, {len(p)} checkpoints, r={r:.3f}')
+print(f'wrote fig_analysis, ladder {sorted(rows)}, {len(p)} checkpoints, '
+      f'r={r:.3f}, band spread {band[:, 1].max() - band[:, 1].min():.1f} pts')

@@ -26,7 +26,7 @@ T = '/scratch/pmohseni/omr/traj'
 DUMP = '/scratch/pmohseni/omr/candf256/room.npz'
 DATA = '/scratch/pmohseni/datasets/cyolo_data/msmd/msmd_rp'
 OUT = '/project/def-ichiro/pmohseni/music-alignment/paper/icassp2027-select/figs/fig_example'
-TOPN = 40
+TOPN = 256
 
 
 def staff_tables(coords, page):
@@ -113,10 +113,19 @@ def main():
     # candidates are drawn as fills. They have to stay faint: at the earlier
     # opacity the notation underneath them was unreadable, and the figure
     # exists to show that the correct notehead was among them.
+    #
+    # Every box gets the SAME alpha, and the whole set is drawn rather than a
+    # subset. Ranking the alpha by confidence was invisible anyway, because the
+    # boxes pile up: the top 40 occupy 7 distinct positions and the top 20
+    # occupy 3, so a reader counting yellow shapes counted 7 and the caption
+    # claimed 40. With a constant alpha the pile-up itself does the shading,
+    # a position holding a dozen boxes reading an order of magnitude darker
+    # than one holding a single box, and the count in the caption is the count
+    # the method uses.
     for r in range(min(TOPN, len(x)))[::-1]:
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
                                facecolor='#f7c948', edgecolor='none',
-                               alpha=0.07 + 0.13 * (1 - r / TOPN)))
+                               alpha=0.065))
     ax.add_patch(Rectangle((x[0] - w[0] / 2, y[0] - h[0] / 2), w[0], h[0], fill=False,
                            lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,

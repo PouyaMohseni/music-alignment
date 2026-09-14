@@ -27,31 +27,27 @@
 \maketitle
 
 \begin{abstract}
-Score following aligns a live performance to its score in real time, committing
-to a position at every instant with no lookahead. The two sides are different
-kinds of object, the performance audio and the score an image. The
-established response is to convert one into the other and align within a single
-modality, either by turning the page into symbols with optical music
-recognition or by turning the audio into notes with transcription, and each
-detour inherits the errors of its conversion. Sheet-image score following
-converts neither side and learns the correspondence directly, and its strongest
-systems condition a visual detector on the audio. What limits them is
-annotation, since performances aligned to notehead coordinates are costly
-enough that nearly all training data is synthesized, so these systems work on
-synthesized audio and lose much of their accuracy on a real instrument in a
-real room. Closing that gap is the field's central open problem, and every
-remedy proposed for it has treated the gap as a failure of perception. We
-present evidence that it is not, since on real recordings the detector already
-proposes a position within the standard tolerance at every scored onset, and an
-oracle held to the same realtime commitments recovers almost everything the
-deployed rule loses. We therefore recast the task as sequential selection over
-the candidates the detector already emits,
-combining a parameter-free transition model with a set-based scorer that judges
-each candidate against its competitors in the same instant. This sets a new
-best on real piano recordings played straight through, holds across three
-released detectors that differ in heads and in training data, and shows that
-what the decision needs is its own temporal history rather than a better image
-representation.
+Score following aligns a live performance to its score in real time,
+committing to a position at every instant with no lookahead. The two sides are
+different kinds of object, the performance audio and the score an image, and
+the established response is to convert one into the other and align within a
+single modality, by optical music recognition or by transcription, each detour
+inheriting the errors of its conversion. Sheet-image score following converts
+neither side and learns the correspondence directly, conditioning a visual
+detector on the audio. What limits it is annotation, since performances aligned
+to notehead coordinates are costly enough that nearly all training data is
+synthesized, so these systems work on synthesized audio and lose much of their
+accuracy on a real instrument in a real room. Every remedy proposed for that
+gap has treated it as a failure of perception. We present evidence that it is
+not, since on real recordings the detector already proposes a position within
+the standard tolerance at every scored onset and an oracle held to the same
+realtime commitments recovers almost everything the deployed rule loses. We
+therefore recast the task as sequential selection over the candidates the
+detector already emits, combining a parameter-free transition model with a
+set-based scorer that judges each candidate against its competitors in the same
+instant. This sets a new best on real piano recordings played straight through,
+holds across three released detectors, and shows that what the decision needs
+is its own temporal history rather than a better image representation.
 \end{abstract}
 
 \begin{keywords}
@@ -62,20 +58,24 @@ music information retrieval
 \section{Introduction}
 \label{sec:intro}
 
-Score following~\cite{orio2003} is the online alignment of an acoustic signal
-to the score being performed. Given the audio observed up to frame $t$, the
-system estimates the position the performer currently occupies, and must do so
-before frame $t+1$ arrives. It supports automatic page turning~\cite{arzt2008},
-live computer accompaniment~\cite{dannenberg1984,dannenberg2006,raphael2010}
-and score-synchronised visualisation.
+Music alignment establishes the correspondence between a performance and the
+score it realises, mapping each moment of the audio to a position in the
+written music. It divides on whether the alignment is allowed to look ahead.
+Offline, where the task is called audio-to-score alignment or music
+synchronisation, the whole recording is available, a global method such as
+dynamic time warping settles every position at once~\cite{dixon2005match} and
+even repeats and jumps can be resolved after the fact~\cite{shan2020,morsi2022},
+which is what underpins cross-modal retrieval and piece
+identification~\cite{dorfer2018msmd}. Online, the system observes only what has
+been played, commits to a position immediately and never revises it.
 
-Offline alignment, or music synchronisation, is a different problem. The whole
-recording is available, a global method such as dynamic time warping settles
-every position at once~\cite{dixon2005match}, repeats and jumps are resolved
-after the fact~\cite{shan2020,morsi2022}, and the result underpins cross-modal
-retrieval and piece identification~\cite{dorfer2018msmd}. Score following, also
-called music tracking~\cite{arzt2010}, has none of these advantages, and
-everything below respects that constraint, the oracles included.
+That online case is score following~\cite{orio2003}, also called music
+tracking~\cite{arzt2010}. Given the audio observed up to frame $t$ it estimates
+the position the performer currently occupies, and must do so before frame
+$t+1$ arrives. It supports automatic page turning~\cite{arzt2008}, live
+computer accompaniment~\cite{dannenberg1984,dannenberg2006,raphael2010} and
+score-synchronised visualisation. Everything below respects that constraint,
+the oracles included.
 
 Its difficulty is that the two sides are different kinds of object. The
 performance is audio and the score an image, with no shared space in which to
@@ -159,11 +159,13 @@ differing in heads and in training data.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_example.pdf}
-  \caption{One instant of a real room-microphone recording. In yellow, 40 of the
-  candidate positions the detector scores. The most confident (red) lies on the
-  wrong staff, 2.3\,s from the truth; \sys{} (teal) takes a less confident
-  candidate on the true note (ring). The correct position was available and was
-  not chosen, which is the characteristic failure on real audio.}
+  \caption{One instant of a real room-microphone recording. In yellow, all 256
+  candidates the detector scores, drawn at one opacity so that where they pile
+  up the fill darkens. The most confident (red) lies on the wrong staff,
+  2.3\,s from the truth; \sys{} (teal) takes a less confident candidate on the
+  true note (ring), forward of the previous decision (caret). The correct
+  position was available and was not chosen, which is the characteristic
+  failure on real audio.}
   \label{fig:example}
 \end{figure}
 
@@ -511,46 +513,41 @@ failure of perception and answered with better audio, more data and new
 architectures. The measurement reported here places it elsewhere. On real
 room-microphone recordings the detector already proposes a correct position at
 every scored onset, and an oracle held to the same realtime commitments
-recovers almost all of what the deployed rule loses. At the standard
-tolerance, then, most of what is needed to follow the performance survives the
-room, and what fails is the rule that reads a position out of it.
+recovers almost all of what the deployed rule loses, so at the standard
+tolerance what fails is the rule that reads a position out of the evidence
+rather than the evidence itself.
 
 Acting on that, \sys{} orders the candidates the detector already emits and
 takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
 against 88.3\% for the best published system on a repertoire played straight
-through, at 1.25\,ms per instant on a single CPU thread. The margin holds across
-three released detectors differing in heads and in training data, which suggests
-the finding concerns the family of audio-conditioned detectors rather than one
-checkpoint, and it is obtained without retraining any of them and without layout
-annotation at test time.
+through, at 1.25\,ms per instant on a single CPU thread, without retraining any
+detector and without layout annotation at test time. The margin holds across
+three released detectors differing in heads and in training data, and within
+this framework the decision depends far more on its own temporal history than
+on the image representations we tested, three of which, including none at all,
+give the same real-audio accuracy.
 
-Within this framework the decision depends far more on its own temporal history
-than on the image representations we tested, since three image representations including none at all give
-the same real-audio accuracy while removing the history costs more than any
-other ablation we ran.
-
-Comparing a decoder of CODA's kind with ours over one shared candidate set is
-a worthwhile experiment and a different one. Two results temper what is claimed here. Accuracy on synthesized audio barely predicts accuracy on real audio
-across 48 trained models, which makes model selection on a synthetic proxy
-unreliable for the whole field and not only for us. And the forward-motion
-assumption that makes the decision tractable fails at a repeat, where \sys{} is
-worse than the rule it replaces. As for what comes next, pitch agreement between a candidate and the audio is the natural source of
-evidence independent of the history.
+Two results temper this. Accuracy on synthesized audio barely predicts accuracy
+on real audio across 48 trained models, which makes model selection on a
+synthetic proxy unreliable for the field and not only for us; and the
+forward-motion assumption that makes the decision tractable fails at a repeat,
+where \sys{} is worse than the rule it replaces. Comparing a decoder of CODA's
+kind with ours over one shared candidate set is a worthwhile experiment and a
+different one, and pitch agreement between a candidate and the audio is the
+natural next source of evidence independent of the history.
 
 \vfill\pagebreak
 
 \noindent Limitations. The correct page is given, all performances are
 piano, 16 evaluation pieces cannot resolve differences of a point.
 
-\section{Compliance with ethical standards}
-\label{sec:ethics}
-This is a numerical study that uses only publicly available data; no ethical
-approval was required.
-
 \section{Acknowledgments}
 \label{sec:ack}
-This research was enabled in part by support provided by Calcul Qu\'ebec and
-the Digital Research Alliance of Canada. \tbd{Funding sources.}
+This project is supported in part by the Social Sciences and Humanities
+Research Council of Canada (SSHRC 895-2022-1004) and the Fonds de recherche du
+Qu\'ebec (FRQSC 2008988). The experiments in this paper were conducted using
+computing infrastructure provided by the Digital Research Alliance of Canada
+and Calcul Qu\'ebec.
 
 {\footnotesize
 \bibliographystyle{IEEEbib}
