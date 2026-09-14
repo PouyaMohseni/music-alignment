@@ -152,6 +152,12 @@ Ethan Perez, Florian Strub, Harm de~Vries, Vincent Dumoulin, and Aaron
 \newblock ``{FiLM}: Visual reasoning with a general conditioning layer,''
 \newblock in {\em Proc. AAAI Conference on Artificial Intelligence}, 2018.
 
+\bibitem{redmon2016yolo}
+Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi,
+\newblock ``You only look once: Unified, real-time object detection,''
+\newblock in {\em Proc. IEEE Conference on Computer Vision and Pattern
+  Recognition (CVPR)}, 2016, pp. 779--788.
+
 \bibitem{zaheer2017deepsets}
 Manzil Zaheer, Satwik Kottur, Siamak Ravanbakhsh, Barnab{\'a}s P{\'o}czos,
   Ruslan Salakhutdinov, and Alexander Smola,
@@ -195,5 +201,10 @@ Yizhi Li, Ruibin Yuan, Ge~Zhang, et~al.,
   self-supervised training,''
 \newblock in {\em Proc. International Conference on Learning Representations
   (ICLR)}, 2024.
+
+\bibitem{gu2024mamba}
+Albert Gu and Tri Dao,
+\newblock ``Mamba: Linear-time sequence modeling with selective state spaces,''
+\newblock in {\em Proc. Conference on Language Modeling (COLM)}, 2024.
 
 \end{thebibliography}
