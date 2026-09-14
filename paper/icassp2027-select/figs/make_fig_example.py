@@ -125,15 +125,22 @@ def main():
     for r in range(min(TOPN, len(x)))[::-1]:
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
                                facecolor='#f7c948', edgecolor='none',
-                               alpha=0.085))
-    ax.add_patch(Rectangle((x[0] - w[0] / 2, y[0] - h[0] / 2), w[0], h[0], fill=False,
-                           lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
-    ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
-                           lw=1.5, ec='#138D90', label=f'CANDOR, {eo:.2f}\u2009s off'))
+                               alpha=0.11))
+    # the detector's boxes are staff-height, 30 by 93 px, so drawn at full
+    # size the two outlines are tall bars that read as regions rather than as
+    # positions. Both mark a point, so they are drawn at a fraction of the box
+    # about the same centre.
+    MS = 0.42
+    for xc, yc, wc, hc, col, lab in (
+            (x[0], y[0], w[0], h[0], '#C0392B', f'confidence only, {eb:.1f}\u2009s off'),
+            (x[io], y[io], w[io], h[io], '#138D90', f'CANDOR, {eo:.2f}\u2009s off')):
+        ax.add_patch(Rectangle((xc - MS * wc / 2, yc - MS * hc / 2),
+                               MS * wc, MS * hc, fill=False, lw=1.4, ec=col,
+                               label=lab))
     if xp is not None:
         ax.plot([xp], [y1 - 24], marker='^', ms=4.5, color='#3f5468',
                 ls='none')
-    ax.add_patch(Circle((xg, yg), 15, fill=False, lw=1.3, ec='k'))
+    ax.add_patch(Circle((xg, yg), 21, fill=False, lw=1.2, ec='k'))
     # legend proxies: a Patch renders as a rectangle whatever shape it is, so
     # the ring was advertised as a square. Draw the handles as markers.
     ax.plot([], [], marker='^', ms=5, color='#3f5468', ls='none',
