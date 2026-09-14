@@ -180,8 +180,8 @@ $\hat{\imath}_t=\arg\max_{i} o_i$, the degenerate selector. \sys{} reads
 $\mathcal{C}_t$ and its previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
 stops binding, a correct candidate being present at every onset only from
 $K=256$. \sys{} saturates earlier, reaching 89.8\%, 92.2\%, 94.1\%, 95.0\% and
-94.4\% at $K=16$, 32, 64, 128 and 256, the last two within the seed deviation
-of each other.
+94.4\% at $K=16$, 32, 64, 128 and 256, the last two within the seed
+deviation.
 
 \subsubsection{Transition model}
 
@@ -392,7 +392,7 @@ points, the largest single ablation here, and teacher forcing attributes two
 thirds of the remaining error to drift, since given the true previous position
 the same scorer reaches 98.0\% against the causal oracle's 99.9\%.
 
-Retraining the detector itself from scratch with a different audio encoder
+Retraining the detector from scratch with a different audio encoder
 gives the lower block of Table~\ref{tab:main}, not comparable with the
 converged checkpoints above it and reported because the decision gains a
 similar margin on any of them. A frozen MERT-95M tower~\cite{li2024mert}
@@ -402,9 +402,9 @@ of~\cite{yang2026coda} in place of the whole audio tower reaches 76.2\% against
 83.3\% for an identically budgeted control; and keeping the convolutional front
 end while replacing only the recurrence, which we call CYOLO-Mamba, reaches
 91.5\%. The recurrence therefore benefits from a state-space model while the
-convolutional front end is load-bearing, which is the encoder ablation absent
-from~\cite{yang2026coda}. None of this rescues the gap, the
-strongest of these detectors merely reaching what re-deciding over an already
+convolutional front end is load-bearing, the encoder ablation absent
+from~\cite{yang2026coda}. None of this rescues the gap, the strongest of these
+merely reaching what re-deciding over an already
 released one achieves.
 
 Across 48 trained models, accuracy on the synthesized validation split
@@ -421,7 +421,7 @@ The synthetic-to-real gap in sheet-image score following has been read as a
 failure of perception and answered with better audio, more data and new
 architectures. The measurement reported here places it elsewhere. On real
 room-microphone recordings the detector already proposes a correct position at
-every scored onset, and an oracle held to the same realtime commitments
+every scored onset, and an oracle under the same realtime commitments
 recovers almost all of what the deployed rule loses, so at the standard
 tolerance what fails is the rule that reads a position from the evidence
 rather than the evidence itself.
