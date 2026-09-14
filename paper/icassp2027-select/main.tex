@@ -165,8 +165,8 @@ score. We use the released CYOLO detectors to propose noteheads.
 final step. At each instant the detector offers a few hundred possible notehead
 positions, and where it would report the most confident of them, \sys{} asks
 which one is most compatible with where its own previous decision was and with
-what the rest of the set looks like. Those two questions are the two parts
-below, and answering them requires carrying state from one instant to the next.
+what the rest of the set looks like. The two parts below formalise these
+criteria, and each requires state to be carried across instants.
 
 \subsubsection{Candidate positions}
 
@@ -175,19 +175,16 @@ backbone reads the audio so far and the current page and scores note boxes
 $b_i=(x_i,y_i,w_i,h_i)$ with confidence $o_i$; we keep the $K=256$ most
 confident, $\mathcal{C}_t$. Staves are concatenated along one horizontal axis,
 the unrolled coordinate $u_i$, so positions across a line break are adjacent.
-The released detectors score 8,112 boxes per instant and report the most
-confident, $\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
-previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where
-availability stops binding, since a correct candidate is present at every
-onset only from 256 and the causal oracle falls to 85.6\% at $K=64$, below
-what \sys{} itself reaches, so a smaller set would limit the decision rather
-than test it.
+The released detectors report the most confident box,
+$\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
+previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
+stops binding, a correct candidate being present at every onset only from 256,
+while at $K=64$ the causal oracle falls to 85.6\%, below what \sys{} reaches.
 
 \subsubsection{Transition model}
 
-Selections must form a plausible trajectory, and between instants $\Delta_t$
-frames apart the performer advances by a roughly predictable amount, so the
-displacement $d_i=u_i-\hat u_{t-1}$ is scored by a floored Gaussian whose mean
+Between instants $\Delta_t$ frames apart the performer advances by a roughly
+predictable amount, so the displacement $d_i=u_i-\hat u_{t-1}$ is scored by a floored Gaussian whose mean
 grows with elapsed time,
 \begin{equation}
   \log\pi_i=\max\Big(-\frac{(d_i-\mu\rho_t)^2}{2\sigma^2},\,J\Big),
@@ -195,18 +192,18 @@ grows with elapsed time,
 \end{equation}
 with $\rho_t=\mathrm{clip}(\Delta_t/\Delta_0,\,0.2,\,8)$ and $\Delta_0=5$
 frames, the mean inter-onset gap in training. The floor $J$ keeps a jump
-possible at bounded cost. Combined with confidence, $h_i=\log o_i+\log\pi_i$
-already recovers a large part of the gap on its own.
+possible at bounded cost, and combined with confidence $h_i=\log o_i+\log\pi_i$
+already recovers a large part of the gap.
 
 \subsubsection{Set-based scorer}
 
-The transition model treats candidates independently given the history, so what
-it cannot express is comparative, whether this box, among those on offer in
-this instant, looks like a real notehead rather than a spurious response. Real
-audio calls for exactly that, since reverberation smears the onset the
-conditioning vector is built from and the detector answers with many moderately
-confident boxes rather than one sharp response, leaving absolute confidence
-poorly calibrated while the shape of the set stays informative. Each candidate
+The transition model scores each candidate independently given the history and
+therefore cannot express a comparative judgement. What it omits is whether a
+given box, relative to the others available at the same instant, is a plausible
+notehead rather than a spurious response. That comparison matters on real
+audio, where reverberation smears the onset the conditioning vector is built
+from, so the detector answers with many moderately confident boxes rather than
+one sharp response and absolute confidence is poorly calibrated. Each candidate
 is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence relative to
 the instant's best, box geometry, motion relative to the history, relation to
 any coarse regions the backbone emits, and how crowded and how typical the box
@@ -217,7 +214,7 @@ re-scoring of detections~\cite{hosang2017nms}, embeds each candidate as
 $e_i=g([\phi_i;\,\mathrm{ReLU}(Wf_i)])$ and scores it against a context pooled
 over the set, $s_i=r([e_i;\,c])$ with
 $c=[\tfrac{1}{K}\sum_j e_j;\ \max_j e_j]$, the maximum taken per dimension.
-Here $g$ and $r$ are two-layer perceptrons (64, 32 and 64, 1) and
+Here $g$ and $r$ are two-layer perceptrons and
 $W\in\mathbb{R}^{64\times128}$, so every candidate is judged against its
 competitors.
 
@@ -225,12 +222,16 @@ competitors.
 
 The decision is supervised listwise against soft targets, so with
 $\varepsilon_i$ the error in frames of candidate $i$ the target is
-$q_i\propto\exp(-\varepsilon_i/\tau)$ with $\tau=3$ and the loss is the
+$q_i\propto\exp(-\varepsilon_i/\tau)$ with $\tau=3$ frames, about
+0.15\,s, so that the target rewards landing near the onset rather than exactly
+on it, and the loss is the
 cross-entropy $-\sum_i q_i\log\mathrm{softmax}(s)_i$, so the scorer learns to
 order a set rather than to regress a coordinate.
 History features come from previous decisions, perturbed on 30\% of samples by
-Laplace noise of scale 30\,px to expose training to the drift of sequence
-prediction~\cite{bengio2015scheduled}. At inference \sys{} decides
+Laplace noise of scale 30\,px, heavy-tailed so that training sees both drift
+and gross error~\cite{bengio2015scheduled}; without the perturbation the
+scorer assumes an exact history and validation accuracy falls below the argmax
+baseline. At inference \sys{} decides
 \begin{equation}
   \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,h_i ,
   \label{eq:decode}
@@ -322,9 +323,8 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
 set and then discards it. CODA~\cite{yang2026coda} is not such a target, since
 its final stage regresses a continuous bar-local coordinate rather than
 choosing among proposals, and the sets it does select over, systems and bars,
-are supplied by layout annotation and already decoded with beam search. It
-appears in Table~\ref{tab:main} as the strongest published system on these
-recordings, not as a backbone \sys{} could be attached to.
+are supplied by layout annotation and already decoded with beam search. It appears in Table~\ref{tab:main} as the strongest published system, not as a
+backbone \sys{} could be attached to.
 
 Table~\ref{tab:main} sets \sys{} against the published literature, taken
 from~\cite{yang2026coda}, on recordings played straight through, with
@@ -375,11 +375,6 @@ CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\
 \multicolumn{5}{l}{\emph{Decision model}, CYOLO-SB candidates}\\
 residual, no fitted constants           & 3 &      &      & 88.7\,$\pm$\,0.9 \\
 without temporal history                & 3 &      &      & 83.7\,$\pm$\,0.4 \\
-\midrule
-\multicolumn{5}{l}{\emph{Image features} $f_i$, CYOLO-SB candidates}\\
-FiLM-conditioned backbone               & 6 &      &      & 90.6\,$\pm$\,0.9 \\
-DINOv2~\cite{oquab2024dinov2}           & 1 &      &      & 90.9 \\
-none                                    & 1 &      &      & 90.9 \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -401,7 +396,7 @@ the same scorer reaches 98.0\% against the causal oracle's 99.6\%.
 Retraining the detector itself from scratch on a fixed 24-hour budget with a
 different audio encoder gives the lower block of Table~\ref{tab:main}, not
 comparable with the converged checkpoints above it and reported because the
-decision gains a similar margin whatever it is attached to. A frozen MERT-95M
+decision gains a similar margin on any of them. A frozen MERT-95M
 tower~\cite{li2024mert} reaches 46.2 and overfits 12.6-fold; the two-layer
 causal Mamba~\cite{gu2024mamba} of~\cite{yang2026coda} in place of the whole
 audio tower reaches 76.2 against 83.3 for an identically budgeted control; and
