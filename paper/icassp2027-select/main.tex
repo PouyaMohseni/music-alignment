@@ -337,7 +337,10 @@ deviations.
 tracked within each error threshold. Layout marks methods needing system and
 bar annotation at test time; $\Delta$ is the gain at 0.5\,s over the perception
 model the row is built on. $^\dagger$\,proprietary training data, public
-checkpoint. Published figures from~\cite{yang2026coda}.}
+checkpoint. Published figures from~\cite{yang2026coda}. The lower block
+retrains the perception model from scratch under a fixed budget and is not
+comparable with the converged checkpoints above; it is shown because the
+decision gains a similar margin whatever it is attached to.}
 \label{tab:main}
 \setlength{\tabcolsep}{4.2pt}
 {\small
@@ -358,6 +361,11 @@ CODA~\cite{yang2026coda}                         & 72.1 & 74.3 & 88.3 & 91.4 & 9
 \syson{CYOLO}                                           & 72.6 & 74.7 & 91.6 & 95.0 & 99.1 & no & $+$20.4 \\
 \syson{CYOLO-SB}                                     & 69.0 & 71.4 & 90.6 & 94.2 & 98.2 & no & $+$10.7 \\
 \syson{CYOLO-SB+A$^\dagger$}                   & \textbf{76.0} & \textbf{78.5} & \textbf{94.4} & \textbf{96.9} & \textbf{99.6} & no & $+$7.9 \\
+\midrule
+\multicolumn{8}{l}{\emph{Detectors we trained, 24\,h from random initialisation; only the audio tower differs}}\\
+\syson{CYOLO-LSTM} (control)                   & 58.2 & 60.6 & 83.3 & 87.5 & 98.3 & no & $+$11.6 \\
+\syson{CYOLO-Mamba}                            & 62.8 & 65.7 & 91.5 & 94.6 & 99.3 & no & $+$19.0 \\
+\syson{CYOLO, audio tower as~\cite{yang2026coda}} & 44.7 & 47.4 & 76.2 & 83.9 & 96.5 & no & $+$17.3 \\
 \bottomrule
 \end{tabular}}
 \end{table*}
@@ -455,14 +463,22 @@ feature, DINOv2 patch features~\cite{oquab2024dinov2} on the same grid, or no
 image feature at all yields 90.6, 90.9 and 90.9, a spread well inside the
 0.9-point seed deviation. On synthesized validation audio the same three differ
 by 3.4 points, so those features are learnable and useful there and worth
-nothing on real audio. We rebuilt the perception model with a different
-audio encoder twice: a frozen MERT-95M tower~\cite{li2024mert} with only a
-projection trained, which reaches 46.2 against 90.6 and overfits 12.6-fold on
-the 353 training pieces, and the two-layer causal Mamba of~\cite{yang2026coda}
-trained from scratch as they train it, which reaches \tbd{.}. The two are not matched on pretraining and fail
-differently, on generalisation and on capacity, arriving at the same place.
-Replacing the visual stem with frozen DINOv2-base patches on the same
-$52\times52$ grid, against a control retrained identically, gives \tbd{.}.
+nothing on real audio. We also rebuilt the perception model itself, retraining the
+detector from scratch for a fixed 24-hour budget with a different audio
+encoder. A frozen MERT-95M tower~\cite{li2024mert} with only a projection
+trained reaches 46.2 and overfits 12.6-fold on the 353 training pieces.
+Replacing the whole audio tower with the two-layer causal
+Mamba of~\cite{yang2026coda}, trained as they train it, reaches 76.2 against
+83.3 for an identically budgeted control, while keeping the convolutional front
+end and replacing only the recurrence, which we call CYOLO-Mamba, reaches 91.5.
+The recurrence therefore benefits from a state-space model and the
+convolutional front end is load-bearing, which is the encoder ablation absent
+from~\cite{yang2026coda}. Both variants leave the visual tower untouched.
+None of this rescues the gap on its own: the strongest of these detectors
+merely reaches what re-deciding over an already released one achieves, and all
+of them sit below the 94.4 of Table~\ref{tab:main}. Replacing the visual stem
+with frozen DINOv2-base patches on the same $52\times52$ grid, against a
+control retrained identically, gives \tbd{.}.
 
 Removing the features computed against the previous
 decision costs 7.2 points, the largest single ablation here. Teacher forcing
