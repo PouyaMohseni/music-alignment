@@ -389,8 +389,9 @@ appears in Table~\ref{tab:main} as the strongest published system on these
 recordings, not as a backbone \sys{} could be attached to.
 
 Table~\ref{tab:main} sets \sys{} against the published literature, taken
-from~\cite{yang2026coda}, on recordings played straight through, with
-$\Delta$ the gain at 0.5\,s over the perception model each row is built on.
+from~\cite{yang2026coda}, on recordings played straight through;
+Sec.~\ref{ssec:jump} reports what happens when a performance is not, and
+$\Delta$ is the gain at 0.5\,s over the perception model each row is built on.
 \sys{} tracks 94.4\% of onsets within 0.5\,s, 95\% CI over pieces
 $[92.2,\,97.1]$, against a previous best of 88.3\%, and leads at every
 threshold. Sixteen pieces are few and the interval is correspondingly wide,
@@ -486,6 +487,22 @@ field selects models on synthesized audio, this is a caution beyond our own
 experiments, and it is why our constants are cross-validated on the target
 recordings instead.
 
+\subsection{Score discontinuities}
+\label{ssec:jump}
+
+Eq.~\ref{eq:prior} assumes the performance moves forward, which is what makes
+the decision tractable and also what a repeat or a jump breaks. Splicing three
+discontinuities into each performance at random destinations following the
+protocol of~\cite{yang2026coda}, re-running perception on the spliced audio so
+its conditioning is genuinely wrong afterwards and excluding jumps across a
+page boundary where state resets anyway, 41 remain. Over the five seconds after
+one, \sys{} tracks 8\% of onsets against 27\% for the argmax it replaces,
+because the transition model holds the trajectory at a stale position.
+Triggering a reset on the scorer's own confidence recovers this to 26\% and
+costs 1.0 point on the unspliced recordings, so selection and discontinuity
+detection compose at a stated price rather than contend. We report \sys{}
+without the trigger, the evaluation repertoire being played straight through.
+
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -513,19 +530,17 @@ the same real-audio accuracy while removing the history costs more than any
 other ablation we ran.
 
 Comparing a decoder of CODA's kind with ours over one shared candidate set is
-a worthwhile experiment and a different one. One result tempers what is claimed
-here. Accuracy on synthesized audio barely predicts accuracy on real audio
+a worthwhile experiment and a different one. Two results temper what is claimed here. Accuracy on synthesized audio barely predicts accuracy on real audio
 across 48 trained models, which makes model selection on a synthetic proxy
-unreliable for the whole field and not only for us. As for what comes next,
-pitch agreement between a candidate and the audio is the natural source of
+unreliable for the whole field and not only for us. And the forward-motion
+assumption that makes the decision tractable fails at a repeat, where \sys{} is
+worse than the rule it replaces. As for what comes next, pitch agreement between a candidate and the audio is the natural source of
 evidence independent of the history.
 
 \vfill\pagebreak
 
 \noindent Limitations. The correct page is given, all performances are
-piano, 16 evaluation pieces cannot resolve differences of a point, and
-Eq.~\ref{eq:prior} assumes forward motion, so repeats and jumps are outside
-the scope evaluated here.
+piano, 16 evaluation pieces cannot resolve differences of a point.
 
 \section{Compliance with ethical standards}
 \label{sec:ethics}
