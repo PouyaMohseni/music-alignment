@@ -121,12 +121,9 @@ page affords rather than the regression of a coordinate. \sys{} decides from a
 transition model, scoring a displacement against elapsed time, and a set-based
 scorer, judging each candidate against its competitors in the same instant,
 trained listwise on synthesized audio alone and decoded causally and greedily
-at 1.25\,ms per instant on one CPU thread.
-
-Our contribution is to relocate the synthetic-to-real gap and act on it.
-Candidate-set oracles place it in the decision rather than in perception, and a
-decision model built on that finding sets a new best on real recordings across
-three released detectors.
+at 1.25\,ms per instant on one CPU thread. Thus we relocate the
+synthetic-to-real gap from perception to the decision and act on it, setting a
+new best on real recordings across three released detectors.
 
 \begin{figure}[t]
   \centering
