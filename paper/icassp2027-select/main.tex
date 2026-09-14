@@ -266,8 +266,9 @@ whose predicted position maps to within 0.05 to 5\,s of the true time, 0.5\,s
 primary, with 95\% intervals bootstrapped over pieces~\cite{efron1993} and seed
 means with deviations.
 
-Three kinds of data enter at three stages. The decision model is trained on
-synthesized audio alone and never sees a real recording, the four constants
+The protocol separates three kinds of data across three stages, in that the
+decision model is trained on synthesized audio alone and never sees a real
+recording, the four constants
 $(\mu,\sigma,J,\beta)$ are calibrated leave-one-piece-out on the other 15 real
 pieces weighted equally, and evaluation is on the piece held out. That still
 lets the benchmark as a whole participate in choosing them, which the published
@@ -319,25 +320,23 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
   \label{fig:analysis}
 \end{figure}
 
-\sys{} orders proposals, so it applies to a follower that produces a candidate
-set and then discards it. CODA~\cite{yang2026coda} is not such a target, since
+Since \sys{} orders proposals, it applies to any follower that produces a
+candidate set and then discards it. CODA~\cite{yang2026coda} is not such a target, since
 its final stage regresses a continuous bar-local coordinate rather than
 choosing among proposals, and the sets it does select over, systems and bars,
-are supplied by layout annotation and already decoded with beam search. It appears in Table~\ref{tab:main} as the strongest published system, not as a
-backbone \sys{} could be attached to.
+are supplied by layout annotation and already decoded with beam search.
 
-Table~\ref{tab:main} sets \sys{} against the published literature, taken
-from~\cite{yang2026coda}, on recordings played straight through, with
+Table~\ref{tab:main} sets \sys{} against the published literature on recordings played straight through, with
 $\Delta$ the gain at 0.5\,s over the perception model each row is built on.
 \sys{} tracks 94.4\% of onsets within 0.5\,s, 95\% CI over pieces
 $[92.2,\,97.1]$, against a previous best of 88.3\%, and leads at every
-threshold. Sixteen pieces are few and the interval is correspondingly wide,
-though the gain over the argmax it replaces, paired on the same resample, is
-$+7.9$ with interval $[+2.8,\,+12.2]$. Nor is the margin an artifact of one
-perception model. Retrained on whichever candidates each emits, the decision
-gains 20.4, 10.7 and 7.9 points, and on the weakest, whose training data is
-entirely public, it passes where the strongest one begins. A decision model
-does not need good proposals, only proposals containing the answer. On 94
+threshold. We acknowledge that sixteen pieces are few and that the interval is
+correspondingly wide, though the gain over the argmax it replaces, paired on
+the same resample, is $+7.9$ with interval $[+2.8,\,+12.2]$. The margin does
+not depend on one perception model either, since retraining the decision on
+whichever candidates each detector emits gains 20.4, 10.7 and 7.9 points, and
+on the weakest, whose training data is entirely public, it passes where the
+strongest one begins. On 94
 synthetic test pieces it reaches 95.5\% against 89.3\% for argmax, and on the
 80 noisy held-out pieces it beats the transition model at every level from 12
 to 0.5\,dB (Fig.~\ref{fig:analysis}a).
@@ -351,11 +350,12 @@ it.
 Table~\ref{tab:transfer} separates the parts over the same candidates, adding
 Eq.~\ref{eq:prior} to the argmax and then the scorer, with $n$
 counting decision-model seeds at a fixed detector. The transition model alone,
-with no learned parameters, accounts for roughly half the gain. The residual
-variant is the one to read for the strictest protocol, fitting no constant to
-any real recording and so comparable with the published rows on equal terms; it
-reaches 88.7\% against the 80.0\% it replaces, above the previous best, and the
-distance from there to 94.4\% is what calibrating four constants is worth.
+with no learned parameters, accounts for roughly half the gain. Under the strictest
+protocol the residual variant is the relevant one, since it fits no constant to
+any real recording and is therefore comparable with the published rows on equal
+terms. It reaches 88.7\% against the 80.0\% it replaces, already above the
+previous best, and the remaining distance to 94.4\% measures what calibrating
+the four constants adds.
 
 \begin{table}[t]
 \centering
