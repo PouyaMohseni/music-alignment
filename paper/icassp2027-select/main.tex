@@ -33,21 +33,20 @@ different kinds of object, the performance audio and the score an image, and
 the established response is to convert one into the other and align within a
 single modality, by optical music recognition or by transcription, each detour
 inheriting the errors of its conversion. Sheet-image score following converts
-neither side and learns the correspondence directly, conditioning a visual
-detector on the audio. What limits it is annotation, since performances aligned
-to notehead coordinates are costly enough that nearly all training data is
-synthesized, so these systems work on synthesized audio and lose much of their
-accuracy on a real instrument in a real room. Every remedy proposed for that
-gap has treated it as a failure of perception. We present evidence that it is
-not, since on real recordings the detector already proposes a position within
-the standard tolerance at every scored onset and an oracle held to the same
-realtime commitments recovers almost everything the deployed rule loses. We
-therefore recast the task as sequential selection over the candidates the
-detector already emits, combining a parameter-free transition model with a
-set-based scorer that judges each candidate against its competitors in the same
-instant. This sets a new best on real piano recordings played straight through,
-holds across three released detectors, and shows that what the decision needs
-is its own temporal history rather than a better image representation.
+neither side, conditioning a visual detector on the audio to learn the
+correspondence directly. What limits it is annotation, since alignments to
+notehead coordinates are costly enough that nearly all training data is
+synthesized, so these systems lose much of their accuracy on a real instrument
+in a real room. Every remedy proposed for that gap has treated it as a failure
+of perception. We present evidence that it is not, since the detector already
+proposes a position within the standard tolerance at every scored onset of a
+real recording, and an oracle held to the same realtime commitments recovers
+almost everything the deployed rule loses. We therefore recast the task as
+sequential selection over the candidates the detector already emits, combining
+a parameter-free transition model with a set-based scorer that judges each
+candidate against its competitors in the same instant. This sets a new best on
+real piano recordings played straight through, and shows that what the decision
+needs is its own temporal history rather than a better image representation.
 \end{abstract}
 
 \begin{keywords}
@@ -522,19 +521,15 @@ takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
 against 88.3\% for the best published system on a repertoire played straight
 through, at 1.25\,ms per instant on a single CPU thread, without retraining any
 detector and without layout annotation at test time. The margin holds across
-three released detectors differing in heads and in training data, and within
-this framework the decision depends far more on its own temporal history than
-on the image representations we tested, three of which, including none at all,
-give the same real-audio accuracy.
-
-Two results temper this. Accuracy on synthesized audio barely predicts accuracy
-on real audio across 48 trained models, which makes model selection on a
-synthetic proxy unreliable for the field and not only for us; and the
-forward-motion assumption that makes the decision tractable fails at a repeat,
-where \sys{} is worse than the rule it replaces. Comparing a decoder of CODA's
-kind with ours over one shared candidate set is a worthwhile experiment and a
-different one, and pitch agreement between a candidate and the audio is the
-natural next source of evidence independent of the history.
+three released detectors, and the decision depends far more on its own temporal
+history than on the image representations we tested, three of which, including
+none at all, give the same real-audio accuracy. Two results temper this.
+Accuracy on synthesized audio barely predicts accuracy on real audio across 48
+trained models, which makes model selection on a synthetic proxy unreliable for
+the field and not only for us; and the forward-motion assumption that makes the
+decision tractable fails at a repeat, where \sys{} is worse than the rule it
+replaces. Pitch agreement between a candidate and the audio is the natural next
+source of evidence independent of the history.
 
 \vfill\pagebreak
 
