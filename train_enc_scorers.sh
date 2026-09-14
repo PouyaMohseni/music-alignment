@@ -20,7 +20,19 @@ F=/scratch/pmohseni/omr/cand_enc_$ARM
 M=/scratch/pmohseni/omr/scorer/enc; mkdir -p "$M"
 T="$M/${ARM}_s$S.pt"
 [ -f "$T" ] && { echo "present: $T"; exit 0; }
-[ -f "$F/valid.npz" ] || { echo "FATAL: no dumps under $F"; exit 1; }
+# Refuse to train on a partial dump. Twice now a scorer has run to completion
+# on a dump still being written, producing a checkpoint fitted on a fifth of
+# the data whose numbers looked entirely plausible. The dump is seven files:
+# room, valid and five training shards.
+NEED="room valid train_c0 train_c1 train_c2 train_c3 train_c4"
+MISSING=""
+for f in $NEED; do [ -s "$F/$f.npz" ] || MISSING="$MISSING $f"; done
+[ -z "$MISSING" ] || { echo "FATAL: incomplete dump in $F, missing:$MISSING"; exit 1; }
+# and refuse if any of them was written in the last two minutes, which means
+# the dump job is probably still going
+RECENT=$(find "$F" -name '*.npz' -newermt '-2 minutes' | wc -l)
+[ "$RECENT" -eq 0 ] || { echo "FATAL: $F written within the last 2 min, still in flight"; exit 1; }
+echo "dump complete: $(ls "$F"/*.npz | wc -l) files, $(du -sh "$F" | cut -f1)"
 echo "##### $ARM seed=$S dumps=$F"
 python extensions/analysis/train_cand_scorer.py --out "$T" \
     --train "$F/train_c*.npz" --valid "$F/valid.npz" \
