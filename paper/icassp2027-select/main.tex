@@ -110,8 +110,8 @@ discarded. What that set contains bounds what any selection rule could
 achieve, and on the room-microphone recordings the bound lies far above what is
 realised. Among the 256 highest-scoring candidates at each
 instant, one falls within the 0.5\,s tolerance at all 4,149 scored onsets, and
-a causal bound that must commit at each instant and never select a position
-behind its last reaches 99.9\%, against 80.0\% for the deployed argmax
+a causal oracle, choosing with knowledge of the truth but forced to commit at
+each instant and never select a position behind its last, reaches 99.9\%, against 80.0\% for the deployed argmax
 (Fig.~\ref{fig:example}). Almost all of the twenty points lost on real audio
 are therefore recoverable under the realtime constraint, which locates the loss in
 candidate ordering rather than in the visual evidence.
@@ -324,8 +324,10 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
   \label{fig:analysis}
 \end{figure}
 
-Since \sys{} orders proposals, it applies to any follower that produces a
-candidate set and then discards it. CODA~\cite{yang2026coda} is not such a target, since
+With a detector $D(x_t,\mathcal{S})\mapsto\mathcal{C}_t$, \sys{} is a causal
+selector $f(\mathcal{C}_t,\hat u_{t-1})\mapsto\hat u_t$ and so a post-hoc
+decision layer for any follower exposing candidate locations, confidences and
+the previous decision, features optional. CODA~\cite{yang2026coda} is not such a target, since
 its final stage regresses a continuous bar-local coordinate rather than
 choosing among proposals, and the sets it does select over, systems and bars,
 are supplied by layout annotation and already decoded with beam search.
@@ -408,9 +410,8 @@ of~\cite{yang2026coda} in place of the whole audio tower reaches 76.2\% against
 end while replacing only the recurrence, which we call CYOLO-Mamba, reaches
 91.5\%. The recurrence therefore benefits from a state-space model while the
 convolutional front end is load-bearing, the encoder ablation absent
-from~\cite{yang2026coda}. None of this rescues the gap, the strongest of these
-merely reaching what re-deciding over an already
-released one achieves.
+from~\cite{yang2026coda}. None of this rescues the gap, the strongest
+merely reaching what re-deciding over a released detector achieves.
 
 Across 48 trained models, accuracy on the synthesized validation split
 correlates $r=0.16$ with accuracy on the real recordings
@@ -436,14 +437,13 @@ takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
 against 88.3\% for the best published system, at 1.25\,ms per instant on one
 CPU thread, without retraining any detector and without layout annotation, by a
 margin holding across three released detectors. Within this framework the
-decision depends far more on its own temporal history than on the image
+decision depends far more on its temporal history than on the image
 representations we tested. Two results temper this, the first being that accuracy on synthesized audio
 barely predicts accuracy on real audio across 48 trained models, which makes
 selection on a synthetic proxy unreliable for the field and not only for us,
 and the second that the forward-motion assumption of Eq.~\ref{eq:prior}
-confines the method to performances played in the written order. Pitch agreement between a candidate
-and the audio is the natural next source of evidence independent of the
-history.
+confines the method to performances played in the written order. Pitch agreement between candidate and audio is
+the next source of evidence independent of the history.
 
 \newpage
 
