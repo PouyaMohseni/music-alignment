@@ -139,10 +139,10 @@ new best on real recordings across three released detectors.
 \subsection{Backbone}
 \label{ssec:backbone}
 
-Every sheet-image follower shares one perception module,
+Every sheet-image follower shares a perception module,
 a convolutional network over the score page whose feature maps are modulated by
 the audio. The mechanism is feature-wise linear
-modulation~\cite{perez2018film}, which injects an external vector into a
+modulation~\cite{perez2018film}, which injects a vector into a
 network by scaling and shifting its activations,
 $f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z)$, where $s$ and $t$ are learned linear
 maps of a conditioning vector $z$ and $\odot$ is elementwise. As the page does not indicate where the performer is,
