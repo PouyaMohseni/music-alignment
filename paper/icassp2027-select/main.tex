@@ -222,16 +222,16 @@ competitors.
 
 The decision is supervised listwise against soft targets, so with
 $\varepsilon_i$ the error in frames of candidate $i$ the target is
-$q_i\propto\exp(-\varepsilon_i/\tau)$ with $\tau=3$ frames, about
-0.15\,s, so that the target rewards landing near the onset rather than exactly
-on it, and the loss is the
-cross-entropy $-\sum_i q_i\log\mathrm{softmax}(s)_i$, so the scorer learns to
-order a set rather than to regress a coordinate.
-History features come from previous decisions, perturbed on 30\% of samples by
-Laplace noise of scale 30\,px, heavy-tailed so that training sees both drift
-and gross error~\cite{bengio2015scheduled}; without the perturbation the
-scorer assumes an exact history and validation accuracy falls below the argmax
-baseline. At inference \sys{} decides
+$q_i\propto\exp(-\varepsilon_i/\tau)$ and the loss is the cross-entropy
+$-\sum_i q_i\log\mathrm{softmax}(s)_i$, under which the scorer learns to order
+a set rather than to regress a coordinate. History features come from previous
+decisions, perturbed by Laplace noise whose heavy tail exposes training to both
+drift and gross error~\cite{bengio2015scheduled}. Target width and perturbation
+are chosen by ablation on the validation set: $\tau=3$ frames, about 0.15\,s,
+rewards landing near the onset rather than exactly on it, and noise of scale
+30\,px on 30\% of samples is worth 2.9 points over an unperturbed history,
+which leaves the scorer below the argmax baseline it replaces; heavier noise is
+worse. At inference \sys{} decides
 \begin{equation}
   \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,h_i ,
   \label{eq:decode}
