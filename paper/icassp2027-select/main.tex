@@ -28,19 +28,18 @@
 
 \begin{abstract}
 Score following aligns a live performance to its score in real time,
-committing to a position at every instant with no lookahead. Its two sides are
-different kinds of object, the performance audio and the score an image, and
-the established response is to convert one into the other and align within a
+committing to a position at every instant with no lookahead. It concerns two input
+modalities, image and audio, and the established response is to convert one into the other and align within a
 single modality, by optical music recognition or by transcription, each detour
-inheriting the errors of its conversion. Sheet-image score following converts
-neither, conditioning a visual detector on the audio, and what limits it is
+inheriting the errors of its conversion. Sheet-image score following conditions a
+visual detector on the audio, and what limits it is
 annotation, since alignments to notehead coordinates are costly enough that
 nearly all training data is synthesized and these systems lose much of their
 accuracy on a real instrument in a real room. Every remedy proposed for that
-gap has treated it as a failure of perception. We show that it is not, since
-the detector already proposes a position within the standard tolerance at every
-scored onset of a real recording and an oracle held to the same realtime
-commitments recovers almost everything the deployed rule loses. We therefore
+gap has treated it as a failure of perception, yet we show that the detector
+already proposes a position within the standard tolerance at every scored onset
+of a real recording and that an oracle held to the same realtime commitments
+recovers almost everything the deployed rule loses. We therefore
 recast the task as sequential selection over the candidates the detector
 already emits, combining a parameter-free transition model with a set-based
 scorer that judges each candidate against its competitors. This sets a new best
@@ -57,8 +56,8 @@ music information retrieval
 \label{sec:intro}
 
 Music alignment puts a performance and its score in correspondence, mapping
-each moment of the audio to a position in the written music. The regimes differ
-in whether the alignment may look ahead. Offline, known as audio-to-score
+each moment of audio to a position in the written music. The regimes differ in
+whether alignment may look ahead. Offline, known as audio-to-score
 alignment or music synchronisation, the whole recording is in hand, dynamic
 time warping settles every position at once~\cite{dixon2005match}, repeats and
 jumps are recoverable after the fact~\cite{shan2020,morsi2022}, and the
@@ -297,13 +296,13 @@ lets the benchmark as a whole participate in choosing them, which the published
 baselines did not require, so the residual form of Eq.~\ref{eq:decode} is
 carried alongside as the variant fitting nothing to any real recording.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Real room-microphone recordings. $\dagger$ proprietary training
 data, $\ddagger$ layout annotation at test time.}
 \label{tab:main}
-\setlength{\tabcolsep}{4.2pt}
-{\small
+\setlength{\tabcolsep}{2.2pt}
+{\scriptsize
 \begin{tabular}{lcccccc}
 \toprule
 & \multicolumn{5}{c}{Onsets tracked (\%) within threshold (s)} & \\
@@ -325,10 +324,10 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
 \multicolumn{7}{l}{\emph{Detectors we retrained, 24\,h, audio tower only}}\\
 \syson{CYOLO-LSTM} (control)                   & 58.2 & 60.6 & 83.3 & 87.5 & 98.3 & $+$11.6 \\
 \syson{CYOLO-Mamba}                            & 62.8 & 65.7 & 91.5 & 94.6 & 99.3 & $+$19.0 \\
-\syson{CYOLO, audio tower as~\cite{yang2026coda}} & 44.7 & 47.4 & 76.2 & 83.9 & 96.5 & $+$17.3 \\
+\syson{CYOLO, CODA tower}~\cite{yang2026coda} & 44.7 & 47.4 & 76.2 & 83.9 & 96.5 & $+$17.3 \\
 \bottomrule
 \end{tabular}}
-\end{table*}
+\end{table}
 
 \section{Results}
 \label{sec:results}
