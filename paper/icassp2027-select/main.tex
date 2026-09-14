@@ -111,9 +111,9 @@ could achieve, and on the real room-microphone recordings the bound lies far
 above what is realised. Among the 256 highest-scoring candidates at each
 instant, one falls within the 0.5\,s tolerance at all 4,149 scored onsets, and
 a causal bound that must commit at each instant and never select a position
-behind its last still reaches 99.6\%, against 80.0\% for the deployed argmax
-(Fig.~\ref{fig:example}). Nineteen of the twenty points lost on real audio are
-therefore recoverable under the realtime constraint, which locates the loss in
+behind its last still reaches 99.9\%, against 80.0\% for the deployed argmax
+(Fig.~\ref{fig:example}). Almost all of the twenty points lost on real audio
+are therefore recoverable under the realtime constraint, which locates the loss in
 the ordering of the candidates rather than in the visual evidence.
 
 This argues for treating the task as a sequential decision over the positions a
@@ -394,7 +394,7 @@ where on synthesized validation audio the same three differ by 3.4 points.
 Removing the features computed against the previous decision instead costs 7.2
 points, the largest single ablation here, and teacher forcing attributes two
 thirds of the remaining error to drift, since given the true previous position
-the same scorer reaches 98.0\% against the causal oracle's 99.6\%.
+the same scorer reaches 98.0\% against the causal oracle's 99.9\%.
 
 Retraining the detector itself from scratch with a different audio encoder
 gives the lower block of Table~\ref{tab:main}, not comparable with the
