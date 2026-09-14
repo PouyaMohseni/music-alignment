@@ -110,22 +110,27 @@ def main():
     fig, ax = plt.subplots(figsize=(3.35, 3.35 * (y1 - y0) / (x1 - x0)), dpi=600)
     ax.imshow(img, cmap='gray', vmin=0, vmax=255, interpolation='antialiased')
     # outlined boxes at this scale vanished into the staff lines, so the
-    # candidates are drawn as fills. They have to stay faint: at the earlier
-    # opacity the notation underneath them was unreadable, and the figure
-    # exists to show that the correct notehead was among them.
+    # candidates are drawn as fills.
     #
-    # Every box gets the SAME alpha, and the whole set is drawn rather than a
-    # subset. Ranking the alpha by confidence was invisible anyway, because the
-    # boxes pile up: the top 40 occupy 7 distinct positions and the top 20
-    # occupy 3, so a reader counting yellow shapes counted 7 and the caption
-    # claimed 40. With a constant alpha the pile-up itself does the shading,
-    # a position holding a dozen boxes reading an order of magnitude darker
-    # than one holding a single box, and the count in the caption is the count
-    # the method uses.
-    for r in range(min(TOPN, len(x)))[::-1]:
+    # Overlap is the thing the figure has to convey, because the top 64
+    # candidates land on only twelve distinct positions. Left to alpha
+    # compositing it does darken -- two boxes at 0.11 measure 0.21 -- but the
+    # step from one box to two moves the blue channel by 7% and is close to
+    # invisible on a printed column. So the count is read off explicitly and
+    # mapped to opacity, with one fill per position rather than a stack: the
+    # jump from a single candidate to two is large, and the curve saturates so
+    # that a dozen candidates still leave the notation readable.
+    groups = {}
+    for r in range(min(TOPN, len(x))):
+        k = (round(float(x[r]) / 5.0), round(float(y[r]) / 20.0))
+        groups.setdefault(k, []).append(r)
+    for members in sorted(groups.values(), key=len):
+        r = members[0]
+        c = len(members)
+        a = 0.12 + 0.26 * (1.0 - 1.0 / c)
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
-                               facecolor='#f7c948', edgecolor='none',
-                               alpha=0.11))
+                               facecolor='#f7c948', edgecolor='none', alpha=a))
+
     # the two outlines are the detector's own boxes at their true extent. It
     # is the stroke that has to stay thin: at 1.5 pt the border was heavier
     # than the staff lines and read as a filled bar.
