@@ -352,7 +352,8 @@ rows are seed means with deviations.
 
 \begin{table*}[t]
 \centering
-\caption{Onsets tracked on 16 real piano recordings, 4,149 onsets.}
+\caption{Results comparison on the real room-microphone recordings.
+$^\dagger$\,proprietary training data; $^\ddagger$\,reads a layout annotation at test time.}
 \label{tab:main}
 \setlength{\tabcolsep}{4.2pt}
 {\small
@@ -407,10 +408,8 @@ backbone \sys{} could be attached to.
 Table~\ref{tab:main} sets \sys{} against the published literature, taken
 from~\cite{yang2026coda}, on the same recordings, all of which are played
 straight through; Sec.~\ref{ssec:jump} reports what happens when a performance
-is not. There $\Delta$ is the gain at 0.5\,s over the perception model each row
-is built on, $\ddagger$ marks the one method reading the system and bar boxes of
-the page at test time, and $\dagger$ a checkpoint trained on proprietary
-recordings. \sys{} tracks 94.4\% of onsets
+is not, and $\Delta$ is the gain at 0.5\,s over the perception model each row
+is built on. \sys{} tracks 94.4\% of onsets
 within 0.5\,s, 95\% CI over pieces \tbd{[a,\,b]}, where the previous best was
 88.3\%, and leads at every threshold. The margin is not an artifact of one
 perception model. Retrained on whichever candidates each model emits, the decision gains
