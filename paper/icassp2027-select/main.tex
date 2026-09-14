@@ -194,7 +194,7 @@ grows with elapsed time,
 \end{equation}
 with $\rho_t=\mathrm{clip}(\Delta_t/\Delta_0,\,0.2,\,8)$ and $\Delta_0=5$
 frames, the mean inter-onset gap in training. The floor $J$ keeps a jump
-possible at bounded cost, and combined with confidence $h_i=\log o_i+\log\pi_i$
+possible at bounded cost, and combined with confidence $\ell_i=\log o_i+\log\pi_i$
 already recovers a large part of the gap.
 
 \subsubsection{Set-based scorer}
@@ -235,12 +235,12 @@ rewards landing near the onset rather than exactly on it, and noise of scale
 which leaves the scorer below the argmax baseline it replaces; heavier noise is
 worse. At inference \sys{} decides
 \begin{equation}
-  \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,h_i ,
+  \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,\ell_i ,
   \label{eq:decode}
 \end{equation}
 causally and greedily, one pass over 256 candidates per instant, in 1.25\,ms on
 a single CPU thread against the 50\,ms available at 20\,fps. Training on the
-residual $s_i-h_i$ and deciding $\arg\max_i(s_i+h_i)$ is Eq.~\ref{eq:decode} at
+residual $s_i-\ell_i$ and deciding $\arg\max_i(s_i+\ell_i)$ is Eq.~\ref{eq:decode} at
 $\beta=0.5$ and eliminates all four constants.
 
 \section{Experimental setup}
