@@ -1,34 +1,5 @@
 \begin{thebibliography}{10}
 
-\bibitem{orio2003}
-Nicola Orio, Serge Lemouton, and Diemo Schwarz,
-\newblock ``Score following: State of the art and new developments,''
-\newblock in {\em Proc. International Conference on New Interfaces for Musical
-  Expression (NIME)}, 2003, pp. 36--41.
-
-\bibitem{arzt2008}
-Andreas Arzt, Gerhard Widmer, and Simon Dixon,
-\newblock ``Automatic page turning for musicians via real-time machine
-  listening,''
-\newblock in {\em Proc. European Conference on Artificial Intelligence (ECAI)},
-  2008, pp. 241--245.
-
-\bibitem{dannenberg1984}
-Roger~B. Dannenberg,
-\newblock ``An on-line algorithm for real-time accompaniment,''
-\newblock in {\em Proc. International Computer Music Conference (ICMC)}, 1984.
-
-\bibitem{dannenberg2006}
-Roger~B. Dannenberg and Christopher Raphael,
-\newblock ``Music score alignment and computer accompaniment,''
-\newblock {\em Communications of the ACM}, vol. 49, no. 8, pp. 38--43, 2006.
-
-\bibitem{raphael2010}
-Christopher Raphael,
-\newblock ``Music plus one and machine learning,''
-\newblock in {\em Proc. International Conference on Machine Learning (ICML)},
-  2010, pp. 21--28.
-
 \bibitem{dixon2005match}
 Simon Dixon and Gerhard Widmer,
 \newblock ``{MATCH}: A music alignment tool chest,''
@@ -56,11 +27,35 @@ Matthias Dorfer, Jan Haji{\v{c}}~jr., Andreas Arzt, Harald Frostel, and Gerhard
 \newblock {\em Transactions of the International Society for Music Information
   Retrieval}, vol. 1, no. 1, 2018.
 
+\bibitem{orio2003}
+Nicola Orio, Serge Lemouton, and Diemo Schwarz,
+\newblock ``Score following: State of the art and new developments,''
+\newblock in {\em Proc. International Conference on New Interfaces for Musical
+  Expression (NIME)}, 2003, pp. 36--41.
+
 \bibitem{arzt2010}
 Andreas Arzt and Gerhard Widmer,
 \newblock ``Towards effective `any-time' music tracking,''
 \newblock in {\em Proc. Starting AI Researchers' Symposium (STAIRS)}, 2010, pp.
   24--36.
+
+\bibitem{arzt2008}
+Andreas Arzt, Gerhard Widmer, and Simon Dixon,
+\newblock ``Automatic page turning for musicians via real-time machine
+  listening,''
+\newblock in {\em Proc. European Conference on Artificial Intelligence (ECAI)},
+  2008, pp. 241--245.
+
+\bibitem{dannenberg1984}
+Roger~B. Dannenberg,
+\newblock ``An on-line algorithm for real-time accompaniment,''
+\newblock in {\em Proc. International Computer Music Conference (ICMC)}, 1984.
+
+\bibitem{raphael2010}
+Christopher Raphael,
+\newblock ``Music plus one and machine learning,''
+\newblock in {\em Proc. International Conference on Machine Learning (ICML)},
+  2010, pp. 21--28.
 
 \bibitem{cont2010}
 Arshia Cont,
