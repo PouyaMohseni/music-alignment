@@ -72,22 +72,21 @@ must be produced before frame $t+1$ arrives. Automatic page
 turning~\cite{arzt2008}, live computer
 accompaniment~\cite{dannenberg1984,raphael2010} and score-synchronised display
 depend on it, and every result below, the oracles included, respects the
-constraint. As the problem is concerned with two modalities, the literature
-addresses it in three different ways.
+constraint. The literature bridges the two modalities in
+three ways, differing in which side, if either, is converted.
 
-The first converts the score. Optical music recognition renders the page as
+Using optical music recognition, the first category renders the page as
 symbols, after which a classical follower tracks a discrete sequence of states,
 a line running from online dynamic time warping~\cite{dixon2005match} through
 duration models~\cite{cont2010}, hidden semi-Markov models~\cite{nakamura2015},
 particle filters~\cite{korzeniowski2013}, switching state-space
-models~\cite{jiang2020} and multi-agent tracking~\cite{arzt2010}; recognition
-remains error-prone~\cite{calvo2020omr} and the follower inherits its
-mistakes. The second converts the audio, pairing realtime piano
-transcription with symbol-level tracking to strong effect~\cite{peter2025}, at
-the price of bounding the follower by the transcriber.
+models~\cite{jiang2020} and multi-agent tracking~\cite{arzt2010}. The second
+category converts the audio instead, pairing realtime piano
+transcription~\cite{kong2021} with symbol-level tracking to strong
+effect~\cite{peter2025}, at the price of bounding the follower by the
+transcriber.
 
-The third converts neither, learning the audio-to-pixel correspondence
-directly. Dorfer et al.~\cite{dorfer2016} classified position into
+The third category learns the audio-to-pixel correspondence directly. Dorfer et al.~\cite{dorfer2016} classified position into
 staff-level buckets on crops; reinforcement learning framed tracking as an
 agent on a score strip~\cite{dorfer2018rl,henkel2019rl};
 CUNet~\cite{henkel2020cunet} emitted an audio-conditioned segmentation of the

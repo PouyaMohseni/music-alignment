@@ -85,10 +85,12 @@ Yucong Jiang and Christopher Raphael,
 \newblock in {\em Proc. International Society for Music Information Retrieval
   Conference (ISMIR)}, 2020, pp. 693--699.
 
-\bibitem{calvo2020omr}
-Jorge Calvo-Zaragoza, Jan Haji{\v{c}}~jr., and Alexander Pacha,
-\newblock ``Understanding optical music recognition,''
-\newblock {\em ACM Computing Surveys}, vol. 53, no. 4, 2020.
+\bibitem{kong2021}
+Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan, and Yuxuan Wang,
+\newblock ``High-resolution piano transcription with pedals by regressing onset
+  and offset times,''
+\newblock {\em IEEE/ACM Transactions on Audio, Speech, and Language
+  Processing}, vol. 29, pp. 3707--3717, 2021.
 
 \bibitem{peter2025}
 Silvan Peter, Patricia Hu, and Gerhard Widmer,
