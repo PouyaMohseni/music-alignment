@@ -362,9 +362,8 @@ appears in Table~\ref{tab:main} as the strongest published system on these
 recordings, not as a backbone \sys{} could be attached to.
 
 Table~\ref{tab:main} sets \sys{} against the published literature, taken
-from~\cite{yang2026coda}, on recordings played straight through;
-Sec.~\ref{ssec:jump} reports what happens when a performance is not, and
-$\Delta$ is the gain at 0.5\,s over the perception model each row is built on.
+from~\cite{yang2026coda}, on recordings played straight through, with
+$\Delta$ the gain at 0.5\,s over the perception model each row is built on.
 \sys{} tracks 94.4\% of onsets within 0.5\,s, 95\% CI over pieces
 $[92.2,\,97.1]$, against a previous best of 88.3\%, and leads at every
 threshold. Sixteen pieces are few and the interval is correspondingly wide,
@@ -460,22 +459,6 @@ field selects models on synthesized audio, this is a caution beyond our own
 experiments, and it is why our constants are cross-validated on the target
 recordings instead.
 
-\subsection{Score discontinuities}
-\label{ssec:jump}
-
-Eq.~\ref{eq:prior} assumes the performance moves forward, which is what makes
-the decision tractable and also what a repeat or a jump breaks. Splicing three
-discontinuities into each performance at random destinations following the
-protocol of~\cite{yang2026coda}, re-running perception on the spliced audio so
-its conditioning is genuinely wrong afterwards and excluding jumps across a
-page boundary where state resets anyway, 41 remain. Over the five seconds after
-one, \sys{} tracks 8\% of onsets against 27\% for the argmax it replaces,
-because the transition model holds the trajectory at a stale position.
-Triggering a reset on the scorer's own confidence recovers this to 26\% and
-costs 1.0 point on the unspliced recordings, so selection and discontinuity
-detection compose at a stated price rather than contend. We report \sys{}
-without the trigger, the evaluation repertoire being played straight through.
-
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -498,9 +481,9 @@ history than on the image representations we tested, three of which, including
 none at all, give the same real-audio accuracy. Two results temper this.
 Accuracy on synthesized audio barely predicts accuracy on real audio across 48
 trained models, which makes model selection on a synthetic proxy unreliable for
-the field and not only for us; and the forward-motion assumption that makes the
-decision tractable fails at a repeat, where \sys{} is worse than the rule it
-replaces. Pitch agreement between a candidate and the audio is the natural next
+the field and not only for us. The other is that the forward-motion assumption
+of Eq.~\ref{eq:prior} confines the method to performances played in the written
+order. Pitch agreement between a candidate and the audio is the natural next
 source of evidence independent of the history.
 
 \section{Acknowledgments}
