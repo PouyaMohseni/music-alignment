@@ -241,7 +241,11 @@ The released detectors score 8,112 boxes per instant and report
   \label{eq:argmax}
 \end{equation}
 which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
-previous choice $\hat u_{t-1}$, and nothing else.
+previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where
+availability stops binding, since a correct candidate is present at every
+onset only from 256 and the causal oracle falls to 85.6\% at $K=64$, below
+what \sys{} itself reaches, so a smaller set would limit the decision rather
+than test it.
 
 \subsubsection{Transition model}
 
