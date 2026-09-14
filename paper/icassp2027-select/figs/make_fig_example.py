@@ -26,7 +26,7 @@ T = '/scratch/pmohseni/omr/traj'
 DUMP = '/scratch/pmohseni/omr/candf256/room.npz'
 DATA = '/scratch/pmohseni/datasets/cyolo_data/msmd/msmd_rp'
 OUT = '/project/def-ichiro/pmohseni/music-alignment/paper/icassp2027-select/figs/fig_example'
-TOPN = 256
+TOPN = 64
 
 
 def staff_tables(coords, page):
@@ -125,7 +125,7 @@ def main():
     for r in range(min(TOPN, len(x)))[::-1]:
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
                                facecolor='#f7c948', edgecolor='none',
-                               alpha=0.065))
+                               alpha=0.085))
     ax.add_patch(Rectangle((x[0] - w[0] / 2, y[0] - h[0] / 2), w[0], h[0], fill=False,
                            lw=1.5, ec='#C0392B', label=f'confidence only, {eb:.1f}\u2009s off'))
     ax.add_patch(Rectangle((x[io] - w[io] / 2, y[io] - h[io] / 2), w[io], h[io], fill=False,
@@ -141,7 +141,7 @@ def main():
     ax.plot([], [], marker='o', ls='none', ms=5, mfc='none', mec='k', mew=1.1,
             label='true position')
     ax.plot([], [], marker='s', ls='none', ms=5, color='#f2b705', alpha=0.8,
-            label=f'{TOPN} note candidates')
+            label='note candidates')
     ax.set_xlim(x0, x1)
     ax.set_ylim(y1, y0)
     ax.set_xticks([])
