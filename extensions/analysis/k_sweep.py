@@ -54,9 +54,14 @@ def oracle_causal(pages, k, tol_s=0.5):
             if c.shape[0] == 0:
                 continue
             cs = c[:k]
-            x, t = cs[:, 5], float(p['t_gt'][i])
-            reach = x >= prev
-            good = np.abs(x - t) <= tol
+            # reachability is on the PAGE COORDINATE, column 0, because the
+            # constraint being modelled is that the tracker never moves
+            # backwards on the page. Testing it on the mapped time in column 5
+            # is more permissive and inflates the oracle by three points at
+            # K=64. Correctness is still judged on the mapped time.
+            x, t = cs[:, 0], float(p['t_gt'][i])
+            reach = x >= prev - 1e-6
+            good = np.abs(cs[:, 5] - t) <= tol
             tot += 1
             ok = np.flatnonzero(good & reach)
             if ok.size:

@@ -18,4 +18,4 @@ case ${SLURM_ARRAY_TASK_ID} in
   0) D=$O/candf256/room.npz;        C="$M/nbr/nbrp64_s[0-2].pt";       L="CYOLO-SB" ;;
   1) D=$O/cand_cyolo_sb_a/room.npz; C="$M/extra/cyolo_sb_a_s[0-9].pt"; L="CYOLO-SB+A" ;;
 esac
-python extensions/analysis/k_sweep.py --dump "$D" --ckpt "$C" --ks 32,64,128,256 --label "$L"
+python extensions/analysis/k_sweep.py --dump "$D" --ckpt "$C" --ks 16,32,64,128,256 --label "$L"

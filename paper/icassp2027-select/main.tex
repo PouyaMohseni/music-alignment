@@ -147,13 +147,11 @@ differing in heads and in training data.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_example.pdf}
-  \caption{One instant of a real room-microphone recording. In yellow, the 64
-  most confident of the 256 candidates, with opacity rising where several
-  land on the same notehead. The most confident (red) lies on the wrong staff,
-  2.3\,s from the truth; \sys{} (teal) takes a less confident candidate on the
-  true note (ring), forward of the previous decision (caret). The correct
-  position was available and was not chosen, which is the characteristic
-  failure on real audio.}
+  \caption{One instant of a real room-microphone recording. In yellow the 64
+  most confident candidates, darker where several share a notehead. The most
+  confident (red) is on the wrong staff, 2.3\,s off; \sys{} (teal) takes a
+  less confident one on the true note (ring), forward of the previous decision
+  (caret). The correct position was available and was not chosen.}
   \label{fig:example}
 \end{figure}
 
@@ -277,40 +275,36 @@ $\beta=0.5$ and eliminates all four constants.
 
 All experiments use MSMD~\cite{dorfer2018msmd}, which pairs public-domain
 LilyPond engravings with MIDI-derived alignments for solo piano. Its repertoire
-is Western classical, weighted towards the Baroque and Classical periods and
-dominated by Bach, with Beethoven, Mozart, Handel, Schumann, Chopin, Czerny and
-Burgm\"uller making up most of the remainder. Textures range from two-voice
-inventions to dense Romantic writing, which matters here because the number of
-simultaneous noteheads sets how many plausible candidates a page affords at
-each instant.
+is Western classical, weighted towards the Baroque and Classical and dominated
+by Bach, with Beethoven, Mozart, Handel, Schumann, Chopin, Czerny and
+Burgm\"uller making up most of the remainder, and textures from two-voice
+inventions to dense Romantic writing, which sets how many plausible candidates
+a page affords at each instant.
 
 The decision model is trained on 353 pieces, synthesized and convolved with
 measured room impulse responses~\cite{traer2016}, and validated on 19, using
 AdamW ($3\cdot10^{-3}$, cosine, 40 epochs, batch 256). Evaluation is the
 real-performance benchmark of~\cite{henkel2019rl}, 16 pieces of Bach, Schumann,
 Mozart, Chopin and Mussorgsky spanning 25 pages and 4,149 onsets, played on a
-Yamaha AvantGrand N2 and captured with a room microphone. The correct page is
-given throughout, so page identification is outside what is measured here. A further 80 held-out
-pieces are rendered with a real impulse response and noise from 12 to 0.5\,dB
-SNR. We report the percentage of onsets whose predicted position maps to within
-0.05 to 5\,s of the true time, 0.5\,s primary, with 95\% intervals bootstrapped
-over pieces~\cite{efron1993}, and seed means with deviations.
+Yamaha AvantGrand N2 and captured with a room microphone, with the correct page
+given throughout. A further 80 held-out pieces are rendered with a real impulse
+response and noise from 12 to 0.5\,dB SNR. We report the percentage of onsets
+whose predicted position maps to within 0.05 to 5\,s of the true time, 0.5\,s
+primary, with 95\% intervals bootstrapped over pieces~\cite{efron1993} and seed
+means with deviations.
 
-Three kinds of data enter at three stages and are worth keeping apart. The
-decision model is trained on synthesized audio alone and never sees a real
-recording. The four constants $(\mu,\sigma,J,\beta)$ are calibrated on real
-recordings leave-one-piece-out, chosen for each evaluation piece on the other
-15 with pieces weighted equally. Evaluation is on the piece held out. Leaving a
-piece out of its own constants does not stop the benchmark as a whole from
-participating in choosing them, which the published baselines did not require,
-so the residual form of Eq.~\ref{eq:decode} is carried alongside as the variant
-that fits nothing to any real recording.
+Three kinds of data enter at three stages. The decision model is trained on
+synthesized audio alone and never sees a real recording, the four constants
+$(\mu,\sigma,J,\beta)$ are calibrated leave-one-piece-out on the other 15 real
+pieces weighted equally, and evaluation is on the piece held out. That still
+lets the benchmark as a whole participate in choosing them, which the published
+baselines did not require, so the residual form of Eq.~\ref{eq:decode} is
+carried alongside as the variant fitting nothing to any real recording.
 
 \begin{table*}[t]
 \centering
-\caption{Results comparison on the real room-microphone recordings.
-$\dagger$ and $\ddagger$ mark proprietary training data and a layout
-annotation read at test time.}
+\caption{Real room-microphone recordings. $\dagger$ proprietary training
+data, $\ddagger$ layout annotation at test time.}
 \label{tab:main}
 \setlength{\tabcolsep}{4.2pt}
 {\small
@@ -332,7 +326,7 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
 \syson{CYOLO-SB}                                     & 69.0 & 71.4 & 90.6 & 94.2 & 98.2 & $+$10.7 \\
 \syson{CYOLO-SB+A$^\dagger$}                   & \textbf{76.0} & \textbf{78.5} & \textbf{94.4} & \textbf{96.9} & \textbf{99.6} & $+$7.9 \\
 \midrule
-\multicolumn{7}{l}{\emph{Detectors we trained, 24\,h from random initialisation; only the audio tower differs}}\\
+\multicolumn{7}{l}{\emph{Detectors we retrained, 24\,h, audio tower only}}\\
 \syson{CYOLO-LSTM} (control)                   & 58.2 & 60.6 & 83.3 & 87.5 & 98.3 & $+$11.6 \\
 \syson{CYOLO-Mamba}                            & 62.8 & 65.7 & 91.5 & 94.6 & 99.3 & $+$19.0 \\
 \syson{CYOLO, audio tower as~\cite{yang2026coda}} & 44.7 & 47.4 & 76.2 & 83.9 & 96.5 & $+$17.3 \\
@@ -346,10 +340,9 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figs/fig_analysis.pdf}
-  \caption{(a) 80 held-out pieces under a measured room impulse response and
-  additive noise, 40,594 onsets per level. (b) Each point is one of 48 trained
-  decision models. Half of them fall in the shaded 1.5-point band of validation
-  accuracy and still differ by 19 points on the real recordings.}
+  \caption{(a) 80 held-out pieces under a room impulse response and additive
+  noise, 40,594 onsets per level. (b) 48 trained decision models; half fall in
+  the shaded 1.5-point validation band and differ by 19 points on real audio.}
   \label{fig:analysis}
 \end{figure}
 
@@ -406,11 +399,11 @@ CYOLO~\cite{henkel2021eusipco}          & 3 & 71.3 & 72.5 & 91.6\,$\pm$\,1.4 \\
 CYOLO-SB~\cite{henkel2021frontiers}     & 6 & 80.0 & 86.5 & 90.6\,$\pm$\,0.9 \\
 CYOLO-SB+A$^\dagger$                    & 3 & 86.5 & 90.8 & \textbf{94.4\,$\pm$\,0.9} \\
 \midrule
-\multicolumn{5}{l}{\emph{Decision model}, on CYOLO-SB candidates (80.0, 86.5)}\\
+\multicolumn{5}{l}{\emph{Decision model}, CYOLO-SB candidates}\\
 residual, no fitted constants           & 3 &      &      & 88.7\,$\pm$\,0.9 \\
 without temporal history                & 3 &      &      & 83.7\,$\pm$\,0.4 \\
 \midrule
-\multicolumn{5}{l}{\emph{Image features} $f_i$, on CYOLO-SB candidates}\\
+\multicolumn{5}{l}{\emph{Image features} $f_i$, CYOLO-SB candidates}\\
 FiLM-conditioned backbone               & 6 &      &      & 90.6\,$\pm$\,0.9 \\
 DINOv2~\cite{oquab2024dinov2}           & 1 &      &      & 90.9 \\
 none                                    & 1 &      &      & 90.9 \\
@@ -426,29 +419,27 @@ none                                    & 1 &      &      & 90.9 \\
 Giving the scorer the FiLM-conditioned backbone feature, DINOv2 patch
 features~\cite{oquab2024dinov2} on the same grid, or no image feature at all
 yields 90.6, 90.9 and 90.9, a spread well inside the 0.9-point seed deviation,
-where on synthesized validation audio the same three differ by 3.4 points. Those
-features are learnable and useful there and worth nothing on real audio.
+where on synthesized validation audio the same three differ by 3.4 points.
 Removing the features computed against the previous decision instead costs 7.2
 points, the largest single ablation here, and teacher forcing attributes two
 thirds of the remaining error to drift, since given the true previous position
 the same scorer reaches 98.0\% against the causal oracle's 99.6\%.
 
-We also rebuilt the perception model, retraining the detector from scratch for
-a fixed 24-hour budget with a different audio encoder. These are the lower
-block of Table~\ref{tab:main}, not comparable with the converged checkpoints
-above it and reported because the decision gains a similar margin whatever it
-is attached to. A frozen MERT-95M tower~\cite{li2024mert} with only a
-projection trained reaches 46.2 and overfits 12.6-fold. Replacing the whole
-audio tower with the two-layer causal Mamba~\cite{gu2024mamba} of~\cite{yang2026coda}, trained as
-they train it, reaches 76.2 against 83.3 for an identically budgeted control,
-while keeping the convolutional front end and replacing only the recurrence,
-which we call CYOLO-Mamba, reaches 91.5. The recurrence therefore benefits from
-a state-space model and the convolutional front end is load-bearing, which is
+Retraining the detector itself from scratch on a fixed 24-hour budget with a
+different audio encoder gives the lower block of Table~\ref{tab:main}, not
+comparable with the converged checkpoints above it and reported because the
+decision gains a similar margin whatever it is attached to. A frozen MERT-95M
+tower~\cite{li2024mert} reaches 46.2 and overfits 12.6-fold; the two-layer
+causal Mamba~\cite{gu2024mamba} of~\cite{yang2026coda} in place of the whole
+audio tower reaches 76.2 against 83.3 for an identically budgeted control; and
+keeping the convolutional front end while replacing only the recurrence, which
+we call CYOLO-Mamba, reaches 91.5. The recurrence therefore benefits from a
+state-space model while the convolutional front end is load-bearing, which is
 the encoder ablation absent from~\cite{yang2026coda}. Replacing the visual stem
-with frozen DINOv2-base patches on the same $52\times52$ grid, against a
-control retrained identically, gives \tbd{.}. None of this rescues the gap on
-its own, the strongest of these detectors merely reaching what re-deciding over
-an already released one achieves.
+with frozen DINOv2-base patches on the same $52\times52$ grid, against an
+identically retrained control, gives \tbd{.}. None of this rescues the gap, the
+strongest of these detectors merely reaching what re-deciding over an already
+released one achieves.
 
 Across 48 trained models, accuracy on the synthesized validation split
 correlates $r=0.16$ with accuracy on the real recordings
