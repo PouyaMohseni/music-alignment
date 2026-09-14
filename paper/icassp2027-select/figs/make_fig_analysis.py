@@ -64,7 +64,7 @@ def scatter_points():
     return np.array(pts)
 
 
-fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.72), dpi=400)
+fig, ax = plt.subplots(1, 2, figsize=(3.4, 1.40), dpi=400)
 
 rows = ladder()
 xs = np.arange(len(SNRS))
@@ -83,7 +83,7 @@ ax[0].set_axisbelow(True)
 # two columns keep it two rows tall, and the headroom is sized so the box
 # clears the highest point rather than sitting on top of the CANDOR curve.
 _lo, _hi = ax[0].get_ylim()
-ax[0].set_ylim(_lo, _hi + 0.34 * (_hi - _lo))
+ax[0].set_ylim(_lo, _hi + 0.26 * (_hi - _lo))
 ax[0].legend(loc='upper center', ncol=2, fontsize=5.6, frameon=False,
              handlelength=1.3, handletextpad=0.35, labelspacing=0.2,
              columnspacing=0.9, borderpad=0.2,

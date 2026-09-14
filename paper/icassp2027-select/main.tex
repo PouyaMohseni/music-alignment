@@ -245,26 +245,19 @@ FiLM-conditioned feature the detection head scored the box from. A
 permutation-invariant network~\cite{zaheer2017deepsets}, as in learned
 re-scoring of detections~\cite{hosang2017nms}, embeds each candidate as
 $e_i=g([\phi_i;\,\mathrm{ReLU}(Wf_i)])$ and scores it against a context pooled
-over the set,
-\begin{equation}
-  s_i = r\big([e_i;\,c]\big),\quad
-  c=\Big[\tfrac{1}{K}{\textstyle\sum_j} e_j;\ \max_j e_j\Big],
-  \label{eq:score}
-\end{equation}
-with $g$ and $r$ two-layer perceptrons (64, 32 and 64, 1) and
-$W\in\mathbb{R}^{64\times128}$. The maximum is per dimension, so every
-candidate is judged against its competitors.
+over the set, $s_i=r([e_i;\,c])$ with
+$c=[\tfrac{1}{K}\sum_j e_j;\ \max_j e_j]$, the maximum taken per dimension.
+Here $g$ and $r$ are two-layer perceptrons (64, 32 and 64, 1) and
+$W\in\mathbb{R}^{64\times128}$, so every candidate is judged against its
+competitors.
 
 \subsubsection{Training and inference}
 
-The decision is supervised listwise, so with $\varepsilon_i$ the error in frames
-of candidate $i$ the target is $q_i\propto\exp(-\varepsilon_i/\tau)$, $\tau=3$,
-and
-\begin{equation}
-  \mathcal{L}=-\sum_{i\in\mathcal{C}_t} q_i\,\log\frac{\exp s_i}{\sum_{j}\exp s_j},
-  \label{eq:loss}
-\end{equation}
-so the scorer learns to order a set rather than to regress a coordinate.
+The decision is supervised listwise against soft targets, so with
+$\varepsilon_i$ the error in frames of candidate $i$ the target is
+$q_i\propto\exp(-\varepsilon_i/\tau)$ with $\tau=3$ and the loss is the
+cross-entropy $-\sum_i q_i\log\mathrm{softmax}(s)_i$, so the scorer learns to
+order a set rather than to regress a coordinate.
 History features come from previous decisions, perturbed on 30\% of samples by
 Laplace noise of scale 30\,px to expose training to the drift of sequence
 prediction~\cite{bengio2015scheduled}. At inference \sys{} decides
@@ -296,7 +289,8 @@ measured room impulse responses~\cite{traer2016}, and validated on 19, using
 AdamW ($3\cdot10^{-3}$, cosine, 40 epochs, batch 256). Evaluation is the
 real-performance benchmark of~\cite{henkel2019rl}, 16 pieces of Bach, Schumann,
 Mozart, Chopin and Mussorgsky spanning 25 pages and 4,149 onsets, played on a
-Yamaha AvantGrand N2 and captured with a room microphone. A further 80 held-out
+Yamaha AvantGrand N2 and captured with a room microphone. The correct page is
+given throughout, so page identification is outside what is measured here. A further 80 held-out
 pieces are rendered with a real impulse response and noise from 12 to 0.5\,dB
 SNR. We report the percentage of onsets whose predicted position maps to within
 0.05 to 5\,s of the true time, 0.5\,s primary, with 95\% intervals bootstrapped
