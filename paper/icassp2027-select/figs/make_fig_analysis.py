@@ -73,7 +73,7 @@ for label, k, col, mk, ls in SERIES:
                ms=2.8, lw=1.0, label=label, zorder=3)
 ax[0].set_xticks(xs)
 ax[0].set_xticklabels(SNRS)
-ax[0].set_xlabel('SNR (dB)')
+ax[0].set_xlabel('signal-to-noise ratio (dB)')
 ax[0].set_ylabel('onsets $\\leq$0.5 s (\\%)' if False else 'onsets $\\leq$0.5 s (%)')
 ax[0].set_title('(a) added noise', pad=2.5)
 ax[0].grid(lw=0.4, color='#dddddd', zorder=0)

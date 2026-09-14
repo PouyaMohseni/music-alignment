@@ -107,13 +107,13 @@ architecture~\cite{yang2026coda}.
 
 An audio-conditioned detector does not output a position but a scored set of
 candidate noteheads, of which the most confident is reported and the rest
-discarded. What that set contains bounds what any selection rule could
+discarded (Fig.~\ref{fig:example}). What that set contains bounds what any selection rule could
 achieve, and on the room-microphone recordings the bound lies far above what is
 realised. Among the 256 highest-scoring candidates at each
 instant, one falls within the 0.5\,s tolerance at every onset, and
 a causal oracle, choosing with knowledge of the truth but forced to commit at
-each instant and never select a position behind its last, reaches 99.9\%, against 80.0\% for the deployed argmax
-(Fig.~\ref{fig:example}). That bound is not an achievable accuracy, but it
+each instant and never select a position behind its last, reaches 99.9\%,
+against 80.0\% for the deployed argmax. That bound is not an achievable accuracy, but it
 leaves only a small irreducible error at the 0.5\,s tolerance, which places
 most of the loss on real audio in candidate ordering rather than the visual
 evidence.
@@ -163,7 +163,7 @@ score. We use the released CYOLO detectors to propose noteheads.
 \subsection{\sys{}}
 \label{ssec:candor}
 
-\sys{}, for candidate ordering, sits after the backbone and replaces only its
+\sys{} sits after the backbone and replaces only its
 final step. At each instant the detector offers a few hundred possible notehead
 positions, and where it would report the most confident of them, \sys{} asks
 which one is most compatible with where its own previous decision was and with
@@ -228,8 +228,8 @@ competitors.
 
 The decision is supervised listwise against soft targets, so with
 $\varepsilon_i$ the difference in frames between the true onset time and the
-time the score maps candidate $i$'s position to, the quantity the evaluation
-thresholds, the target is
+time the score maps candidate $i$'s position to, the quantity that the
+evaluation thresholds, the target is
 $q_i\propto\exp(-\varepsilon_i/\tau)$ and the loss is the cross-entropy
 $-\sum_i q_i\log\mathrm{softmax}(s)_i$, under which the scorer learns to order
 a set rather than regress a coordinate. History features come from previous
@@ -237,9 +237,9 @@ decisions, perturbed by Laplace noise whose heavy tail exposes training to
 drift and gross error~\cite{bengio2015scheduled}. Target width and perturbation
 are chosen by ablation on the validation set: $\tau=3$ frames, about 0.15\,s,
 rewards landing near the onset rather than exactly on it, and noise of scale
-30\,px on 30\% of samples is worth 2.9 points over an unperturbed history,
-which leaves the scorer below the argmax baseline it replaces; heavier noise is
-worse. At inference \sys{} decides
+30\,px on 30\% of samples improves validation accuracy by 2.9 points, since an
+unperturbed history leaves the scorer below the argmax baseline it replaces;
+heavier noise is worse. At inference \sys{} decides
 \begin{equation}
   \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t}\ \beta\,s_i+(1-\beta)\,\ell_i ,
   \label{eq:decode}
@@ -269,9 +269,9 @@ real-performance benchmark of~\cite{henkel2019rl}, 16 pieces of Bach, Schumann,
 Mozart, Chopin and Mussorgsky spanning 25 pages and 4,149 onsets, played on a
 Yamaha AvantGrand N2 and captured with a room microphone, with the correct page
 given throughout. A further 80 held-out pieces are rendered with a real impulse
-response and noise from 12 to 0.5\,dB SNR. We report the percentage of onsets
+response and noise from 12 to 0.5\,dB signal-to-noise ratio. We report the percentage of onsets
 whose predicted position maps to within 0.05 to 5\,s of the true time, 0.5\,s
-primary, with 95\% intervals bootstrapped over pieces~\cite{efron1993} and seed
+primary, with 95\% confidence intervals (CI) bootstrapped over pieces~\cite{efron1993} and seed
 means with deviations.
 
 The protocol separates three kinds of data across three stages, in that the
@@ -309,7 +309,7 @@ CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 9
 \syson{CYOLO-SB+A$^\dagger$}                   & \textbf{76.0} & \textbf{78.5} & \textbf{94.4} & \textbf{96.9} & \textbf{99.6} & $+$7.9 \\
 \midrule
 \multicolumn{7}{l}{\emph{Detectors we trained}}\\
-\syson{CYOLO-LSTM} (control)                   & 58.2 & 60.6 & 83.3 & 87.5 & 98.3 & $+$11.6 \\
+\syson{CYOLO-LSTM}                             & 58.2 & 60.6 & 83.3 & 87.5 & 98.3 & $+$11.6 \\
 \syson{CYOLO-Mamba}                            & 62.8 & 65.7 & 91.5 & 94.6 & 99.3 & $+$19.0 \\
 \syson{CYOLO, CODA tower}~\cite{yang2026coda} & 44.7 & 47.4 & 76.2 & 83.9 & 96.5 & $+$17.3 \\
 \bottomrule
