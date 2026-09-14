@@ -18,7 +18,7 @@
 \newcommand{\sys}{CANDOR}
 \newcommand{\syson}[1]{CANDOR\textsubscript{#1}}
 
-\title{SCORE FOLLOWING IN SHEET MUSIC IMAGES\\AS SEQUENTIAL CANDIDATE SELECTION}
+\title{SEQUENTIAL CANDIDATE SELECTION FOR SCORE FOLLOWING\\IN SHEET MUSIC IMAGES}
 \name{Pouya Mohseni, Ichiro Fujinaga\thanks{Code and trained decision models:
 \url{https://github.com/PouyaMohseni/candor}}}
 \address{Schulich School of Music, McGill University, Montr\'eal, Canada}
@@ -42,14 +42,18 @@ synthesized audio and lose much of their accuracy on a real instrument in a
 real room. Closing that gap is the field's central open problem, and every
 remedy proposed for it has treated the gap as a failure of perception. We
 present evidence that it is not, since on real recordings the detector already
-proposes a correct position at every scored onset and an oracle held to the
-same realtime commitments recovers almost everything the deployed rule loses. We therefore recast the
-task as sequential selection over the candidates the detector already emits,
+proposes a position within the standard tolerance at every scored onset, and an
+oracle held to the same realtime commitments recovers almost everything the
+deployed rule loses. We therefore recast the task as sequential selection over
+the candidates the detector already emits,
 combining a parameter-free transition model with a set-based scorer that judges
 each candidate against its competitors in the same instant. This sets a new
-best on real piano recordings, holds across three independently trained
-detectors, and shows that what the decision needs is its own temporal history
-rather than a better image representation.
+best on real piano recordings played straight through, holds across three
+released detectors that differ in heads and in training data, and shows that
+what the decision needs is its own temporal history rather than a better image
+representation. Where a performance leaves the written order, the same forward
+assumption that makes the decision tractable is what breaks, and we report that
+case rather than set it aside.
 \end{abstract}
 
 \begin{keywords}
@@ -149,8 +153,9 @@ commit at each instant and never move backwards, exactly as a deployed follower
 must, and it still reaches 99.6\%. The deployed rule reaches 80.0\%
 (Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio
 survive the realtime constraint and are recoverable from what the model
-already saw, which indicates that reverberation degrades the detector's
-confidence ordering rather than the underlying visual evidence.
+already saw. At this tolerance, then, reverberation degrades the detector's
+confidence ordering more than the visual evidence beneath it, and
+Sec.~\ref{sec:results} qualifies how far that holds as the tolerance tightens.
 
 We therefore recast sheet-image score following as a sequential decision over
 the positions the page affords, rather than the regression of a coordinate.
@@ -164,8 +169,8 @@ and no beam, and costs 1.25\,ms per instant on a single CPU thread against the
 Our contribution is to relocate the synthetic-to-real gap in this task and to
 act on it. Candidate-set oracles place the gap in the decision rather than in
 perception, and \sys{}, a decision model built on that finding, sets a new best
-on real recordings by a margin that holds across three independently trained
-perception models.
+on real recordings by a margin that holds across three released detectors
+differing in heads and in training data.
 
 \begin{figure}[t]
   \centering
@@ -209,16 +214,19 @@ over layout regions supplied with the score.
 
 We take this module as given rather than as a design choice, and use the
 released CYOLO detectors to propose noteheads. No detector weight is updated
-anywhere in this work, and three separately trained instances are used, so the
-conclusions concern the family and not one checkpoint.
+anywhere in this work, and three released instances are used, differing in
+their heads and in their training data, so the conclusions concern the family
+and not one checkpoint.
 
 \subsection{\sys{}}
 \label{ssec:candor}
 
 \sys{}, for candidate ordering, sits after the backbone and replaces only its
-final step. Where the detector reports the single most confident box, \sys{}
-treats the boxes as a candidate set and orders them by how well each continues
-the performance so far, carrying its own state from one instant to the next.
+final step. At each instant the detector offers a few hundred possible notehead
+positions, and where it would report the most confident of them, \sys{} asks
+which one is most compatible with where its own previous decision was and with
+what the rest of the set looks like. Those two questions are the two parts
+below, and answering them requires carrying state from one instant to the next.
 
 \subsubsection{Candidate positions}
 
@@ -254,7 +262,12 @@ already recovers a large part of the gap on its own.
 
 The transition model treats candidates independently given the history, so what
 it cannot express is comparative, whether this box, among those on offer in
-this instant, looks like a real notehead rather than a spurious response. Each
+this instant, looks like a real notehead rather than a spurious response. This
+is what real audio in particular calls for, since reverberation smears the
+onset the conditioning vector is built from and the detector answers with many
+moderately confident boxes rather than one sharp response, so absolute
+confidence is poorly calibrated while the shape of the set is still
+informative. Each
 candidate is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence
 relative to the instant's best, box geometry, motion relative to the history,
 relation to any coarse regions the backbone emits, and a neighbourhood group
@@ -321,20 +334,26 @@ Yamaha AvantGrand N2 and captured with a room microphone. A held-out set of 80
 further pieces is rendered with a real impulse response and noise from 12 to
 0.5\,dB SNR.
 
-We report the ratio of onsets whose predicted position maps to within
+We report the percentage of onsets whose predicted position maps to within
 0.05 to 5\,s of the true time, 0.5\,s primary, with 95\% intervals bootstrapped
 over pieces~\cite{efron1993}.
 
-The four constants $(\mu,\sigma,J,\beta)$ are fitted leave-one-piece-out, so for
-each evaluation piece they are chosen on the other 15, pieces weighted equally,
-so none influences its own decoding, and the residual variant needs no fit at
-all. Seeds move results by about a point, so rows are seed means with
-deviations.
+Three kinds of data enter at three separate stages and it is worth keeping them
+apart. The decision model is trained on synthesized audio alone and never sees
+a real recording. The four constants $(\mu,\sigma,J,\beta)$ are then calibrated
+on real recordings leave-one-piece-out, so for each evaluation piece they are
+chosen on the other 15 with pieces weighted equally and none influences its own
+decoding. Evaluation is on the piece held out. Leaving a piece out of its own
+constants does not change the fact that the benchmark as a whole participates
+in choosing them, which the published baselines did not require, so the
+residual form of Eq.~\ref{eq:decode} is carried alongside as the variant that
+fits nothing to any real recording. Seeds move results by about a point, so
+rows are seed means with deviations.
 
 \begin{table*}[t]
 \centering
-\caption{Real piano recordings, 16 pieces and 4,149 onsets. Ratio of onsets
-tracked within each error threshold. Layout marks methods needing system and
+\caption{Real piano recordings, 16 pieces and 4,149 onsets, played straight
+through. Percentage of onsets tracked within each error threshold. Layout marks methods needing system and
 bar annotation at test time; $\Delta$ is the gain at 0.5\,s over the perception
 model the row is built on. $^\dagger$\,proprietary training data, public
 checkpoint. Published figures from~\cite{yang2026coda}. The lower block
@@ -383,15 +402,26 @@ CODA~\cite{yang2026coda}                         & 72.1 & 74.3 & 88.3 & 91.4 & 9
   \label{fig:analysis}
 \end{figure}
 
+One clarification belongs before the table. \sys{} orders proposals, so it
+applies to a follower that produces a candidate set and then discards it.
+CODA~\cite{yang2026coda} is not such a target: its final stage regresses a
+continuous bar-local coordinate rather than choosing among proposals, and the
+sets it does select over, systems and bars, are supplied by layout annotation
+and already decoded with learned transition penalties and beam search. It
+appears below as the strongest published system on these recordings, not as a
+backbone \sys{} could be attached to.
+
 Table~\ref{tab:main} sets \sys{} against the published literature on the same
-recordings. It tracks 94.4\% of onsets within 0.5\,s, where the previous best was 88.3\%,
-and leads at every threshold. The margin is not an artifact of one perception
-model. Retrained on whichever candidates each model emits, the decision gains
+recordings, all of which are played straight through; Sec.~\ref{ssec:jump}
+reports what happens when a performance is not. It tracks 94.4\% of onsets
+within 0.5\,s, 95\% CI over pieces \tbd{[a,\,b]}, where the previous best was
+88.3\%, and leads at every threshold. The margin is not an artifact of one
+perception model. Retrained on whichever candidates each model emits, the decision gains
 20.4, 10.7 and 7.9 points on three of them, and on the weakest, whose training
 data is entirely public, it passes the point at which the strongest one begins.
 A decision model does not need good proposals, only proposals containing the
-answer. On the 94 synthetic test pieces \sys{} reaches .955 where argmax
-reaches .893, and on 80 held-out pieces under a real impulse response and noise
+answer. On the 94 synthetic test pieces \sys{} reaches 95.5\% where argmax
+reaches 89.3\%, and on 80 held-out pieces under a real impulse response and noise
 it beats the transition model at every level from 12 to 0.5\,dB
 (Fig.~\ref{fig:analysis}a).
 
@@ -400,15 +430,20 @@ The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reache
 decision is only as precise as the boxes it chooses between, so the mechanism
 recovers which notehead is active rather than the position within it.
 
-Table~\ref{tab:transfer} separates the parts: the transition model alone, with
-no learned parameters, accounts for roughly half the gain, and the residual
-variant, which fits no constant to any evaluation data, still reaches 88.7\%.
+Table~\ref{tab:transfer} separates the parts. The transition model alone, with
+no learned parameters, accounts for roughly half the gain. The residual variant
+is the one to read for the strictest protocol, since it fits no constant to any
+real recording and is therefore comparable with the published rows on equal
+terms: it reaches 88.7\% against 80.0\% for the argmax it replaces, still above
+the previous best, and the distance from it to 94.4\% is what calibrating four
+constants on the other 15 pieces is worth.
 
 \begin{table}[t]
 \centering
 \caption{Components of \sys{}, cross-validated per piece on the real recordings
 at 0.5\,s. argmax is Eq.~\ref{eq:argmax} over the same candidates,
-$+$transition adds Eq.~\ref{eq:prior}, full adds the scorer.}
+$+$transition adds Eq.~\ref{eq:prior}, full adds the scorer. $n$ counts
+decision-model seeds; the detector is fixed within a row.}
 \label{tab:transfer}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
@@ -436,8 +471,8 @@ none                                    & 1 &      &      & 90.9 \\
 \begin{table}[t]
 \centering
 \caption{Recovery from 41 spliced discontinuities, CYOLO-SB+A candidates.
-rec@1 is the fraction first tracked correctly within 1\,s, post the onsets
-tracked within 1\,s over the next 5\,s.}
+rec@1 is the percentage first tracked correctly within 1\,s, post the
+percentage of onsets tracked within 1\,s over the next 5\,s.}
 \label{tab:jump}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
@@ -508,8 +543,8 @@ so its conditioning is genuinely wrong afterwards, and excluding jumps across a
 page boundary where state resets anyway, leaving 41.
 
 Table~\ref{tab:jump} reports a systematic failure, in which after a jump \sys{}
-performs considerably worse than the rule it replaces, 0.08 against 0.27 of onsets tracked over the
-next five seconds, because the transition model holds the trajectory at a stale
+performs considerably worse than the rule it replaces, 8\% against 27\% of
+onsets tracked over the next five seconds, because the transition model holds the trajectory at a stale
 position. Suppressing it on detected silence helps where a break exists and not
 otherwise, as its design implies; triggering on the scorer's own confidence
 needs no break, recovers most of the loss and reaches argmax without passing
@@ -523,9 +558,13 @@ seeds and so outside the 0.4-point spread between them. The confidence trigger
 therefore buys roughly eighteen points after a discontinuity for one point of
 continuous accuracy. We report \sys{} without it, since the evaluation
 repertoire is played straight through, and note that the trade favours the
-trigger for any repertoire in which repeats are taken. A transition
-model strong enough to be worth ten points on continuous playing is strong
-enough to be wrong at a discontinuity, and reconciling the two is open.
+trigger for any repertoire in which repeats are taken. What the trigger
+establishes is that the two mechanisms compose: \sys{} is a rule for selecting
+among candidates while the performance runs forward, discontinuity detection is
+a separate decision about when that assumption has lapsed, and the second can
+be placed in front of the first at a stated price. A transition model strong
+enough to be worth ten points on continuous playing is strong enough to be
+wrong at a discontinuity, and reconciling the two within one rule is open.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -535,30 +574,27 @@ failure of perception and answered with better audio, more data and new
 architectures. The measurement reported here places it elsewhere. On real
 room-microphone recordings the detector already proposes a correct position at
 every scored onset, and an oracle held to the same realtime commitments
-recovers almost all of what the deployed rule loses, so the information needed
-to follow the performance survives the room and what fails is the rule that
-reads a position out of it.
+recovers almost all of what the deployed rule loses. At the standard
+tolerance, then, most of what is needed to follow the performance survives the
+room, and what fails is the rule that reads a position out of it.
 
 Acting on that, \sys{} orders the candidates the detector already emits and
 takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
-against 88.3\% for the best published system, at 1.25\,ms per instant on a
-single CPU thread. The margin holds across three independently trained
-perception models, which suggests the finding concerns the family of
-audio-conditioned detectors rather than one checkpoint, and it is obtained
-without retraining any of them and without layout annotation at test time.
+against 88.3\% for the best published system on a repertoire played straight
+through, at 1.25\,ms per instant on a single CPU thread. The margin holds across
+three released detectors differing in heads and in training data, which suggests
+the finding concerns the family of audio-conditioned detectors rather than one
+checkpoint, and it is obtained without retraining any of them and without layout
+annotation at test time.
 
 Within this framework the decision depends far more on its own temporal history
 than on the image representations we tested, since three image representations including none at all give
 the same real-audio accuracy while removing the history costs more than any
 other ablation we ran.
 
-The method applies where a follower discards a candidate set, which is what
-makes the detection-based family its natural target. CODA~\cite{yang2026coda}
-is not such a target, since its final stage regresses a continuous bar-local
-coordinate rather than choosing among proposals, and the sets it does select
-over, systems and bars, are supplied by layout annotation and already decoded
-with learned transition penalties and beam search. Comparing that decoder with
-ours over the same candidates is a worthwhile experiment and a different one. Two results temper this. Accuracy on synthesized audio
+Comparing a decoder of CODA's kind with ours over one shared candidate set is
+a worthwhile experiment and a different one. Two results temper what is claimed
+here. Accuracy on synthesized audio
 barely predicts accuracy on real audio across 48 trained models, which makes
 model selection on a synthetic proxy unreliable for the whole field and not
 only for us. And the forward-motion assumption that makes the decision
