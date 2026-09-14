@@ -83,46 +83,35 @@ compare them, a mismatch the literature answers in three ways.
 \subsection{Related work}
 \label{ssec:related}
 
-Two families make the sides commensurable by converting one of them.
-Converting the score, optical music recognition turns the page into symbols so
-that a classical follower can track over a discrete set of states, a
-well-developed line spanning online dynamic time warping~\cite{dixon2005match},
-duration-focused probabilistic models~\cite{cont2010}, hidden semi-Markov
-models absorbing performer errors and arbitrary repeats~\cite{nakamura2015},
-particle filters for rests and tempo change~\cite{korzeniowski2013}, switching
-state-space models with hidden tempo~\cite{jiang2020} and multi-agent
-tracking~\cite{arzt2010}; its weakness is that optical music recognition
-remains error-prone on real scores~\cite{calvo2020omr} and the follower
-inherits every mistake. Converting the audio instead, recent work pairs
-realtime piano transcription with symbol-level tracking to strong
-effect~\cite{peter2025}, though the follower is then bounded by the transcriber
-and restricted to instruments transcription handles well.
+Two families make the sides commensurable by converting one of them. Optical
+music recognition turns the page into symbols so that a classical follower can
+track a discrete set of states, a well-developed line spanning online dynamic
+time warping~\cite{dixon2005match}, duration models~\cite{cont2010}, hidden
+semi-Markov models~\cite{nakamura2015}, particle
+filters~\cite{korzeniowski2013}, switching state-space models~\cite{jiang2020}
+and multi-agent tracking~\cite{arzt2010}; recognition remains error-prone on
+real scores~\cite{calvo2020omr} and the follower inherits every mistake.
+Transcribing the audio instead pairs realtime piano transcription with
+symbol-level tracking to strong effect~\cite{peter2025}, at the cost of
+bounding the follower by the transcriber.
 
-The third family converts neither side and learns the correspondence between
-audio and pixels directly. Dorfer et al.~\cite{dorfer2016} classified position
-into staff-level buckets on crops; reinforcement learning framed tracking as an
-agent navigating a score strip~\cite{dorfer2018rl,henkel2019rl};
-CUNet~\cite{henkel2020cunet} moved to full pages with an audio-conditioned
-segmentation whose centre of mass gives the position; and
-CYOLO~\cite{henkel2021eusipco} recast it as audio-conditioned object detection,
-CYOLO-SB~\cite{henkel2021frontiers} adding heads for the enclosing system and
-bar. The concurrent CODA~\cite{yang2026coda} cascades system, bar and note
-selection over layout regions with beam search and learned transition
-penalties, and is the strongest published system on this benchmark, though it
-reads the system and bar boxes of the page at test time, which the other
-methods and ours do not.
-
-All of them need performances aligned to notehead coordinates, an annotation
-costly enough that nearly all of it is synthesized, a score rendered to MIDI
-and the MIDI to audio. The result is systems that work on synthesized audio and
-lose much of their accuracy on a real instrument in a real room,
-CUNet~\cite{henkel2020cunet} falling from 85.5\% of onsets tracked within
-0.5\,s to 22.4\%, CYOLO-SB~\cite{henkel2021frontiers} from 89.3\% to 79.9\% and
-CODA~\cite{yang2026coda} from 95.5\% to 88.3\%. Closing that gap is the field's
-central open problem, and every remedy proposed for it has been a perception
-remedy, whether reverberant augmentation~\cite{henkel2021eusipco}, extra
-proprietary recordings~\cite{henkel2021frontiers} or a new
-architecture~\cite{yang2026coda}.
+The third family converts neither side. Dorfer et al.~\cite{dorfer2016}
+classified position into staff-level buckets; reinforcement learning framed
+tracking as an agent on a score strip~\cite{dorfer2018rl,henkel2019rl};
+CUNet~\cite{henkel2020cunet} emitted an audio-conditioned segmentation over
+full pages; and CYOLO~\cite{henkel2021eusipco} recast it as audio-conditioned
+object detection, CYOLO-SB~\cite{henkel2021frontiers} adding system and bar
+heads. CODA~\cite{yang2026coda} cascades system, bar and note selection over
+layout regions with beam search and learned transition penalties and is the
+strongest published system on this benchmark, though it reads the page's system
+and bar boxes at test time, which the others and ours do not. All of them need
+alignments to notehead coordinates, costly enough that nearly all training data
+is synthesized, and the result is systems that lose much of their accuracy on a
+real instrument in a real room, CUNet falling from 85.5\% of onsets within
+0.5\,s to 22.4\%, CYOLO-SB from 89.3\% to 79.9\% and CODA from 95.5\% to
+88.3\%. Every remedy proposed has been a perception remedy, whether reverberant
+augmentation~\cite{henkel2021eusipco}, extra proprietary
+recordings~\cite{henkel2021frontiers} or a new architecture~\cite{yang2026coda}.
 
 \subsection{Diagnosis}
 \label{ssec:diagnosis}
@@ -179,12 +168,8 @@ a convolutional network over the score page whose feature maps are modulated by
 the audio. The mechanism is feature-wise linear
 modulation~\cite{perez2018film}, which injects an external vector into a
 network by scaling and shifting its activations,
-\begin{equation}
-  f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z),
-  \label{eq:film}
-\end{equation}
-where $s$ and $t$ are learned linear maps of a conditioning vector $z$ and
-$\odot$ is elementwise. The page alone cannot say where the performer is, so
+$f_{\mathrm{FiLM}}(x)=s(z)\odot x+t(z)$, where $s$ and $t$ are learned linear
+maps of a conditioning vector $z$ and $\odot$ is elementwise. The page alone cannot say where the performer is, so
 $z$ carries the recent audio and the visual features become a function of what
 has just been heard.
 
@@ -220,12 +205,8 @@ backbone reads the audio so far and the current page and scores note boxes
 $b_i=(x_i,y_i,w_i,h_i)$ with confidence $o_i$; we keep the $K=256$ most
 confident, $\mathcal{C}_t$. Staves are concatenated along one horizontal axis,
 the unrolled coordinate $u_i$, so positions across a line break are adjacent.
-The released detectors score 8,112 boxes per instant and report
-\begin{equation}
-  \hat{\imath}_t=\arg\max_{i\in\mathcal{C}_t} o_i ,
-  \label{eq:argmax}
-\end{equation}
-which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
+The released detectors score 8,112 boxes per instant and report the most
+confident, $\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
 previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where
 availability stops binding, since a correct candidate is present at every
 onset only from 256 and the causal oracle falls to 85.6\% at $K=64$, below
@@ -251,30 +232,27 @@ already recovers a large part of the gap on its own.
 
 The transition model treats candidates independently given the history, so what
 it cannot express is comparative, whether this box, among those on offer in
-this instant, looks like a real notehead rather than a spurious response. This
-is what real audio in particular calls for, since reverberation smears the
-onset the conditioning vector is built from and the detector answers with many
-moderately confident boxes rather than one sharp response, so absolute
-confidence is poorly calibrated while the shape of the set is still
-informative. Each
-candidate is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence
-relative to the instant's best, box geometry, motion relative to the history,
-relation to any coarse regions the backbone emits, and a neighbourhood group
-describing how crowded and how typical the box is among its neighbours. We also
-read $f_i$, the 128-dimensional FiLM-conditioned feature from which the
-detection head scored the box, so the decision sees the representation
-perception used. A permutation-invariant network~\cite{zaheer2017deepsets}, as
-in learned re-scoring of detections~\cite{hosang2017nms}, embeds the set and
-pools a context shared by all candidates,
-\begin{align}
-  e_i &= g\big([\phi_i;\,\mathrm{ReLU}(Wf_i)]\big),\quad
+this instant, looks like a real notehead rather than a spurious response. Real
+audio calls for exactly that, since reverberation smears the onset the
+conditioning vector is built from and the detector answers with many moderately
+confident boxes rather than one sharp response, leaving absolute confidence
+poorly calibrated while the shape of the set stays informative. Each candidate
+is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence relative to
+the instant's best, box geometry, motion relative to the history, relation to
+any coarse regions the backbone emits, and how crowded and how typical the box
+is among its neighbours, together with $f_i$, the 128-dimensional
+FiLM-conditioned feature the detection head scored the box from. A
+permutation-invariant network~\cite{zaheer2017deepsets}, as in learned
+re-scoring of detections~\cite{hosang2017nms}, embeds each candidate as
+$e_i=g([\phi_i;\,\mathrm{ReLU}(Wf_i)])$ and scores it against a context pooled
+over the set,
+\begin{equation}
+  s_i = r\big([e_i;\,c]\big),\quad
   c=\Big[\tfrac{1}{K}{\textstyle\sum_j} e_j;\ \max_j e_j\Big],
-  \label{eq:embed}\\
-  s_i &= r\big([e_i;\,c]\big),
   \label{eq:score}
-\end{align}
+\end{equation}
 with $g$ and $r$ two-layer perceptrons (64, 32 and 64, 1) and
-$W\in\mathbb{R}^{64\times128}$. The maximum is taken per dimension, so every
+$W\in\mathbb{R}^{64\times128}$. The maximum is per dimension, so every
 candidate is judged against its competitors.
 
 \subsubsection{Training and inference}
@@ -412,7 +390,7 @@ decision is only as precise as the boxes it chooses between and the mechanism
 recovers which notehead is active rather than the position within it.
 
 Table~\ref{tab:transfer} separates the parts over the same candidates, adding
-Eq.~\ref{eq:prior} to Eq.~\ref{eq:argmax} and then the scorer, with $n$
+Eq.~\ref{eq:prior} to the argmax and then the scorer, with $n$
 counting decision-model seeds at a fixed detector. The transition model alone,
 with no learned parameters, accounts for roughly half the gain. The residual
 variant is the one to read for the strictest protocol, fitting no constant to
