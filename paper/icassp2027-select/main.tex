@@ -178,8 +178,12 @@ the unrolled coordinate $u_i$, so positions across a line break are adjacent.
 The released detectors report the most confident box,
 $\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
 previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
-stops binding, a correct candidate being present at every onset only from 256,
-while at $K=64$ the causal oracle falls to 85.6\%, below what \sys{} reaches.
+stops binding. A correct candidate is present at every onset only from $K=256$,
+and the causal oracle, restricted to candidates forward of the previous
+decision, rises from 84.6\% at $K=16$ to 95.2\% at 64 and 100.0\% at 256, while
+\sys{} follows the same shape and saturates earlier, reaching 89.8\%, 92.2\%,
+94.1\%, 95.0\% and 94.4\% at $K=16$, 32, 64, 128 and 256, the last two within
+the seed deviation of each other.
 
 \subsubsection{Transition model}
 
@@ -332,7 +336,7 @@ $\Delta$ the gain at 0.5\,s over the perception model each row is built on.
 $[92.2,\,97.1]$, against a previous best of 88.3\%, and leads at every
 threshold. We acknowledge that sixteen pieces are few and that the interval is
 correspondingly wide, though the gain over the argmax it replaces, paired on
-the same resample, is $+7.9$ with interval $[+2.8,\,+12.2]$. The margin does
+the same resample, is $+7.9$ points with interval $[+2.8,\,+12.2]$. The margin does
 not depend on one perception model either, since retraining the decision on
 whichever candidates each detector emits gains 20.4, 10.7 and 7.9 points, and
 on the weakest, whose training data is entirely public, it passes where the
@@ -359,7 +363,8 @@ the four constants adds.
 
 \begin{table}[t]
 \centering
-\caption{Components of \sys{} on the real recordings at 0.5\,s.}
+\caption{Components of \sys{} on the real recordings, onsets tracked (\%)
+at 0.5\,s.}
 \label{tab:transfer}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
