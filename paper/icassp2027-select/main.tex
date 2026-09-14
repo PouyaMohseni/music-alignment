@@ -441,9 +441,9 @@ across three released detectors. The decision depends far more on its temporal
 history than on the image representations we tested. Two results temper this,
 since accuracy on synthesized audio barely predicts accuracy on real audio
 across 48 trained models, which makes selection on a synthetic proxy unreliable
-for the field, not only for us, and since the forward-motion assumption of
-Eq.~\ref{eq:prior} confines the method to performances played in the written
-order. Pitch agreement is the next source of evidence independent of the
+for the field, not only for us, and since Eq.~\ref{eq:prior} charges a bounded
+penalty for moving backward, so repeats and jumps remain possible but are
+disfavoured. Pitch agreement is the next source of evidence independent of the
 history.
 
 \newpage
