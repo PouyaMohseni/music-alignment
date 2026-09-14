@@ -223,7 +223,9 @@ competitors.
 \subsubsection{Training and inference}
 
 The decision is supervised listwise against soft targets, so with
-$\varepsilon_i$ the error in frames of candidate $i$ the target is
+$\varepsilon_i$ the absolute difference in frames between the true onset time
+and the time the score maps candidate $i$'s position to, which is the quantity
+the evaluation thresholds, the target is
 $q_i\propto\exp(-\varepsilon_i/\tau)$ and the loss is the cross-entropy
 $-\sum_i q_i\log\mathrm{softmax}(s)_i$, under which the scorer learns to order
 a set rather than to regress a coordinate. History features come from previous
