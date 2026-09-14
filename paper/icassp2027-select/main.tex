@@ -352,15 +352,7 @@ rows are seed means with deviations.
 
 \begin{table*}[t]
 \centering
-\caption{Real piano recordings, 16 pieces and 4,149 onsets, played straight
-through. Percentage of onsets tracked within each error threshold. $\Delta$ is the gain
-at 0.5\,s over the perception model the row is built on.
-$^\ddagger$\,requires the system and bar bounding boxes of the page as an
-additional input at test time; no other method here reads a layout annotation.
-$^\dagger$\,proprietary training data, public checkpoint. Published figures from~\cite{yang2026coda}. The lower block
-retrains the perception model from scratch under a fixed budget and is not
-comparable with the converged checkpoints above; it is shown because the
-decision gains a similar margin whatever it is attached to.}
+\caption{Onsets tracked on 16 real piano recordings, 4,149 onsets.}
 \label{tab:main}
 \setlength{\tabcolsep}{4.2pt}
 {\small
@@ -412,9 +404,13 @@ and already decoded with learned transition penalties and beam search. It
 appears below as the strongest published system on these recordings, not as a
 backbone \sys{} could be attached to.
 
-Table~\ref{tab:main} sets \sys{} against the published literature on the same
-recordings, all of which are played straight through; Sec.~\ref{ssec:jump}
-reports what happens when a performance is not. It tracks 94.4\% of onsets
+Table~\ref{tab:main} sets \sys{} against the published literature, taken
+from~\cite{yang2026coda}, on the same recordings, all of which are played
+straight through; Sec.~\ref{ssec:jump} reports what happens when a performance
+is not. There $\Delta$ is the gain at 0.5\,s over the perception model each row
+is built on, $\ddagger$ marks the one method reading the system and bar boxes of
+the page at test time, and $\dagger$ a checkpoint trained on proprietary
+recordings. \sys{} tracks 94.4\% of onsets
 within 0.5\,s, 95\% CI over pieces \tbd{[a,\,b]}, where the previous best was
 88.3\%, and leads at every threshold. The margin is not an artifact of one
 perception model. Retrained on whichever candidates each model emits, the decision gains
@@ -431,8 +427,10 @@ The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{} reache
 decision is only as precise as the boxes it chooses between, so the mechanism
 recovers which notehead is active rather than the position within it.
 
-Table~\ref{tab:transfer} separates the parts. The transition model alone, with
-no learned parameters, accounts for roughly half the gain. The residual variant
+Table~\ref{tab:transfer} separates the parts over the same candidates, adding
+Eq.~\ref{eq:prior} to Eq.~\ref{eq:argmax} and then the scorer, with $n$ counting
+decision-model seeds at a fixed detector. The transition model alone, with no
+learned parameters, accounts for roughly half the gain. The residual variant
 is the one to read for the strictest protocol, since it fits no constant to any
 real recording and is therefore comparable with the published rows on equal
 terms: it reaches 88.7\% against 80.0\% for the argmax it replaces, still above
@@ -441,10 +439,7 @@ constants on the other 15 pieces is worth.
 
 \begin{table}[t]
 \centering
-\caption{Components of \sys{}, cross-validated per piece on the real recordings
-at 0.5\,s. argmax is Eq.~\ref{eq:argmax} over the same candidates,
-$+$transition adds Eq.~\ref{eq:prior}, full adds the scorer. $n$ counts
-decision-model seeds; the detector is fixed within a row.}
+\caption{Components of \sys{} on the real recordings at 0.5\,s.}
 \label{tab:transfer}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
@@ -471,9 +466,7 @@ none                                    & 1 &      &      & 90.9 \\
 
 \begin{table}[t]
 \centering
-\caption{Recovery from 41 spliced discontinuities, CYOLO-SB+A candidates.
-rec@1 is the percentage first tracked correctly within 1\,s, post the
-percentage of onsets tracked within 1\,s over the next 5\,s.}
+\caption{Recovery from 41 spliced discontinuities.}
 \label{tab:jump}
 \setlength{\tabcolsep}{4pt}
 {\footnotesize
@@ -501,7 +494,9 @@ image feature at all yields 90.6, 90.9 and 90.9, a spread well inside the
 by 3.4 points, so those features are learnable and useful there and worth
 nothing on real audio. We also rebuilt the perception model itself, retraining the
 detector from scratch for a fixed 24-hour budget with a different audio
-encoder. A frozen MERT-95M tower~\cite{li2024mert} with only a projection
+encoder. These are the lower block of Table~\ref{tab:main}, not comparable with
+the converged checkpoints above it and reported because the decision gains a
+similar margin whatever it is attached to. A frozen MERT-95M tower~\cite{li2024mert} with only a projection
 trained reaches 46.2 and overfits 12.6-fold on the 353 training pieces.
 Replacing the whole audio tower with the two-layer causal
 Mamba of~\cite{yang2026coda}, trained as they train it, reaches 76.2 against
@@ -541,9 +536,12 @@ decision is tractable and also why a repeat or a jump breaks it. Following the
 protocol of~\cite{yang2026coda} we splice three discontinuities into each
 performance at random destinations, re-running perception on the spliced audio
 so its conditioning is genuinely wrong afterwards, and excluding jumps across a
-page boundary where state resets anyway, leaving 41.
+page boundary where state resets anyway, leaving 41. Table~\ref{tab:jump}
+decodes the CYOLO-SB+A candidates and reports rec@1, the percentage of breaks
+first tracked correctly within 1\,s, and post, the percentage of onsets tracked
+within 1\,s over the five seconds after one.
 
-Table~\ref{tab:jump} reports a systematic failure, in which after a jump \sys{}
+The table reports a systematic failure, in which after a jump \sys{}
 performs considerably worse than the rule it replaces, 8\% against 27\% of
 onsets tracked over the next five seconds, because the transition model holds the trajectory at a stale
 position. Suppressing it on detected silence helps where a break exists and not
