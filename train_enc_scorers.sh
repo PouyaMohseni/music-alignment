@@ -29,10 +29,12 @@ NEED="room valid train_c0 train_c1 train_c2 train_c3 train_c4"
 MISSING=""
 for f in $NEED; do [ -s "$F/$f.npz" ] || MISSING="$MISSING $f"; done
 [ -z "$MISSING" ] || { echo "FATAL: incomplete dump in $F, missing:$MISSING"; exit 1; }
-# and refuse if any of them was written in the last two minutes, which means
-# the dump job is probably still going
-RECENT=$(find "$F" -name '*.npz' -newermt '-2 minutes' | wc -l)
-[ "$RECENT" -eq 0 ] || { echo "FATAL: $F written within the last 2 min, still in flight"; exit 1; }
+# and refuse if a dump for this arm is still in the queue. This used to be an
+# mtime window, which asked the question badly: a scorer released by afterany
+# starts seconds after its dump ends, so a freshness test fails the one case
+# where the dependency has already proved the dump is finished. Ask the queue.
+INFLIGHT=$(squeue -u "${USER:-pmohseni}" -h -n "dumpenc_$ARM" -o %i 2>/dev/null | wc -l)
+[ "$INFLIGHT" -eq 0 ] || { echo "FATAL: dumpenc_$ARM still in the queue, $INFLIGHT tasks"; exit 1; }
 echo "dump complete: $(ls "$F"/*.npz | wc -l) files, $(du -sh "$F" | cut -f1)"
 echo "##### $ARM seed=$S dumps=$F"
 python extensions/analysis/train_cand_scorer.py --out "$T" \
