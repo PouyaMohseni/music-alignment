@@ -223,13 +223,13 @@ competitors.
 \subsubsection{Training and inference}
 
 The decision is supervised listwise against soft targets, so with
-$\varepsilon_i$ the absolute difference in frames between the true onset time
-and the time the score maps candidate $i$'s position to, which is the quantity
-the evaluation thresholds, the target is
+$\varepsilon_i$ the difference in frames between the true onset time and the
+time the score maps candidate $i$'s position to, the quantity the evaluation
+thresholds, the target is
 $q_i\propto\exp(-\varepsilon_i/\tau)$ and the loss is the cross-entropy
 $-\sum_i q_i\log\mathrm{softmax}(s)_i$, under which the scorer learns to order
 a set rather than regress a coordinate. History features come from previous
-decisions, perturbed by Laplace noise whose heavy tail exposes training to both
+decisions, perturbed by Laplace noise whose heavy tail exposes training to
 drift and gross error~\cite{bengio2015scheduled}. Target width and perturbation
 are chosen by ablation on the validation set: $\tau=3$ frames, about 0.15\,s,
 rewards landing near the onset rather than exactly on it, and noise of scale
@@ -241,9 +241,9 @@ worse. At inference \sys{} decides
   \label{eq:decode}
 \end{equation}
 causally and greedily, one pass over 256 candidates per instant, in 1.25\,ms on
-a single CPU thread against the 50\,ms available at 20\,fps. Training on the
+one CPU thread against the 50\,ms available at 20\,fps. Training on the
 residual $s_i-\ell_i$ and deciding $\arg\max_i(s_i+\ell_i)$ is Eq.~\ref{eq:decode} at
-$\beta=0.5$ and eliminates all four constants.
+$\beta=0.5$, eliminating all four constants.
 
 \section{Experimental setup}
 \label{sec:setup}
@@ -334,14 +334,14 @@ Table~\ref{tab:main} sets \sys{} against the published literature on
 recordings played straight through, the last column giving the improvement at
 0.5\,s over the perception model each row is built on.
 \sys{} tracks 94.4\% of onsets within 0.5\,s, 95\% CI over pieces
-$[92.2,\,97.1]\%$, against a previous best of 88.3\%, and leads at every
-threshold. We acknowledge that sixteen pieces are few and that the interval is
+$[92.2,\,97.1]\%$, against a previous best of 88.3\%, leading at every
+threshold. We acknowledge that sixteen pieces are few and the interval
 correspondingly wide, though the gain over the argmax it replaces, paired on
 the same resample, is $+7.9$ points with interval $[+2.8,\,+12.2]$. The margin does
 not depend on one perception model either, since retraining the decision on
 whichever candidates each detector emits gains 20.4, 10.7 and 7.9 points, and
 on the weakest, whose training data is entirely public, it passes where the
-strongest one begins. On 94
+strongest begins. On 94
 synthetic test pieces it reaches 95.5\% against 89.3\% for argmax, and on the
 80 noisy held-out pieces it beats the transition model at every level from 12
 to 0.5\,dB (Fig.~\ref{fig:analysis}a).
@@ -428,8 +428,8 @@ architectures. The measurement reported here places it elsewhere. On real
 room-microphone recordings the detector already proposes a correct position at
 every scored onset, and an oracle under the same realtime commitments
 recovers almost all of what the deployed rule loses, so at the standard
-tolerance what fails is the rule that reads a position from the evidence
-rather than the evidence itself.
+tolerance what fails is the rule that reads a position from the evidence, not
+the evidence itself.
 
 Acting on that, \sys{} orders the candidates the detector already emits and
 takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
