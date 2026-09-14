@@ -106,15 +106,15 @@ architecture~\cite{yang2026coda}.
 
 An audio-conditioned detector does not output a position but a scored set of
 candidate noteheads, of which the most confident is reported and the rest
-discarded. What that discarded set contains bounds what any selection rule
-could achieve, and on the real room-microphone recordings the bound lies far
-above what is realised. Among the 256 highest-scoring candidates at each
+discarded. What that set contains bounds what any selection rule could
+achieve, and on the room-microphone recordings the bound lies far above what is
+realised. Among the 256 highest-scoring candidates at each
 instant, one falls within the 0.5\,s tolerance at all 4,149 scored onsets, and
 a causal bound that must commit at each instant and never select a position
-behind its last still reaches 99.9\%, against 80.0\% for the deployed argmax
+behind its last reaches 99.9\%, against 80.0\% for the deployed argmax
 (Fig.~\ref{fig:example}). Almost all of the twenty points lost on real audio
 are therefore recoverable under the realtime constraint, which locates the loss in
-the ordering of the candidates rather than in the visual evidence.
+candidate ordering rather than in the visual evidence.
 
 This argues for treating the task as a sequential decision over the positions a
 page affords rather than the regression of a coordinate. \sys{} decides from a
@@ -176,8 +176,8 @@ $b_i=(x_i,y_i,w_i,h_i)$ with confidence $o_i$; we keep the $K=256$ most
 confident, $\mathcal{C}_t$. Staves are concatenated along one horizontal axis,
 the unrolled coordinate $u_i$, so positions across a line break are adjacent.
 The released detectors report the most confident box,
-$\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
-previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
+$\hat{\imath}_t=\arg\max_{i} o_i$, the degenerate selector. \sys{} reads
+$\mathcal{C}_t$ and its previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
 stops binding, a correct candidate being present at every onset only from
 $K=256$. \sys{} saturates earlier, reaching 89.8\%, 92.2\%, 94.1\%, 95.0\% and
 94.4\% at $K=16$, 32, 64, 128 and 256, the last two within the seed deviation
@@ -228,7 +228,7 @@ and the time the score maps candidate $i$'s position to, which is the quantity
 the evaluation thresholds, the target is
 $q_i\propto\exp(-\varepsilon_i/\tau)$ and the loss is the cross-entropy
 $-\sum_i q_i\log\mathrm{softmax}(s)_i$, under which the scorer learns to order
-a set rather than to regress a coordinate. History features come from previous
+a set rather than regress a coordinate. History features come from previous
 decisions, perturbed by Laplace noise whose heavy tail exposes training to both
 drift and gross error~\cite{bengio2015scheduled}. Target width and perturbation
 are chosen by ablation on the validation set: $\tau=3$ frames, about 0.15\,s,
@@ -250,7 +250,7 @@ $\beta=0.5$ and eliminates all four constants.
 
 \subsection{Dataset}
 
-All experiments use MSMD~\cite{dorfer2018msmd}, which pairs public-domain
+All experiments use MSMD~\cite{dorfer2018msmd}, which pairs
 LilyPond engravings with MIDI-derived alignments for solo piano. Its repertoire
 is Western classical, weighted towards the Baroque and Classical and dominated
 by Bach, with Beethoven, Mozart, Handel, Schumann, Chopin, Czerny and
