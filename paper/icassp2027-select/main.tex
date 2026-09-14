@@ -104,17 +104,17 @@ and CODA from 95.5\% to 88.3\%. Every remedy has been a perception remedy, wheth
 proprietary recordings~\cite{henkel2021frontiers} or a new
 architecture~\cite{yang2026coda}.
 
-We tested that premise before adopting it. An audio-conditioned detector does
-not emit a position but scores thousands of candidate noteheads and reports the
-most confident. Keeping the 256 highest-scoring, on real room-microphone
-recordings one lies within the 0.5\,s tolerance at every one of 4,149 scored
-onsets, so an unrestricted oracle is exact though it could not run live. An
-oracle that commits at each instant and never moves backwards, as a deployed
-follower must, still reaches 99.6\% where the deployed rule reaches 80.0\%
-(Fig.~\ref{fig:example}). Nineteen of the twenty points lost to real audio
-therefore survive the realtime constraint, and at this tolerance the room
-degrades the detector's ordering of its candidates more than the visual
-evidence underneath.
+We test that premise directly. An audio-conditioned detector does not emit a
+position; it scores thousands of candidate noteheads and reports the most
+confident. We retain the 256 highest-scoring per instant and evaluate two
+oracles on the real room-microphone recordings. An unconstrained oracle, free
+to select any candidate, is correct at all 4,149 scored onsets, so the
+tolerance is met somewhere in the set at every onset. A causal oracle, which
+must commit at each instant and never select a position behind its last,
+reaches 99.6\%. The deployed argmax reaches 80.0\%
+(Fig.~\ref{fig:example}). Nineteen of the twenty points lost on real audio are
+therefore recoverable under the realtime constraint, which locates the loss in
+the ordering of the candidates rather than in the visual evidence.
 
 This argues for treating the task as a sequential decision over the positions a
 page affords rather than the regression of a coordinate. \sys{} decides from a
