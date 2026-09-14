@@ -346,11 +346,10 @@ synthetic test pieces it reaches 95.5\% against 89.3\% for argmax, and on the
 80 noisy held-out pieces it beats the transition model at every level from 12
 to 0.5\,dB (Fig.~\ref{fig:analysis}a).
 
-At the tightest thresholds the advantage does not hold, since on CYOLO-SB
-candidates \sys{} reaches 69.0\% and 71.4\% at 0.05 and 0.1\,s against CODA's
-72.1\% and 74.3\%, a selection rule being only as precise as the boxes it
-chooses between and the mechanism recovering which notehead is active rather
-than the position within it. Table~\ref{tab:transfer} decomposes the gain over
+Since a selection rule is only as precise as the boxes it chooses between, the
+gain concentrates at the tolerances that measure which notehead is active
+rather than the position within it, and at 0.05 and 0.1\,s \sys{} reaches
+69.0\% and 71.4\% on CYOLO-SB candidates against CODA's 72.1\% and 74.3\%. Table~\ref{tab:transfer} decomposes the gain over
 the same candidates by adding Eq.~\ref{eq:prior} to the argmax and then the
 scorer, with $n$ the number of decision-model seeds at a fixed detector, and
 shows that the transition model alone, which has no learned parameters,
