@@ -22,11 +22,12 @@ ARM=${1:?usage: dump_encoders.sh lstm|mamba|cnnmamba|dinov2|cnn}
 cd /project/def-ichiro/pmohseni/music-alignment
 module load gcc python/3.10 scipy-stack opencv/4.10.0
 source /scratch/pmohseni/venv_cyolo/bin/activate
+python -c "import cv2, scipy, numpy, torch" || { echo "FATAL: env broken on $(hostname) -- cv2/scipy/torch not importable"; exit 1; }
 CY=/scratch/pmohseni/datasets/cyolo_score_following
 DATA=/scratch/pmohseni/datasets/cyolo_data/msmd
 export CYOLO_ROOT=$CY
 export PYTHONPATH=$CY:/project/def-ichiro/pmohseni/music-alignment:${PYTHONPATH:-}
-export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=8 DUMP_MAXK=256
+export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 BLIS_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 DUMP_MAXK=256
 unset SLURM_PROCID RANK WORLD_SIZE LOCAL_RANK
 
 case $ARM in
