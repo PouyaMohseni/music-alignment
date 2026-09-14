@@ -126,26 +126,25 @@ def main():
         ax.add_patch(Rectangle((x[r] - w[r] / 2, y[r] - h[r] / 2), w[r], h[r],
                                facecolor='#f7c948', edgecolor='none',
                                alpha=0.11))
-    # the detector's boxes are staff-height, 30 by 93 px, so drawn at full
-    # size the two outlines are tall bars that read as regions rather than as
-    # positions. Both mark a point, so they are drawn at a fraction of the box
-    # about the same centre.
-    MS = 0.42
+    # the two outlines are the detector's own boxes at their true extent. It
+    # is the stroke that has to stay thin: at 1.5 pt the border was heavier
+    # than the staff lines and read as a filled bar.
+    MS = 1.0
     for xc, yc, wc, hc, col, lab in (
             (x[0], y[0], w[0], h[0], '#C0392B', f'confidence only, {eb:.1f}\u2009s off'),
             (x[io], y[io], w[io], h[io], '#138D90', f'CANDOR, {eo:.2f}\u2009s off')):
         ax.add_patch(Rectangle((xc - MS * wc / 2, yc - MS * hc / 2),
-                               MS * wc, MS * hc, fill=False, lw=1.4, ec=col,
+                               MS * wc, MS * hc, fill=False, lw=0.7, ec=col,
                                label=lab))
     if xp is not None:
         ax.plot([xp], [y1 - 24], marker='^', ms=4.5, color='#3f5468',
                 ls='none')
-    ax.add_patch(Circle((xg, yg), 21, fill=False, lw=1.2, ec='k'))
+    ax.add_patch(Circle((xg, yg), 15, fill=False, lw=0.7, ec='k'))
     # legend proxies: a Patch renders as a rectangle whatever shape it is, so
     # the ring was advertised as a square. Draw the handles as markers.
     ax.plot([], [], marker='^', ms=5, color='#3f5468', ls='none',
             label='previous onset')
-    ax.plot([], [], marker='o', ls='none', ms=5, mfc='none', mec='k', mew=1.1,
+    ax.plot([], [], marker='o', ls='none', ms=5, mfc='none', mec='k', mew=0.9,
             label='true position')
     ax.plot([], [], marker='s', ls='none', ms=5, color='#f2b705', alpha=0.8,
             label='note candidates')
