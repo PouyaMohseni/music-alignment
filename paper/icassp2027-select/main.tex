@@ -64,22 +64,16 @@ jumps are recoverable after the fact~\cite{shan2020,morsi2022}, and the
 correspondences support cross-modal retrieval and piece
 identification~\cite{dorfer2018msmd}.
 
-Online, none of that is available. The system observes only what has been
-played, commits immediately and never revises. This is score
+In the online version, however, the system observes only what has been played,
+commits immediately and never revises. This is score
 following~\cite{orio2003}, also called music tracking~\cite{arzt2010}, in which
 the audio up to frame $t$ fixes an estimate of the performer's position that
 must be produced before frame $t+1$ arrives. Automatic page
 turning~\cite{arzt2008}, live computer
 accompaniment~\cite{dannenberg1984,raphael2010} and score-synchronised display
 depend on it, and every result below, the oracles included, respects the
-constraint.
-
-What makes it hard is that the two sides are not the same kind of object. The
-performance arrives as audio and the score exists as an image, with no space in
-which to compare them directly, and the literature resolves this in three ways.
-
-\subsection{Related work}
-\label{ssec:related}
+constraint. As the problem is concerned with two modalities, the literature
+addresses it in three different ways.
 
 The first converts the score. Optical music recognition renders the page as
 symbols, after which a classical follower tracks a discrete sequence of states,
@@ -111,9 +105,6 @@ from 85.5\% of onsets within 0.5\,s to 22.4\%, CYOLO-SB from 89.3\% to 79.9\%
 and CODA from 95.5\% to 88.3\%. Every remedy has been a perception remedy, whether reverberant augmentation~\cite{henkel2021eusipco}, extra
 proprietary recordings~\cite{henkel2021frontiers} or a new
 architecture~\cite{yang2026coda}.
-
-\subsection{This work}
-\label{ssec:diagnosis}
 
 We tested that premise before adopting it. An audio-conditioned detector does
 not emit a position but scores thousands of candidate noteheads and reports the
