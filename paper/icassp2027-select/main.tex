@@ -95,11 +95,10 @@ detection, CYOLO-SB~\cite{henkel2021frontiers} adding heads for the enclosing
 system and bar. CODA~\cite{yang2026coda} cascades system, bar and note
 selection over layout regions with beam search and learned transition penalties
 and is the strongest published system here, though it reads the page's system
-and bar boxes at test time, which the others and ours do not.
-
-All three need performances aligned to notehead coordinates, an annotation
-costly enough that nearly all training data is synthesized, so systems learn on
-rendered audio and lose much of their accuracy in a real room, CUNet falling
+and bar boxes at test time, which the others and ours do not. These methods
+require performances aligned to notehead coordinates, an annotation costly
+enough that nearly all training data is synthesized, so they learn on rendered
+audio and lose much of their accuracy in a real room, CUNet falling
 from 85.5\% of onsets within 0.5\,s to 22.4\%, CYOLO-SB from 89.3\% to 79.9\%
 and CODA from 95.5\% to 88.3\%. Every remedy has been a perception remedy, whether reverberant augmentation~\cite{henkel2021eusipco}, extra
 proprietary recordings~\cite{henkel2021frontiers} or a new
