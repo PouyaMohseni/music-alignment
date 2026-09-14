@@ -178,12 +178,10 @@ the unrolled coordinate $u_i$, so positions across a line break are adjacent.
 The released detectors report the most confident box,
 $\hat{\imath}_t=\arg\max_{i} o_i$, which is the degenerate selector. \sys{} reads $\mathcal{C}_t$ and its own
 previous choice $\hat u_{t-1}$, and nothing else. $K$ is set where availability
-stops binding. A correct candidate is present at every onset only from $K=256$,
-and the causal oracle, restricted to candidates forward of the previous
-decision, rises from 84.6\% at $K=16$ to 95.2\% at 64 and 100.0\% at 256, while
-\sys{} follows the same shape and saturates earlier, reaching 89.8\%, 92.2\%,
-94.1\%, 95.0\% and 94.4\% at $K=16$, 32, 64, 128 and 256, the last two within
-the seed deviation of each other.
+stops binding, a correct candidate being present at every onset only from
+$K=256$. \sys{} saturates earlier, reaching 89.8\%, 92.2\%, 94.1\%, 95.0\% and
+94.4\% at $K=16$, 32, 64, 128 and 256, the last two within the seed deviation
+of each other.
 
 \subsubsection{Transition model}
 
