@@ -41,7 +41,7 @@ already proposes a position within the standard tolerance at every scored onset
 of a real recording and that an oracle under the same realtime commitments
 recovers almost everything the deployed rule loses. We therefore
 recast the task as sequential selection over the candidates it
-already emits, combining a parameter-free transition model with a set-based
+already emits, combining a non-learned transition model with a set-based
 scorer that judges each candidate against its competitors. This sets a new best
 on real piano recordings and shows that the decision needs its own temporal
 history rather than a better image representation.
@@ -352,7 +352,7 @@ rather than the position within it, and at 0.05 and 0.1\,s \sys{} reaches
 69.0\% and 71.4\% on CYOLO-SB candidates against CODA's 72.1\% and 74.3\%. Table~\ref{tab:transfer} decomposes the gain over
 the same candidates by adding Eq.~\ref{eq:prior} to the argmax and then the
 scorer, with $n$ the number of decision-model seeds at a fixed detector, and
-shows that the transition model alone, which has no learned parameters,
+shows that the transition model alone, with no trained weights,
 accounts for roughly half of it.
 
 \begin{table}[t]
