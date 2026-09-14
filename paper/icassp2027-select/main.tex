@@ -290,7 +290,7 @@ data, $\ddagger$ layout annotation at test time.}
 \toprule
 & \multicolumn{5}{c}{Onsets tracked (\%) within threshold (s)} & \\
 \cmidrule(lr){2-6}
-Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & $\Delta$ \\
+Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Gain \\
 \midrule
 MM-Loc~\cite{dorfer2016}                         & 36.4 & 40.6 & 58.5 & 61.1 & 73.5 & \\
 RL agent~\cite{henkel2019rl}                     & 18.5 & 20.0 & 47.6 & 60.3 & 90.1 & \\
@@ -330,8 +330,9 @@ its final stage regresses a continuous bar-local coordinate rather than
 choosing among proposals, and the sets it does select over, systems and bars,
 are supplied by layout annotation and already decoded with beam search.
 
-Table~\ref{tab:main} sets \sys{} against the published literature on recordings played straight through, with
-$\Delta$ the gain at 0.5\,s over the perception model each row is built on.
+Table~\ref{tab:main} sets \sys{} against the published literature on
+recordings played straight through, the last column giving the improvement at
+0.5\,s over the perception model each row is built on.
 \sys{} tracks 94.4\% of onsets within 0.5\,s, 95\% CI over pieces
 $[92.2,\,97.1]$, against a previous best of 88.3\%, and leads at every
 threshold. We acknowledge that sixteen pieces are few and that the interval is
