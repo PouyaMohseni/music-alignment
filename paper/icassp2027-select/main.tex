@@ -206,10 +206,12 @@ notehead rather than a spurious response. That comparison matters on real
 audio, where reverberation smears the onset the conditioning vector is built
 from, so the detector answers with many moderately confident boxes rather than
 one sharp response and absolute confidence is poorly calibrated. Each candidate
-is described by $\phi_i\in\mathbb{R}^{33}$ holding its confidence relative to
-the instant's best, box geometry, motion relative to the history, relation to
-any coarse regions the backbone emits, and how crowded and how typical the box
-is among its neighbours, together with $f_i$, the 128-dimensional
+is described by $\phi_i\in\mathbb{R}^{33}$, holding five confidence and rank
+terms within the instant, two box dimensions, seven for motion from the
+previous decision, four for a constant-velocity extrapolation, six locating it
+in the coarse system and bar regions the
+backbone emits, and nine for how crowded and how typical it is among its
+neighbours, together with $f_i$, the 128-dimensional
 FiLM-conditioned feature the detection head scored the box from. A
 permutation-invariant network~\cite{zaheer2017deepsets}, as in learned
 re-scoring of detections~\cite{hosang2017nms}, embeds each candidate as
@@ -252,11 +254,11 @@ $\beta=0.5$, eliminating all four constants.
 
 All experiments use MSMD~\cite{dorfer2018msmd}, which pairs
 LilyPond engravings with MIDI-derived alignments for solo piano. Its repertoire
-is Western classical, weighted towards the Baroque and Classical and dominated
-by Bach, with Beethoven, Mozart, Handel, Schumann, Chopin, Czerny and
-Burgm\"uller making up most of the remainder, and textures from two-voice
+is Western classical, dominated by Bach, with Beethoven, Mozart, Schumann and
+Chopin making up most of the remainder, and textures from two-voice
 inventions to dense Romantic writing, which sets how many plausible candidates
-a page affords at each instant.
+a page affords at each instant. Every result below is therefore solo piano,
+the only repertoire with aligned sheet-image data at this scale.
 
 The decision model is trained on 353 pieces, synthesized and convolved with
 measured room impulse responses~\cite{traer2016}, and validated on 19, using
@@ -431,15 +433,15 @@ the evidence itself.
 Acting on that, \sys{} orders the candidates the detector already emits and
 takes real piano recordings from 80.0\% to 94.4\% of onsets within 0.5\,s,
 against 88.3\% for the best published system, at 1.25\,ms per instant on one
-CPU thread, without retraining any detector and without layout annotation, by a
-margin holding across three released detectors. Within this framework the
-decision depends far more on its temporal history than on the image
-representations we tested. Two results temper this, the first being that accuracy on synthesized audio
-barely predicts accuracy on real audio across 48 trained models, which makes
-selection on a synthetic proxy unreliable for the field and not only for us,
-and the second that the forward-motion assumption of Eq.~\ref{eq:prior}
-confines the method to performances played in the written order. Pitch agreement between candidate and audio is
-the next source of evidence independent of the history.
+CPU thread, without retraining any detector or reading layout annotation,
+across three released detectors. The decision depends far more on its temporal
+history than on the image representations we tested. Two results temper this,
+since accuracy on synthesized audio barely predicts accuracy on real audio
+across 48 trained models, which makes selection on a synthetic proxy unreliable
+for the field, not only for us, and since the forward-motion assumption of
+Eq.~\ref{eq:prior} confines the method to performances played in the written
+order. Pitch agreement is the next source of evidence independent of the
+history.
 
 \newpage
 
