@@ -286,8 +286,9 @@ carried alongside as the variant fitting nothing to any real recording.
 
 \begin{table}[t]
 \centering
-\caption{Real room-microphone recordings. $\dagger$ proprietary training
-data, $\ddagger$ layout annotation at test time.}
+\caption{Real room-microphone recordings. Baselines quoted
+from~\cite{yang2026coda}, $*$ re-evaluated here, $\dagger$ proprietary
+training data, $\ddagger$ layout annotation at test time.}
 \label{tab:main}
 \setlength{\tabcolsep}{2.2pt}
 {\scriptsize
@@ -300,13 +301,13 @@ Method & $\le$0.05 & $\le$0.1 & $\le$0.5 & $\le$1.0 & $\le$5.0 & Gain \\
 MM-Loc~\cite{dorfer2016}                         & 36.4 & 40.6 & 58.5 & 61.1 & 73.5 & \\
 RL agent~\cite{henkel2019rl}                     & 18.5 & 20.0 & 47.6 & 60.3 & 90.1 & \\
 CUNet~\cite{henkel2020cunet}                     & 11.3 & 12.5 & 22.4 & 26.6 & 44.3 & \\
-CYOLO~\cite{henkel2021eusipco}                   & 56.3 & 58.1 & 71.2 & 74.9 & 91.9 & \\
-CYOLO-SB~\cite{henkel2021frontiers}              & 61.0 & 63.0 & 79.9 & 83.2 & 96.0 & \\
-CYOLO-SB+A$^\dagger$~\cite{henkel2021frontiers}  & 68.2 & 70.6 & 86.5 & 89.1 & 98.1 & \\
+CYOLO~\cite{henkel2021eusipco}$^{*}$             & 56.2 & 58.1 & 71.3 & 74.9 & 91.9 & \\
+CYOLO-SB~\cite{henkel2021frontiers}$^{*}$        & 60.9 & 62.9 & 80.0 & 83.2 & 96.0 & \\
+CYOLO-SB+A$^{\dagger*}$~\cite{henkel2021frontiers} & 68.2 & 70.6 & 86.5 & 89.1 & 98.1 & \\
 CODA$^\ddagger$~\cite{yang2026coda}              & 72.1 & 74.3 & 88.3 & 91.4 & 98.7 & \\
 \midrule
-\syson{CYOLO}                                           & 72.6 & 74.7 & 91.6 & 95.0 & 99.1 & $+$20.4 \\
-\syson{CYOLO-SB}                                     & 69.0 & 71.4 & 90.6 & 94.2 & 98.2 & $+$10.7 \\
+\syson{CYOLO}                                           & 72.6 & 74.7 & 91.6 & 95.0 & 99.1 & $+$20.3 \\
+\syson{CYOLO-SB}                                     & 69.0 & 71.4 & 90.6 & 94.2 & 98.2 & $+$10.6 \\
 \syson{CYOLO-SB+A$^\dagger$}                   & \textbf{76.0} & \textbf{78.5} & \textbf{94.4} & \textbf{96.9} & \textbf{99.6} & $+$7.9 \\
 \midrule
 \multicolumn{7}{l}{\emph{Detectors we trained}}\\
@@ -346,7 +347,7 @@ threshold. We acknowledge that sixteen pieces are few and the interval
 correspondingly wide, though the gain over the argmax it replaces, paired on
 the same resample, is $+7.9$ points with interval $[+2.8,\,+12.2]$. The margin does
 not depend on one perception model either, since retraining the decision on
-whichever candidates each detector emits gains 20.4, 10.7 and 7.9 points, and
+whichever candidates each detector emits gains 20.3, 10.6 and 7.9 points, and
 on the weakest, whose training data is entirely public, it passes where the
 strongest begins. On 94
 synthetic test pieces it reaches 95.5\% against 89.3\% for argmax, and on the
