@@ -104,17 +104,18 @@ and CODA from 95.5\% to 88.3\%. Every remedy has been a perception remedy, wheth
 proprietary recordings~\cite{henkel2021frontiers} or a new
 architecture~\cite{yang2026coda}.
 
-We test that premise directly. An audio-conditioned detector does not emit a
-position; it scores thousands of candidate noteheads and reports the most
-confident. We retain the 256 highest-scoring per instant and evaluate two
-oracles on the real room-microphone recordings. An unconstrained oracle, free
-to select any candidate, is correct at all 4,149 scored onsets, so the
-tolerance is met somewhere in the set at every onset. A causal oracle, which
-must commit at each instant and never select a position behind its last,
-reaches 99.6\%. The deployed argmax reaches 80.0\%
-(Fig.~\ref{fig:example}). Nineteen of the twenty points lost on real audio are
-therefore recoverable under the realtime constraint, which locates the loss in
-the ordering of the candidates rather than in the visual evidence.
+We test that premise directly, starting from the observation that an
+audio-conditioned detector does not emit a position but scores thousands of
+candidate noteheads and reports the most confident of them. Retaining the 256
+highest-scoring candidates per instant, we evaluate two oracles on the real
+room-microphone recordings. An unconstrained oracle, free to select any
+candidate, is correct at all 4,149 scored onsets, so the tolerance is met
+somewhere in the set at every onset, while a causal oracle, which must commit
+at each instant and never select a position behind its last, reaches 99.6\%
+against the 80.0\% of the deployed argmax (Fig.~\ref{fig:example}). Nineteen of
+the twenty points lost on real audio are therefore recoverable under the
+realtime constraint, which locates the loss in the ordering of the candidates
+rather than in the visual evidence.
 
 This argues for treating the task as a sequential decision over the positions a
 page affords rather than the regression of a coordinate. \sys{} decides from a
@@ -354,10 +355,11 @@ synthetic test pieces it reaches 95.5\% against 89.3\% for argmax, and on the
 80 noisy held-out pieces it beats the transition model at every level from 12
 to 0.5\,dB (Fig.~\ref{fig:analysis}a).
 
-The tightest thresholds qualify this. On CYOLO-SB candidates \sys{} reaches
-69.0\% and 71.4\% at 0.05 and 0.1\,s, below CODA's 72.1\% and 74.3\%, since a
-decision is only as precise as the boxes it chooses between and the mechanism
-recovers which notehead is active rather than the position within it.
+The tightest thresholds qualify this, since on CYOLO-SB candidates \sys{}
+reaches 69.0\% and 71.4\% at 0.05 and 0.1\,s, below CODA's 72.1\% and 74.3\%, a
+decision being only as precise as the boxes it chooses between and the
+mechanism recovering which notehead is active rather than the position within
+it.
 
 Table~\ref{tab:transfer} separates the parts over the same candidates, adding
 Eq.~\ref{eq:prior} to the argmax and then the scorer, with $n$
@@ -450,11 +452,11 @@ against 88.3\% for the best published system, at 1.25\,ms per instant on one
 CPU thread, without retraining any detector and without layout annotation, by a
 margin holding across three released detectors. Within this framework the
 decision depends far more on its own temporal history than on the image
-representations we tested. Two results temper it. Accuracy on synthesized audio
+representations we tested. Two results temper this, the first being that accuracy on synthesized audio
 barely predicts accuracy on real audio across 48 trained models, which makes
 selection on a synthetic proxy unreliable for the field and not only for us,
-and the forward-motion assumption of Eq.~\ref{eq:prior} confines the method to
-performances played in the written order. Pitch agreement between a candidate
+and the second that the forward-motion assumption of Eq.~\ref{eq:prior}
+confines the method to performances played in the written order. Pitch agreement between a candidate
 and the audio is the natural next source of evidence independent of the
 history.
 
