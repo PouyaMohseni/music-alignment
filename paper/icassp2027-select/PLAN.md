@@ -1,6 +1,7 @@
 # ICASSP 2027 paper plan
 
-Deadline: 16 Sep 2026 (full paper). Format: 4 pages of content + 1 page for
+Deadline: 23 Sep 2026, 23:59 UTC (full paper), per cmsworkshops.com/ICASSP2027
+and 2027.ieeeicassp.org; the organisers say no further extension is expected. Format: 4 pages of content + 1 page for
 references / acknowledgements / ethics statement only. Not double-blind (names
 on the PDF). Track: Audio and Acoustic Signal Processing, music signal
 processing. Official kit in `kit/` (spconf.sty, IEEEbib.bst, Template.tex).
